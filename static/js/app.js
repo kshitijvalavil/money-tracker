@@ -52,6 +52,28 @@ export async function signOut() {
   window.location.href = "/login";
 }
 
+// --- Day / night theme -----------------------------------------------------
+// The current theme is applied to <html data-theme> in base.html before paint.
+export function currentTheme() {
+  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+}
+
+export function setTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  try { localStorage.setItem("theme", theme); } catch (e) {}
+}
+
+// Wire up a sidebar toggle button; keeps its icon/label in sync.
+export function initThemeToggle(btn, iconEl, labelEl) {
+  const paint = () => {
+    const dark = currentTheme() === "dark";
+    if (iconEl) iconEl.textContent = dark ? "☀️" : "🌙";
+    if (labelEl) labelEl.textContent = dark ? "Day mode" : "Night mode";
+  };
+  paint();
+  if (btn) btn.onclick = () => { setTheme(currentTheme() === "dark" ? "light" : "dark"); paint(); };
+}
+
 // Small toast for errors / confirmations.
 export function toast(message, kind = "error") {
   let el = document.getElementById("toast");

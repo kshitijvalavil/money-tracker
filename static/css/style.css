@@ -7,6 +7,9 @@
   --line: #e9ecf1;
   --brand: #2f5fe0;
   --brand-dark: #2449b8;
+  --brand-soft: #eef2fd;
+  --brand-ring: #c9d6fb;
+  --ghost-hover: #eceef2;
   --pos: #137a4b;
   --pos-bg: #e5f4ec;
   --neg: #c0392b;
@@ -14,6 +17,29 @@
   --radius: 14px;
   --shadow: 0 1px 3px rgba(20, 27, 45, 0.06), 0 8px 24px rgba(20, 27, 45, 0.05);
 }
+
+/* Night theme. Applied via data-theme="dark" on <html> (set early in base.html
+   to avoid a flash), either from the user's saved choice or their OS setting. */
+:root[data-theme="dark"] {
+  --bg: #0e1320;
+  --surface: #161d2d;
+  --ink: #e7ecf3;
+  --muted: #9aa6b8;
+  --line: #273041;
+  --brand: #5b82f0;
+  --brand-dark: #6f92f3;
+  --brand-soft: #1b2640;
+  --brand-ring: #33498c;
+  --ghost-hover: #1f283a;
+  --pos: #3ecf8e;
+  --pos-bg: #13301f;
+  --neg: #f2695c;
+  --neg-bg: #381f1d;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+html { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -49,7 +75,7 @@ a { color: inherit; text-decoration: none; }
   font-weight: 500; font-size: 0.95rem; margin-bottom: 2px;
 }
 .nav a:hover { background: var(--bg); color: var(--ink); }
-.nav a.active { background: #eef2fd; color: var(--brand); font-weight: 600; }
+.nav a.active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
 .nav .ico { width: 18px; text-align: center; }
 .sidebar .bottom { margin-top: auto; }
 .signout {
@@ -89,7 +115,7 @@ input, select {
   width: 100%; padding: 10px 12px; border: 1px solid var(--line);
   border-radius: 10px; font-size: 0.95rem; background: var(--surface); color: var(--ink);
 }
-input:focus, select:focus { outline: 2px solid #c9d6fb; border-color: var(--brand); }
+input:focus, select:focus { outline: 2px solid var(--brand-ring); border-color: var(--brand); }
 .field { margin-bottom: 14px; }
 .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 
@@ -100,13 +126,13 @@ input:focus, select:focus { outline: 2px solid #c9d6fb; border-color: var(--bran
 }
 .btn:hover { background: var(--brand-dark); }
 .btn.ghost { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
-.btn.ghost:hover { background: #eceef2; }
+.btn.ghost:hover { background: var(--ghost-hover); }
 .btn.sm { padding: 6px 12px; font-size: 0.85rem; }
 
 .toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .toggle button { border: none; background: var(--surface); padding: 9px 18px; cursor: pointer;
                  font-weight: 600; color: var(--muted); font-size: 0.9rem; }
-.toggle button.active { background: #eef2fd; color: var(--brand); }
+.toggle button.active { background: var(--brand-soft); color: var(--brand); }
 
 /* Tables ------------------------------------------------------------------- */
 table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
@@ -158,3 +184,20 @@ td.amt { text-align: right; font-weight: 600; white-space: nowrap; font-variant-
   .user-email { display: none; }
   .content { padding: 20px 16px; }
 }
+
+/* Demo banner + night-mode tweaks -------------------------------------------*/
+.demo-banner {
+  background: var(--brand-soft); color: var(--brand);
+  text-align: center; padding: 8px 16px; font-size: 0.88rem; font-weight: 600;
+}
+:root[data-theme="dark"] .notice {
+  background: #2e2713; border-color: #5c4a1e; color: #e8cf8a;
+}
+
+/* Theme toggle button in the sidebar */
+.theme-toggle {
+  width: 100%; text-align: left; background: none; border: none; cursor: pointer;
+  color: var(--muted); padding: 10px 12px; border-radius: 10px; font: inherit;
+  display: flex; align-items: center; gap: 10px;
+}
+.theme-toggle:hover { background: var(--bg); color: var(--ink); }

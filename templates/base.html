@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Money Tracker{% endblock %}</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
+  <!-- Apply the saved/OS theme before first paint to avoid a flash. -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        if (t !== "light" && t !== "dark") {
+          t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <!-- supabase-js (UMD global `supabase`), vendored locally for reliability -->
   <script src="{{ url_for('static', filename='vendor/supabase.js') }}"></script>
@@ -19,9 +31,7 @@
 </head>
 <body>
 {% if DEMO_MODE %}
-  <div style="background:#eef2fd;color:#2449b8;text-align:center;padding:8px 16px;font-size:0.88rem;font-weight:600">
-    🧪 Demo mode — sample data, nothing is saved. Reload to reset.
-  </div>
+  <div class="demo-banner">🧪 Demo mode — sample data, nothing is saved. Reload to reset.</div>
 {% endif %}
 {% if not config_ready %}
   <div style="padding:16px"><div class="notice">

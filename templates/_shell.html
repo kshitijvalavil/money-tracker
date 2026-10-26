@@ -12,6 +12,7 @@
       <a href="/reports"      class="{{ 'active' if page=='reports' }}"><span class="ico">📊</span> Reports</a>
     </nav>
     <div class="bottom">
+      <button class="theme-toggle" id="themeToggle"><span class="ico" id="themeIcon">🌙</span> <span id="themeLabel">Night mode</span></button>
       <div class="user-email" id="userEmail"></div>
       <button class="signout" id="signout">Sign out</button>
     </div>
@@ -21,7 +22,10 @@
   </main>
 </div>
 <script type="module">
-  import { requireAuth, signOut } from "{{ url_for('static', filename='js/app.js') }}";
+  import { requireAuth, signOut, initThemeToggle } from "{{ url_for('static', filename='js/app.js') }}";
+  initThemeToggle(document.getElementById("themeToggle"),
+                  document.getElementById("themeIcon"),
+                  document.getElementById("themeLabel"));
   const user = await requireAuth();
   if (user) document.getElementById("userEmail").textContent = user.email;
   document.getElementById("signout").onclick = signOut;
