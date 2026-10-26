@@ -3,6 +3,11 @@
 A personal money tracker: accounts, income & expenses, transfers between your
 own accounts, monthly budgets, and reports — all in Indian Rupees (₹).
 
+**One-click deploy** (opens Render pre-configured from `render.yaml` — you just
+paste your two Supabase values and click Apply):
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/kshitijvalavil/money-tracker)
+
 - **Frontend:** plain HTML/CSS/JS served by a small Flask app.
 - **Backend:** [Supabase](https://supabase.com) for the database **and** sign-in.
 - **Security:** the browser talks to Supabase directly. Every table has Row
