@@ -10,11 +10,20 @@
   <!-- supabase-js (UMD global `supabase`) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
   <script>
-    window.__CONFIG = { url: {{ SUPABASE_URL | tojson }}, key: {{ SUPABASE_ANON_KEY | tojson }} };
+    window.__CONFIG = {
+      url: {{ SUPABASE_URL | tojson }},
+      key: {{ SUPABASE_ANON_KEY | tojson }},
+      demo: {{ DEMO_MODE | tojson }}
+    };
   </script>
   {% block head %}{% endblock %}
 </head>
 <body>
+{% if DEMO_MODE %}
+  <div style="background:#eef2fd;color:#2449b8;text-align:center;padding:8px 16px;font-size:0.88rem;font-weight:600">
+    🧪 Demo mode — sample data, nothing is saved. Reload to reset.
+  </div>
+{% endif %}
 {% if not config_ready %}
   <div style="padding:16px"><div class="notice">
     Supabase isn't configured yet. Set <code>SUPABASE_URL</code> and

@@ -51,6 +51,18 @@ cp .env.example .env          # then fill in your URL and anon key
 python app.py                 # open http://localhost:5000
 ```
 
+### Just want to look around first? (demo mode)
+
+Try the whole interface with sample data and **no Supabase and no login**:
+
+```bash
+pip install -r requirements.txt
+DEMO_MODE=1 python app.py     # open http://localhost:5000
+```
+
+Everything is fake and in-memory — nothing is saved, and a reload resets it.
+Use this only to explore; turn it off for real use.
+
 ---
 
 ## 3. Deploy to Render

@@ -1,13 +1,19 @@
 // Shared helpers used by every page.
 // window.__CONFIG is set in base.html from the server's Supabase settings.
 
-const CONFIG = window.__CONFIG || {};
+import { createDemoClient } from "./demo.js";
 
-// One Supabase client for the whole app. supabase-js is loaded as a global
-// (window.supabase) by the UMD script in base.html.
-export const db = (CONFIG.url && CONFIG.key)
-  ? window.supabase.createClient(CONFIG.url, CONFIG.key)
-  : null;
+const CONFIG = window.__CONFIG || {};
+export const DEMO = !!CONFIG.demo;
+
+// One data client for the whole app. In demo mode it's an in-memory stand-in;
+// otherwise it's the real Supabase client (supabase-js is loaded as a global,
+// window.supabase, by the UMD script in base.html).
+export const db = DEMO
+  ? createDemoClient()
+  : (CONFIG.url && CONFIG.key)
+    ? window.supabase.createClient(CONFIG.url, CONFIG.key)
+    : null;
 
 // Format money the Indian way: ₹1,23,456.00
 const inr = new Intl.NumberFormat("en-IN", {
@@ -41,6 +47,7 @@ export async function requireAuth() {
 }
 
 export async function signOut() {
+  if (DEMO) { toast("Sign-out is disabled in demo mode.", "ok"); return; }
   if (db) await db.auth.signOut();
   window.location.href = "/login";
 }

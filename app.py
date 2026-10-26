@@ -32,13 +32,18 @@ app = Flask(__name__)
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 
+# Demo mode: try the UI with fake in-memory data and no login. Turn it on with
+# DEMO_MODE=1. Never enable it for real use — it stores nothing.
+DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
+
 
 @app.context_processor
 def inject_config():
     return {
         "SUPABASE_URL": SUPABASE_URL,
         "SUPABASE_ANON_KEY": SUPABASE_ANON_KEY,
-        "config_ready": bool(SUPABASE_URL and SUPABASE_ANON_KEY),
+        "DEMO_MODE": DEMO_MODE,
+        "config_ready": DEMO_MODE or bool(SUPABASE_URL and SUPABASE_ANON_KEY),
     }
 
 
