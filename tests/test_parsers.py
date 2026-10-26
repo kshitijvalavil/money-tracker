@@ -48,13 +48,41 @@ check(t["balance_after"] == 1234.56, f"balance ({t['balance_after']})")
 check(t["occurred_on"] == "2026-01-15", f"exact date ({t['occurred_on']})")
 check("UPI transfer" in t["note"], f"note ({t['note']!r})")
 
+# --- Merchant receipts ------------------------------------------------------
+from bot.parsers import parse_receipt
+
+# Domino's-style body (total in the body, with pipe separators and a date).
+# Synthetic order number / date / amounts matching the real body structure.
+dom = parse_receipt("Order Successful", "do-not-reply@dominos.co.in",
+    "Order No. 999|02-02-2026|12:00:00 ... Sub Total : Rs.500.00 Discount : - Rs.50.00 "
+    "Grand Total | : | Rs.450.00", message_id="d1")
+check(dom is not None, "dominos receipt parsed")
+check(dom["direction"] == "expense", "receipt is expense")
+check(dom["amount"] == 450.0, f"grand total wins over sub total ({dom['amount']})")
+check(dom["occurred_on"] == "2026-02-02", f"receipt date ({dom['occurred_on']})")
+check(dom["category_hint"] == "Food", "dominos -> Food category hint")
+check(dom["note"] == "Domino's order", f"receipt note ({dom['note']})")
+
+# "Order TotalRs.X" with no separator at all.
+z = parse_receipt("order", "noreply@zomato.com", "Order TotalRs.123.00", email_date="2026-01-01")
+check(z is not None and z["amount"] == 123.0, "no-separator total parsed")
+check(z["occurred_on"] == "2026-01-01", "falls back to email date when body has none")
+
+# Known merchant but total only in a PDF attachment (no total in body) -> None.
+check(parse_receipt("Bill summary", "noreply@district.in",
+                    "Please find the bill attached.") is None, "attachment-only receipt skipped")
+
+# Dispatcher routes bank vs receipt correctly.
+r = parse_email("Order Successful", "do-not-reply@dominos.co.in", "Grand Total Rs.500.00")
+check(r and r["source"] == "receipt", "dispatcher -> receipt")
+
 # Non-transaction emails are ignored
 check(parse_email("Your pre-approved loan", "sbi@communications.sbi.co.in",
                   "Download YONO and get a loan today!") is None, "marketing ignored")
 check(parse_email("Groww Digest", "noreply@digest.groww.in",
                   "Sensex up 0.66% today") is None, "newsletter ignored")
-check(parse_email("Your Zomato order", "noreply@zomato.com",
-                  "Your order was delivered") is None, "non-bank sender ignored")
+check(parse_email("Newsletter", "noreply@medium.com",
+                  "I Spent A Month In India") is None, "unknown sender ignored")
 
 print(f"\n{'ALL PARSER TESTS PASSED' if fails == 0 else str(fails) + ' FAILURES'}")
 sys.exit(1 if fails else 0)

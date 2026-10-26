@@ -36,7 +36,7 @@ def _to_iso(datestr):
     return None
 
 
-def parse_sbi_alert(subject, sender, body, message_id=None):
+def parse_sbi_alert(subject, sender, body, message_id=None, email_date=None):
     """SBI 'CBSSBI ALERT' emails from alerts.sbi.bank.in.
 
     Example body (synthetic):
@@ -80,15 +80,75 @@ def parse_sbi_alert(subject, sender, body, message_id=None):
     }
 
 
-# Registry of parsers. Statement-PDF and merchant-receipt parsers (Phase 2/3)
-# will be added here behind the same interface.
-PARSERS = [parse_sbi_alert]
+# Merchant receipts: sender domain -> (merchant name, suggested category).
+MERCHANTS = {
+    "dominos.co.in": ("Domino's", "Food"),
+    "zomato.com": ("Zomato", "Food"),
+    "swiggy.in": ("Swiggy", "Food"),
+    "swiggy.com": ("Swiggy", "Food"),
+    "district.in": ("District", "Entertainment"),
+    "bookmyshow.com": ("BookMyShow", "Entertainment"),
+    "amazon.in": ("Amazon", "Shopping"),
+    "amazon.com": ("Amazon", "Shopping"),
+    "uber.com": ("Uber", "Transport"),
+    "olacabs.com": ("Ola", "Transport"),
+}
+
+# Total patterns, most specific first (so "Grand Total" wins over a bare "Total").
+_TOTAL_PATTERNS = [
+    r"Grand\s*Total", r"Amount\s*Paid", r"Total\s*Paid",
+    r"Order\s*Total", r"Bill\s*Total", r"Total\s*Amount", r"Total",
+]
 
 
-def parse_email(subject, sender, body, message_id=None):
+def parse_receipt(subject, sender, body, message_id=None, email_date=None):
+    """Merchant order/receipt emails (Domino's, Zomato, …) with the total in
+    the body. Returns an expense. Attachment-only receipts (e.g. a PDF bill)
+    have no total in the body and return None — handled by the statement/PDF
+    path instead."""
+    domain = (sender or "").split("@")[-1].lower().strip(">")
+    merchant = category = None
+    for known, (name, cat) in MERCHANTS.items():
+        if known in domain:
+            merchant, category = name, cat
+            break
+    if not merchant:
+        return None
+
+    amount = None
+    for label in _TOTAL_PATTERNS:
+        m = re.search(label + r"[\s:\-|]*" + _AMOUNT, body, re.I)
+        if m:
+            amount = _to_float(m.group(1))
+            break
+    if amount is None or amount <= 0:
+        return None  # e.g. the amount is in a PDF attachment, not the body
+
+    date_m = re.search(r"(\d{2}[/-]\d{2}[/-]\d{4})", body)
+    occurred_on = _to_iso(date_m.group(1)) if date_m else email_date
+
+    return {
+        "source": "receipt",
+        "direction": "expense",
+        "amount": amount,
+        "occurred_on": occurred_on,
+        "account_hint": None,
+        "note": merchant + " order",
+        "category_hint": category,
+        "balance_after": None,
+        "source_message_id": message_id,
+        "confidence": "low",   # merchant receipts are noisier than bank emails
+    }
+
+
+# Registry of parsers. The statement-PDF parser (Phase 2b) plugs in here too.
+PARSERS = [parse_sbi_alert, parse_receipt]
+
+
+def parse_email(subject, sender, body, message_id=None, email_date=None):
     """Try each parser; return the first transaction found, or None."""
     for parser in PARSERS:
-        result = parser(subject, sender, body, message_id)
+        result = parser(subject, sender, body, message_id, email_date)
         if result:
             return result
     return None
