@@ -77,6 +77,11 @@ def reports():
     return render_template("reports.html", page="reports")
 
 
+@app.route("/imports")
+def imports():
+    return render_template("imports.html", page="imports")
+
+
 @app.route("/healthz")
 def healthz():
     return {"ok": True}

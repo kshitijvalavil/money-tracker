@@ -1,0 +1,114 @@
+{% extends "_shell.html" %}
+{% block title %}Email imports — Money Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Email imports</h1>
+  <button class="btn" id="approveAll" style="display:none">Approve all</button>
+</div>
+
+<div class="card">
+  <p style="color:var(--muted);font-size:0.9rem;margin-bottom:16px">
+    Transactions the bot found in your email. Pick an account (and category) for
+    each, then approve to add them to your tracker. Nothing is added until you approve.
+  </p>
+  <table>
+    <thead><tr>
+      <th>Date</th><th>Source</th><th>Note</th><th>Account</th><th>Category</th>
+      <th style="text-align:right">Amount</th><th></th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, money, esc, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  const $ = (id) => document.getElementById(id);
+
+  let accounts = [], categories = [], pending = [];
+
+  async function loadLists() {
+    const [a, c] = await Promise.all([
+      db.from("accounts").select("id, name").order("name"),
+      db.from("categories").select("id, name, kind").order("name"),
+    ]);
+    if (a.error) return toast(a.error.message);
+    if (c.error) return toast(c.error.message);
+    accounts = a.data; categories = c.data;
+  }
+
+  function accountOptions() {
+    return accounts.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join("");
+  }
+  function categoryOptions(kind) {
+    return categories.filter((c) => c.kind === kind)
+      .map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+  }
+
+  async function load() {
+    const { data, error } = await db.from("pending_imports")
+      .select("*").eq("status", "pending").order("occurred_on", { ascending: false });
+    if (error) return toast(error.message);
+    pending = data;
+
+    $("approveAll").style.display = data.length ? "" : "none";
+    $("rows").innerHTML = data.length ? data.map((p) => {
+      const kind = p.direction;        // 'income' | 'expense'
+      const cls = kind === "income" ? "pos" : "neg";
+      const sign = kind === "income" ? "+" : "−";
+      return `<tr data-id="${p.id}">
+        <td>${p.occurred_on}</td>
+        <td><span class="pill">${esc(p.source)}</span></td>
+        <td>${esc(p.note || "—")}${p.account_hint ? ` <span class="pill">…${esc(p.account_hint)}</span>` : ""}</td>
+        <td><select class="sel-account">${accountOptions()}</select></td>
+        <td><select class="sel-category">${categoryOptions(kind)}</select></td>
+        <td class="amt ${cls}">${sign}${money(p.amount)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn sm approve">Approve</button>
+          <button class="icon-btn reject" title="Reject">✕</button>
+        </td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="7" class="empty">No email imports waiting. The bot will add detected transactions here.</td></tr>`;
+
+    $("rows").querySelectorAll("tr[data-id]").forEach((tr) => {
+      tr.querySelector(".approve").onclick = () => approve(tr);
+      tr.querySelector(".reject").onclick = () => reject(tr.dataset.id);
+    });
+  }
+
+  async function approve(tr) {
+    const p = pending.find((x) => x.id === tr.dataset.id);
+    const tx = {
+      occurred_on: p.occurred_on,
+      amount: p.amount,
+      type: p.direction,
+      account_id: tr.querySelector(".sel-account").value,
+      category_id: tr.querySelector(".sel-category").value,
+      note: p.note || "",
+      source: p.source,
+      source_message_id: p.source_message_id,
+    };
+    const { error } = await db.from("transactions").insert(tx);
+    // A duplicate source email is fine — it just means it's already imported.
+    if (error && !/duplicate|unique/i.test(error.message)) return toast(error.message);
+    const upd = await db.from("pending_imports").update({ status: "approved" }).eq("id", p.id);
+    if (upd.error) return toast(upd.error.message);
+    toast("Added.", "ok");
+    load();
+  }
+
+  async function reject(id) {
+    const { error } = await db.from("pending_imports").update({ status: "rejected" }).eq("id", id);
+    if (error) return toast(error.message);
+    load();
+  }
+
+  $("approveAll").onclick = async () => {
+    if (!confirm(`Approve all ${pending.length} transactions with the selected accounts/categories?`)) return;
+    for (const tr of $("rows").querySelectorAll("tr[data-id]")) await approve(tr);
+  };
+
+  if (db) { await loadLists(); load(); }
+</script>
+{% endblock %}

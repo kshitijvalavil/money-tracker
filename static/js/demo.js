@@ -52,7 +52,20 @@ function seed() {
     { id: uid(), category_id: C["Entertainment"], monthly_limit: 2000 },
   ];
 
-  return { accounts, categories, transactions, budgets };
+  // Sample transactions "detected from email", awaiting review (demo only).
+  const pending_imports = [
+    { id: uid(), source: "sbi_alert", direction: "income", amount: 5000,
+      occurred_on: day(thisMonth, 5), account_hint: "0001", note: "UPI transfer",
+      source_message_id: "demo-1", status: "pending", created_at: new Date().toISOString() },
+    { id: uid(), source: "statement", direction: "expense", amount: 450,
+      occurred_on: day(thisMonth, 7), account_hint: "0001", note: "POS purchase",
+      source_message_id: "demo-2", status: "pending", created_at: new Date().toISOString() },
+    { id: uid(), source: "receipt", direction: "expense", amount: 299,
+      occurred_on: day(thisMonth, 8), account_hint: null, note: "Zomato order",
+      source_message_id: "demo-3", status: "pending", created_at: new Date().toISOString() },
+  ];
+
+  return { accounts, categories, transactions, budgets, pending_imports };
 }
 
 // ---- helpers that mirror the SQL functions --------------------------------
