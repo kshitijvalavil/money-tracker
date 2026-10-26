@@ -1,0 +1,19 @@
+# Render Blueprint — deploy with one click from the Render dashboard
+# (New → Blueprint → pick this repo). You still set the two Supabase values
+# below in the Render UI; they are marked sync:false so they are never stored
+# in this file.
+services:
+  - type: web
+    name: money-tracker
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.5"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false

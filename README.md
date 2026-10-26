@@ -55,13 +55,22 @@ python app.py                 # open http://localhost:5000
 
 ## 3. Deploy to Render
 
-1. Push this repo to GitHub and create a **Web Service** from it on Render.
-2. Build command: `pip install -r requirements.txt` — Start command comes from
-   the `Procfile` (`gunicorn app:app`).
-3. Add two environment variables on the Render service:
+**Easiest — Blueprint (uses `render.yaml`):**
+1. On Render, choose **New → Blueprint** and pick this repo. It reads
+   `render.yaml` and configures the web service automatically.
+2. When prompted, fill in the two values: `SUPABASE_URL` and
+   `SUPABASE_ANON_KEY`.
+3. Apply, then open the URL and sign in with the account you created.
+
+**Or set it up by hand — Web Service:**
+1. **New → Web Service** from this repo.
+2. Build command: `pip install -r requirements.txt`.
+   Start command: `gunicorn app:app --bind 0.0.0.0:$PORT`
+   (binding to `$PORT` is required so Render can reach the app).
+3. Add two environment variables:
    - `SUPABASE_URL` — your project URL
    - `SUPABASE_ANON_KEY` — your anon public key
-4. Deploy, open the URL, and sign in with the account you created.
+4. Deploy, open the URL, and sign in.
 
 ---
 
