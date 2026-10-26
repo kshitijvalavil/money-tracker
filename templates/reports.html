@@ -1,7 +1,7 @@
 {% extends "_shell.html" %}
 {% block title %}Reports — Money Tracker{% endblock %}
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
 {% endblock %}
 {% block content %}
 <div class="page-head">

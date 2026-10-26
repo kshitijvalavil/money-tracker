@@ -104,12 +104,20 @@ Use this only to explore; turn it off for real use.
 
 ## Running the tests
 
-The tests check the schema, the security rules (one user cannot see another's
-data), and the money math (balances, transfers, budgets) against a local
-PostgreSQL. With `psql` and a local Postgres available:
+**Database** — schema, security rules (one user cannot see another's data) and
+money math (balances, transfers, budgets) against a local PostgreSQL:
 
 ```bash
 bash tests/run.sh
+```
+
+**Browser smoke test** — drives the real UI (dashboard, add a transaction/
+account/budget, charts) in demo mode, failing on any browser error. Needs
+`playwright` and a Chromium:
+
+```bash
+DEMO_MODE=1 gunicorn app:app --bind 127.0.0.1:8099 &
+BASE_URL=http://127.0.0.1:8099 python tests/smoke_test.py
 ```
 
 ---
