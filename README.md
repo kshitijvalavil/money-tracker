@@ -33,7 +33,8 @@ tests/                     a SQL test of the schema, security rules and money lo
 
 1. Create a free project at [supabase.com](https://supabase.com).
 2. Open **SQL Editor** and run each file in `supabase/migrations/` **in order**:
-   `0001_schema.sql`, `0002_rls.sql`, `0003_functions.sql`, `0004_seed_trigger.sql`.
+   `0001_schema.sql`, `0002_rls.sql`, `0003_functions.sql`, `0004_seed_trigger.sql`,
+   `0005_imports.sql`, `0006_approve_import.sql`.
    (Paste the contents of each, run, then the next.)
 3. Create your own account: **Authentication → Users → Add user** (set an email
    and password). The seed trigger gives you starter categories and a Cash
@@ -132,3 +133,46 @@ BASE_URL=http://127.0.0.1:8099 python tests/smoke_test.py
 Render's free PostgreSQL and Supabase's free tier have their own limits and
 retention policies. Use **Reports → Export CSV** now and then to keep your own
 backup of your transactions.
+
+---
+
+## Email import scanner
+
+`bot/scanner.py` turns bank-alert and merchant-receipt emails into rows in
+`pending_imports`. You then review them on the **Imports** page and approve
+or reject each one. It uses only the Python standard library.
+
+**Dry run on the sample emails.** This prints the rows it would import and
+uploads nothing:
+
+```bash
+python -m bot.scanner --from-dir tests/fixtures
+```
+
+**From Gmail.** You need an OAuth access token with only the
+`gmail.readonly` scope. The scanner never changes your mailbox.
+
+```bash
+export GMAIL_TOKEN=ya29....                 # read-only Gmail access token
+python -m bot.scanner --gmail               # dry run
+python -m bot.scanner --gmail --query 'from:(alerts.sbi.bank.in) newer_than:7d'
+```
+
+The default query is `from:(alerts.sbi.bank.in) newer_than:30d`. You can
+override it with `--query` or the `GMAIL_QUERY` variable.
+
+**Uploading to your account.** Add `--push` and set these variables:
+
+| Variable            | Value                                                      |
+|---------------------|------------------------------------------------------------|
+| `SUPABASE_URL`      | your project URL                                           |
+| `SUPABASE_ANON_KEY` | the public anon key (the same one the app uses)            |
+| `SUPABASE_USER_JWT` | **your** access token from a signed-in session             |
+
+The rows are inserted as you, so row-level security keeps them in your own
+account. Never use the `service_role` key here. Emails that were already
+imported are skipped, and a re-run never creates duplicates: the table is
+unique on `(user_id, source_message_id)`.
+
+**Tests:** `python3 tests/test_scanner.py`. The emails in `tests/fixtures/`
+are synthetic.

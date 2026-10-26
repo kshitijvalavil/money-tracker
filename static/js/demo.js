@@ -53,16 +53,18 @@ function seed() {
   ];
 
   // Sample transactions "detected from email", awaiting review (demo only).
+  // The hints/sources are chosen so the Imports page can pre-select a matching
+  // account for some rows (HDFC by bank name, Credit Card by hint).
+  const pi = (source, direction, amount, d, account_hint, note, n) => ({
+    id: uid(), source, direction, amount, occurred_on: day(thisMonth, d), account_hint, note,
+    source_message_id: `demo-${n}`, status: "pending", created_at: new Date().toISOString(),
+  });
   const pending_imports = [
-    { id: uid(), source: "sbi_alert", direction: "income", amount: 5000,
-      occurred_on: day(thisMonth, 5), account_hint: "0001", note: "UPI transfer",
-      source_message_id: "demo-1", status: "pending", created_at: new Date().toISOString() },
-    { id: uid(), source: "statement", direction: "expense", amount: 450,
-      occurred_on: day(thisMonth, 7), account_hint: "0001", note: "POS purchase",
-      source_message_id: "demo-2", status: "pending", created_at: new Date().toISOString() },
-    { id: uid(), source: "receipt", direction: "expense", amount: 299,
-      occurred_on: day(thisMonth, 8), account_hint: null, note: "Zomato order",
-      source_message_id: "demo-3", status: "pending", created_at: new Date().toISOString() },
+    pi("hdfc_alert", "income", 5000, 5, "0001", "UPI transfer from Ravi", 1),
+    pi("statement", "expense", 450, 7, "card", "POS purchase", 2),
+    pi("receipt", "expense", 299, 8, null, "Zomato order", 3),
+    pi("hdfc_alert", "expense", 1200, 9, "0001", "Electricity bill autopay", 4),
+    pi("receipt", "expense", 186, 11, null, "Uber trip", 5),
   ];
 
   return { accounts, categories, transactions, budgets, pending_imports };
@@ -84,7 +86,41 @@ function accountBalances(s) {
 const inMonth = (t, m) => t.occurred_on.slice(0, 7) === m;
 const sum = (arr) => arr.reduce((n, t) => n + Number(t.amount), 0);
 
+// Mirrors the approve_import / reject_import SQL functions: approving creates
+// the transaction and marks the import approved in one step, returning the new
+// transaction id. Throwing becomes a supabase-style { error } in the client.
+function importRpc(s, name, params) {
+  // Same SQLSTATE codes as the real functions (migration 0006).
+  const fail = (code, message) => { const e = new Error(message); e.code = code; throw e; };
+  const imp = s.pending_imports.find((p) => p.id === params?.p_import_id);
+  if (!imp) fail("P0002", `import ${params?.p_import_id} not found`);
+  if (imp.status !== "pending") fail("55000", `import ${imp.id} is already ${imp.status}`);
+  if (name === "reject_import") { imp.status = "rejected"; return null; }
+  if (!s.accounts.some((a) => a.id === params.p_account_id)) {
+    fail("P0002", `account ${params.p_account_id} not found`);
+  }
+  const cat = params.p_category_id && s.categories.find((c) => c.id === params.p_category_id);
+  if (params.p_category_id && !cat) fail("P0002", `category ${params.p_category_id} not found`);
+  if (cat && cat.kind !== imp.direction) {
+    fail("22023", `category kind ${cat.kind} does not match import direction ${imp.direction}`);
+  }
+  // Same source email already imported: reuse that transaction (dedup).
+  let t = imp.source_message_id && s.transactions.find((x) => x.source_message_id === imp.source_message_id);
+  if (!t) {
+    t = {
+      id: uid(), occurred_on: imp.occurred_on, amount: imp.amount, type: imp.direction,
+      account_id: params.p_account_id, to_account_id: null, category_id: params.p_category_id || null,
+      note: imp.note || "", source: imp.source, source_message_id: imp.source_message_id,
+      created_at: new Date().toISOString(),
+    };
+    s.transactions.push(t);
+  }
+  imp.status = "approved";
+  return t.id;
+}
+
 function rpc(s, name, params) {
+  if (name === "approve_import" || name === "reject_import") return importRpc(s, name, params);
   const m = params?.p_month;
   if (name === "account_balances") return accountBalances(s);
   if (name === "dashboard_summary") {
@@ -152,7 +188,8 @@ function makeBuilder(store, table) {
   const b = {
     _op: "select", _payload: null, _conflict: null,
     _filters: [], _orders: [], _limit: null,
-    select() { this._op = "select"; return this; },
+    _count: null, _head: false,
+    select(_cols, o) { this._op = "select"; this._count = o?.count || null; this._head = !!o?.head; return this; },
     insert(p) { this._op = "insert"; this._payload = p; return this; },
     update(p) { this._op = "update"; this._payload = p; return this; },
     upsert(p, o) { this._op = "upsert"; this._payload = p; this._conflict = o?.onConflict; return this; },
@@ -203,8 +240,9 @@ function makeBuilder(store, table) {
         for (const [c, asc] of [...this._orders].reverse()) {
           out.sort((x, y) => (x[c] > y[c] ? 1 : x[c] < y[c] ? -1 : 0) * (asc ? 1 : -1));
         }
+        const count = this._count ? out.length : null;
         if (this._limit != null) out = out.slice(0, this._limit);
-        return { data: out, error: null };
+        return { data: this._head ? null : out, error: null, count };
       } catch (e) {
         return { data: null, error: { message: String(e) } };
       }
@@ -224,6 +262,16 @@ export function createDemoClient() {
       async signOut() { return { error: null }; },
     },
     from(table) { return makeBuilder(store, table); },
-    async rpc(name, params) { return { data: rpc(store.data, name, params), error: null }; },
+    async rpc(name, params) {
+      // Write RPCs get a short fake network delay so loading states are visible.
+      if (name === "approve_import" || name === "reject_import") {
+        await new Promise((r) => setTimeout(r, 350));
+      }
+      try {
+        return { data: rpc(store.data, name, params), error: null };
+      } catch (e) {
+        return { data: null, error: { message: e.message || String(e), code: e.code || null } };
+      }
+    },
   };
 }

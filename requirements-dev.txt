@@ -1,0 +1,3 @@
+# Dev/test-only dependencies (CI browser smoke test). App deps: requirements.txt
+-r requirements.txt
+playwright==1.58.0
