@@ -644,6 +644,10 @@ begin
     if p_paid_on is null then
         raise exception 'paid-on date is required' using errcode = '22023';
     end if;
+    -- SB-13: the date comes from the caller's clock. Allow tomorrow (time
+    -- zones ahead of UTC) but no further, so a wrong clock cannot record a
+    -- payment in the future.
+    p_paid_on := least(p_paid_on, current_date + 1);
 
     select * into v_r from public.recurring
      where id = p_id and user_id = v_uid
@@ -794,6 +798,10 @@ begin
     if p_as_of is null then
         raise exception 'as-of date is required' using errcode = '22023';
     end if;
+    -- SB-13: p_as_of is the caller's local date (SB-11). Allow tomorrow (time
+    -- zones ahead of UTC) but no further, so a phone with its clock set ahead
+    -- cannot post future bills as real payments.
+    p_as_of := least(p_as_of, current_date + 1);
 
     for v_r in
         select * from public.recurring

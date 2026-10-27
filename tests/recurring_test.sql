@@ -581,6 +581,44 @@ begin
     assert (select count(*) from public.upcoming_recurring(p_as_of => d + 1)) = 3, 'named p_as_of with default p_days';
 end $$;
 
+-- SB-13: a clock set ahead cannot post the future. The date is clamped
+-- silently to tomorrow (server UTC date + 1), not rejected.
+insert into public.recurring (name, type, amount, account_id, category_id, frequency, start_date, auto_post)
+    select 'Clock', 'expense', 50.00, (select id from accounts where name = 'Cash'),
+           (select id from categories where name = 'Bills'), 'weekly', current_date - 7, true;
+do $$
+declare v_id uuid; v_n int; v_max date; r public.recurring%rowtype; v_tx uuid;
+begin
+    select id into v_id from public.recurring where name = 'Clock';
+    -- Due: D-7, D, (D+7 ... D+28 would be "due" by the phone's clock but are future).
+    v_n := public.post_due_recurring(current_date + 30);
+    select max(occurred_on) into v_max from public.transactions where recurring_id = v_id;
+    assert v_max <= current_date + 1, format('post_due posted a future date %s', v_max);
+    assert v_n = 2, format('expected 2 posted (D-7, D), got %s', v_n);
+    select * into r from public.recurring where id = v_id;
+    assert r.next_seq = 2 and r.next_due = current_date + 7, format('next %s %s', r.next_seq, r.next_due);
+    assert public.post_due_recurring(current_date + 365) = 0, 'a year ahead must post nothing more';
+
+    -- Tomorrow itself is allowed (IST is ahead of UTC): a bill due D+1 posts.
+    update public.recurring set start_date = current_date + 1, next_seq = 0 where id = v_id;
+    delete from public.transactions where recurring_id = v_id;
+    assert public.post_due_recurring(current_date + 1) = 1, 'a bill due tomorrow should post with as-of tomorrow';
+    assert (select max(occurred_on) from public.transactions where recurring_id = v_id) = current_date + 1,
+        'tomorrow''s bill dated tomorrow';
+    assert public.post_due_recurring(current_date + 30) = 0, 'D+8 must not post';
+
+    -- Early Mark paid: dated no later than tomorrow.
+    v_tx := public.mark_recurring_paid(v_id, current_date + 30);
+    assert (select occurred_on from public.transactions where id = v_tx) = current_date + 1,
+        format('Mark paid dated %s, expected tomorrow', (select occurred_on from public.transactions where id = v_tx));
+    -- An early payment still advances the schedule normally.
+    assert (select next_seq from public.recurring where id = v_id) = 2, 'Mark paid should advance';
+    -- Past dates are untouched by the clamp.
+    v_tx := public.mark_recurring_paid(v_id, current_date - 3);
+    assert (select occurred_on from public.transactions where id = v_tx) = current_date - 3, 'past paid-on kept';
+    update public.recurring set active = false where id = v_id;   -- keep later counts unaffected
+end $$;
+
 -- Only one upcoming_recurring exists, so the RPC is never ambiguous.
 reset role;
 do $$ begin
