@@ -462,6 +462,24 @@ begin
 exception when others then perform qa.fail('decision 12: reschedule_recurring', sqlerrm);
 end $$;
 
+-- SB-13: the client's date is trusted only up to tomorrow (UTC+14 is the
+-- furthest any local date can be ahead of the server's current_date).
+do $$
+declare v uuid; tx uuid; late int;
+begin
+    v := qa.bill('Clamp weekly', 'weekly', current_date - 7, true, 5);
+    perform public.post_due_recurring(current_date + 30);
+    select count(*) into late from public.transactions where recurring_id = v and occurred_on > current_date + 1;
+    assert late = 0, format('post_due(current_date + 30) posted %s payments dated after tomorrow', late);
+    assert (select count(*) from public.transactions where recurring_id = v) between 2 and 3,
+        'post_due should still post the occurrences due up to tomorrow';
+    tx := public.mark_recurring_paid(v, current_date + 30);
+    assert (select occurred_on from public.transactions where id = tx) <= current_date + 1,
+        'mark_recurring_paid kept a paid date after tomorrow';
+    perform qa.pass('SB-13: post_due / mark paid never record a date after tomorrow');
+exception when others then perform qa.fail('SB-13: client date clamp', sqlerrm);
+end $$;
+
 -- Upcoming list (uses current_date).
 do $$
 declare v_over uuid; v_today uuid; v_3 uuid; v_8 uuid; v_paused uuid; r record; ids uuid[];
