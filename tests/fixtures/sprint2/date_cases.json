@@ -1,0 +1,233 @@
+[
+ {
+  "start": "2024-01-31",
+  "freq": "monthly",
+  "n": 0,
+  "expected": "2024-01-31",
+  "why": "n=0 is the start date"
+ },
+ {
+  "start": "2024-01-31",
+  "freq": "monthly",
+  "n": 1,
+  "expected": "2024-02-29",
+  "why": "31 Jan -> 29 Feb in a leap year"
+ },
+ {
+  "start": "2024-01-31",
+  "freq": "monthly",
+  "n": 2,
+  "expected": "2024-03-31",
+  "why": "no drift: back to 31 after Feb"
+ },
+ {
+  "start": "2024-01-31",
+  "freq": "monthly",
+  "n": 3,
+  "expected": "2024-04-30",
+  "why": "30-day month clamp"
+ },
+ {
+  "start": "2024-01-31",
+  "freq": "monthly",
+  "n": 4,
+  "expected": "2024-05-31",
+  "why": "no drift after April"
+ },
+ {
+  "start": "2023-01-31",
+  "freq": "monthly",
+  "n": 1,
+  "expected": "2023-02-28",
+  "why": "31 Jan -> 28 Feb in a non-leap year"
+ },
+ {
+  "start": "2023-01-31",
+  "freq": "monthly",
+  "n": 2,
+  "expected": "2023-03-31",
+  "why": "no drift after non-leap Feb"
+ },
+ {
+  "start": "2023-01-31",
+  "freq": "monthly",
+  "n": 13,
+  "expected": "2024-02-29",
+  "why": "13 months later lands on leap Feb"
+ },
+ {
+  "start": "2023-01-29",
+  "freq": "monthly",
+  "n": 1,
+  "expected": "2023-02-28",
+  "why": "29th clamps in non-leap Feb"
+ },
+ {
+  "start": "2023-01-29",
+  "freq": "monthly",
+  "n": 2,
+  "expected": "2023-03-29",
+  "why": "29th restored"
+ },
+ {
+  "start": "2024-01-29",
+  "freq": "monthly",
+  "n": 1,
+  "expected": "2024-02-29",
+  "why": "29th fits leap Feb"
+ },
+ {
+  "start": "2023-01-30",
+  "freq": "monthly",
+  "n": 1,
+  "expected": "2023-02-28",
+  "why": "30th clamps in Feb"
+ },
+ {
+  "start": "2023-01-30",
+  "freq": "monthly",
+  "n": 2,
+  "expected": "2023-03-30",
+  "why": "30th restored"
+ },
+ {
+  "start": "2023-01-30",
+  "freq": "monthly",
+  "n": 3,
+  "expected": "2023-04-30",
+  "why": "30th fits April"
+ },
+ {
+  "start": "2023-08-31",
+  "freq": "monthly",
+  "n": 1,
+  "expected": "2023-09-30",
+  "why": "31 Aug -> 30 Sep"
+ },
+ {
+  "start": "2023-12-31",
+  "freq": "monthly",
+  "n": 1,
+  "expected": "2024-01-31",
+  "why": "month across year end"
+ },
+ {
+  "start": "2023-12-31",
+  "freq": "monthly",
+  "n": 2,
+  "expected": "2024-02-29",
+  "why": "Dec 31 -> leap Feb"
+ },
+ {
+  "start": "2024-01-15",
+  "freq": "monthly",
+  "n": 120,
+  "expected": "2034-01-15",
+  "why": "10 years of months"
+ },
+ {
+  "start": "2023-11-30",
+  "freq": "quarterly",
+  "n": 1,
+  "expected": "2024-02-29",
+  "why": "quarterly 30 Nov -> leap Feb"
+ },
+ {
+  "start": "2023-11-30",
+  "freq": "quarterly",
+  "n": 2,
+  "expected": "2024-05-30",
+  "why": "quarterly no drift after Feb"
+ },
+ {
+  "start": "2024-08-31",
+  "freq": "quarterly",
+  "n": 1,
+  "expected": "2024-11-30",
+  "why": "quarterly 31 Aug -> 30 Nov"
+ },
+ {
+  "start": "2024-08-31",
+  "freq": "quarterly",
+  "n": 2,
+  "expected": "2025-02-28",
+  "why": "quarterly -> non-leap Feb"
+ },
+ {
+  "start": "2024-08-31",
+  "freq": "quarterly",
+  "n": 3,
+  "expected": "2025-05-31",
+  "why": "quarterly restored to 31"
+ },
+ {
+  "start": "2024-02-29",
+  "freq": "yearly",
+  "n": 1,
+  "expected": "2025-02-28",
+  "why": "yearly from 29 Feb -> 28 Feb"
+ },
+ {
+  "start": "2024-02-29",
+  "freq": "yearly",
+  "n": 2,
+  "expected": "2026-02-28",
+  "why": "yearly 29 Feb, non-leap again"
+ },
+ {
+  "start": "2024-02-29",
+  "freq": "yearly",
+  "n": 4,
+  "expected": "2028-02-29",
+  "why": "yearly 29 Feb restored in next leap year"
+ },
+ {
+  "start": "2023-03-01",
+  "freq": "yearly",
+  "n": 1,
+  "expected": "2024-03-01",
+  "why": "yearly 1 Mar stays 1 Mar over leap day"
+ },
+ {
+  "start": "2025-12-29",
+  "freq": "weekly",
+  "n": 1,
+  "expected": "2026-01-05",
+  "why": "weekly across year end"
+ },
+ {
+  "start": "2024-12-31",
+  "freq": "weekly",
+  "n": 1,
+  "expected": "2025-01-07",
+  "why": "weekly from 31 Dec"
+ },
+ {
+  "start": "2024-02-26",
+  "freq": "weekly",
+  "n": 1,
+  "expected": "2024-03-04",
+  "why": "weekly across leap day"
+ },
+ {
+  "start": "2023-02-26",
+  "freq": "weekly",
+  "n": 1,
+  "expected": "2023-03-05",
+  "why": "weekly across non-leap Feb"
+ },
+ {
+  "start": "2024-01-01",
+  "freq": "weekly",
+  "n": 52,
+  "expected": "2024-12-30",
+  "why": "52 weeks is not a year"
+ },
+ {
+  "start": "2024-01-01",
+  "freq": "weekly",
+  "n": 53,
+  "expected": "2025-01-06",
+  "why": "53 weeks"
+ }
+]

@@ -1,0 +1,523 @@
+{
+ "min_occurrences": 3,
+ "transactions": [
+  {
+   "occurred_on": "2026-01-05",
+   "type": "expense",
+   "amount": 649,
+   "note": "Netflix 0123",
+   "category": "Entertainment",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-02-05",
+   "type": "expense",
+   "amount": 649,
+   "note": "NETFLIX #44",
+   "category": "Entertainment",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-05",
+   "type": "expense",
+   "amount": 649,
+   "note": "netflix-9",
+   "category": "Entertainment",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-04-05",
+   "type": "expense",
+   "amount": 649,
+   "note": "Netflix",
+   "category": "Entertainment",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-02",
+   "type": "expense",
+   "amount": 500,
+   "note": "Cult Gym",
+   "category": "Health",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-09",
+   "type": "expense",
+   "amount": 500,
+   "note": "Cult Gym",
+   "category": "Health",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-16",
+   "type": "expense",
+   "amount": 500,
+   "note": "Cult Gym",
+   "category": "Health",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-23",
+   "type": "expense",
+   "amount": 500,
+   "note": "Cult Gym",
+   "category": "Health",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-30",
+   "type": "expense",
+   "amount": 500,
+   "note": "Cult Gym",
+   "category": "Health",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-01",
+   "type": "income",
+   "amount": 85000,
+   "note": "Salary ACME",
+   "category": "Salary",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-02-01",
+   "type": "income",
+   "amount": 85000,
+   "note": "Salary ACME",
+   "category": "Salary",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-01",
+   "type": "income",
+   "amount": 85000,
+   "note": "Salary ACME",
+   "category": "Salary",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-04-01",
+   "type": "income",
+   "amount": 85000,
+   "note": "Salary ACME",
+   "category": "Salary",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-10",
+   "type": "expense",
+   "amount": 1800,
+   "note": "BESCOM bill",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-02-11",
+   "type": "expense",
+   "amount": 1950,
+   "note": "BESCOM bill",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-09",
+   "type": "expense",
+   "amount": 2000,
+   "note": "BESCOM bill",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-04-10",
+   "type": "expense",
+   "amount": 1900,
+   "note": "BESCOM bill",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2023-06-15",
+   "type": "expense",
+   "amount": 12000,
+   "note": "LIC premium",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2024-06-15",
+   "type": "expense",
+   "amount": 12000,
+   "note": "LIC premium",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2025-06-15",
+   "type": "expense",
+   "amount": 12000,
+   "note": "LIC premium",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2025-04-20",
+   "type": "expense",
+   "amount": 3000,
+   "note": "Broadband quarterly",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2025-07-20",
+   "type": "expense",
+   "amount": 3000,
+   "note": "Broadband quarterly",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2025-10-20",
+   "type": "expense",
+   "amount": 3000,
+   "note": "Broadband quarterly",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-20",
+   "type": "expense",
+   "amount": 3000,
+   "note": "Broadband quarterly",
+   "category": "Bills",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-03",
+   "type": "expense",
+   "amount": 900,
+   "note": "Groceries",
+   "category": "Food",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-06",
+   "type": "expense",
+   "amount": 1100,
+   "note": "Groceries",
+   "category": "Food",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-23",
+   "type": "expense",
+   "amount": 950,
+   "note": "Groceries",
+   "category": "Food",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-04",
+   "type": "expense",
+   "amount": 1050,
+   "note": "Groceries",
+   "category": "Food",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-13",
+   "type": "expense",
+   "amount": 1000,
+   "note": "Groceries",
+   "category": "Food",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-12",
+   "type": "expense",
+   "amount": 199,
+   "note": "Amazon",
+   "category": "Shopping",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-02-12",
+   "type": "expense",
+   "amount": 4999,
+   "note": "Amazon",
+   "category": "Shopping",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-12",
+   "type": "expense",
+   "amount": 89,
+   "note": "Amazon",
+   "category": "Shopping",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-04-12",
+   "type": "expense",
+   "amount": 12500,
+   "note": "Amazon",
+   "category": "Shopping",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-01",
+   "type": "expense",
+   "amount": 119,
+   "note": "Spotify",
+   "category": "Entertainment",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-04-01",
+   "type": "expense",
+   "amount": 119,
+   "note": "Spotify",
+   "category": "Entertainment",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-15",
+   "type": "expense",
+   "amount": 500,
+   "note": "",
+   "category": "Other",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-02-15",
+   "type": "expense",
+   "amount": 500,
+   "note": "",
+   "category": "Other",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-15",
+   "type": "expense",
+   "amount": 500,
+   "note": "",
+   "category": "Other",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-04-15",
+   "type": "expense",
+   "amount": 500,
+   "note": "",
+   "category": "Other",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-20",
+   "type": "expense",
+   "amount": 250,
+   "note": "12345 / 678",
+   "category": "Other",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-02-20",
+   "type": "expense",
+   "amount": 250,
+   "note": "12345 / 678",
+   "category": "Other",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-20",
+   "type": "expense",
+   "amount": 250,
+   "note": "12345 / 678",
+   "category": "Other",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-04-20",
+   "type": "expense",
+   "amount": 250,
+   "note": "12345 / 678",
+   "category": "Other",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-25",
+   "type": "expense",
+   "amount": 300,
+   "note": "PhonePe",
+   "category": "Other",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-02-25",
+   "type": "expense",
+   "amount": 300,
+   "note": "PhonePe",
+   "category": "Other",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-25",
+   "type": "income",
+   "amount": 300,
+   "note": "PhonePe",
+   "category": "Gift",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-04-25",
+   "type": "income",
+   "amount": 300,
+   "note": "PhonePe",
+   "category": "Gift",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-03",
+   "type": "expense",
+   "amount": 18000,
+   "note": "Rent",
+   "category": "Rent",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-02-03",
+   "type": "expense",
+   "amount": 18000,
+   "note": "Rent",
+   "category": "Rent",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-03-03",
+   "type": "expense",
+   "amount": 18000,
+   "note": "Rent",
+   "category": "Rent",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-04-03",
+   "type": "expense",
+   "amount": 18000,
+   "note": "Rent",
+   "category": "Rent",
+   "account": "HDFC"
+  },
+  {
+   "occurred_on": "2026-01-07",
+   "type": "transfer",
+   "amount": 5000,
+   "note": "ATM withdrawal",
+   "category": null,
+   "account": "HDFC",
+   "to_account": "Cash"
+  },
+  {
+   "occurred_on": "2026-02-07",
+   "type": "transfer",
+   "amount": 5000,
+   "note": "ATM withdrawal",
+   "category": null,
+   "account": "HDFC",
+   "to_account": "Cash"
+  },
+  {
+   "occurred_on": "2026-03-07",
+   "type": "transfer",
+   "amount": 5000,
+   "note": "ATM withdrawal",
+   "category": null,
+   "account": "HDFC",
+   "to_account": "Cash"
+  },
+  {
+   "occurred_on": "2026-04-07",
+   "type": "transfer",
+   "amount": 5000,
+   "note": "ATM withdrawal",
+   "category": null,
+   "account": "HDFC",
+   "to_account": "Cash"
+  }
+ ],
+ "existing_bills": [
+  {
+   "name": "RENT!",
+   "type": "expense",
+   "amount": 18000,
+   "frequency": "monthly",
+   "start_date": "2026-01-03",
+   "category": "Rent"
+  }
+ ],
+ "expected": [
+  {
+   "name": "netflix",
+   "type": "expense",
+   "frequency": "monthly",
+   "occurrences": 4,
+   "last_seen": "2026-04-05",
+   "next_guess": "2026-05-05",
+   "amount": 649
+  },
+  {
+   "name": "cult gym",
+   "type": "expense",
+   "frequency": "weekly",
+   "occurrences": 5,
+   "last_seen": "2026-03-30",
+   "next_guess": "2026-04-06",
+   "amount": 500
+  },
+  {
+   "name": "salary acme",
+   "type": "income",
+   "frequency": "monthly",
+   "occurrences": 4,
+   "last_seen": "2026-04-01",
+   "next_guess": "2026-05-01",
+   "amount": 85000
+  },
+  {
+   "name": "bescom bill",
+   "type": "expense",
+   "frequency": "monthly",
+   "occurrences": 4,
+   "last_seen": "2026-04-10"
+  },
+  {
+   "name": "lic premium",
+   "type": "expense",
+   "frequency": "yearly",
+   "occurrences": 3,
+   "last_seen": "2025-06-15",
+   "next_guess": "2026-06-15",
+   "amount": 12000
+  },
+  {
+   "name": "broadband quarterly",
+   "type": "expense",
+   "frequency": "quarterly",
+   "occurrences": 4,
+   "last_seen": "2026-01-20",
+   "next_guess": "2026-04-20",
+   "amount": 3000
+  }
+ ],
+ "must_not_suggest": [
+  "groceries",
+  "amazon",
+  "spotify",
+  "",
+  "phonepe",
+  "rent",
+  "atm withdrawal"
+ ],
+ "notes": "Names compare after normalising: lowercase, keep a-z and spaces, collapse spaces. '' and digits-only notes must never become a suggestion (a nameless bill is a false positive)."
+}

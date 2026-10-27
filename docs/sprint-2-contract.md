@@ -94,3 +94,26 @@ Tests go in `tests/recurring_test.sql`, wired into `tests/run.sh`, and also appe
 - Detection accuracy on fixtures (true positives, no false positives on random spend).
 - UI: Bills page + dashboard card in demo mode at 1440 and 390 px, no horizontal scroll, all actions work.
 - Verdict SHIP / NO-SHIP with numbered bugs (SB-9 onward).
+
+## Manager decisions (after Byte Vader's questions)
+
+1. 28-day plans stay "monthly"; the user can edit the start date when adding. No 4-weekly frequency this sprint.
+2. `confidence` = (gaps in band ÷ all gaps) × (kept rows ÷ group rows) is accepted. The front end hides suggestions below 0.5.
+3. The front end tidies the suggested name before pre-filling: strip digits and trailing reference codes, title case (e.g. "NETFLIX.COM 9921" → "Netflix.com").
+4. Paused bills still exclude their group (the user already knows about them).
+5. Non-ASCII normalisation differences are accepted for now; fixtures stay ASCII.
+6. Transactions posted by bills get `source = 'recurring'`.
+7. The front end never sends `next_due` (the trigger computes it).
+8. Editing the amount, name, account, category or auto-post keeps the schedule. Changing frequency or the date means "a new schedule from the date you pick": the form sends `start_date = <picked next due>` and `next_seq = 0`.
+9. The add form defaults the start date to today. If the date is in the past and auto-post is on, it warns: "This will add N past payments now."
+10. Paused bills can still be marked paid or skipped by hand; only auto-post and the upcoming list skip them.
+11. The front end also maps 23514 (invalid value) and 23503 ("This category is used by a bill") to friendly messages.
+12. (Replaces the next_seq part of 8, after Sherlock's review.) Resetting `next_seq = 0` would collide with already-posted
+    sequence numbers. Instead Tabledore adds `reschedule_recurring(p_id uuid, p_start date, p_frequency text)`: in one
+    transaction it renumbers the bill's posted transactions to negative seqs (seq − next_seq, so history stays linked
+    and unique), then sets start_date, frequency and next_seq = 0. The front end calls it instead of a direct update
+    when the frequency or date changes.
+13. Detection must not suggest ordinary random spend: Byte Vader tightens the rule (at least 2/3 of gaps inside the band,
+    on top of the 0.5 confidence cut-off) so Sherlock's random-spend fixtures produce no suggestions.
+14. Resuming a paused bill skips the dates missed while paused (no backlog is auto-posted); the front end advances
+    next_seq past them on resume.

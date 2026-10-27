@@ -12,6 +12,18 @@
   <div class="card stat"><div class="label">Spent this month</div><div class="value neg" id="expense">—</div></div>
 </div>
 
+<div class="card upcoming-card" style="margin-bottom:16px">
+  <div class="card-head">
+    <h2 id="upcomingHeading" tabindex="-1">Upcoming bills</h2>
+    <a href="/bills" class="card-link">All bills <span aria-hidden="true">→</span></a>
+  </div>
+  <p class="card-intro" style="margin-bottom:8px">Due in the next 7 days, plus anything overdue.</p>
+  <ul class="bill-list" id="upcoming" aria-labelledby="upcomingHeading" aria-busy="true">
+    <li class="bill-item" aria-hidden="true"><span class="skel w-60"></span></li>
+    <li class="bill-item" aria-hidden="true"><span class="skel w-40"></span></li>
+  </ul>
+</div>
+
 <div class="grid cols-2">
   <div class="card">
     <h2>Accounts</h2>
@@ -25,16 +37,19 @@
 
 <div class="card" style="margin-top:16px">
   <h2>Recent transactions</h2>
-  <table>
-    <thead><tr><th>Date</th><th>Category</th><th>Account</th><th>Note</th><th style="text-align:right">Amount</th></tr></thead>
-    <tbody id="recent"></tbody>
-  </table>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Date</th><th>Category</th><th>Account</th><th>Note</th><th style="text-align:right">Amount</th></tr></thead>
+      <tbody id="recent"></tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}
 
 {% block page_script %}
 <script type="module">
-  import { db, money, esc, thisMonth, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  import { db, money, esc, thisMonth, toast, today, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
+  import { dueLabel, shortDate } from "{{ url_for('static', filename='js/recurring.js') }}";
 
   const $ = (id) => document.getElementById(id);
   const monthInput = $("month");
@@ -93,7 +108,75 @@
       : `<tr><td colspan="5" class="empty">No transactions yet. <a href="/transactions" style="color:var(--brand)">Add one →</a></td></tr>`;
   }
 
+  // --- Upcoming bills (next 7 days + overdue) ------------------------------
+  const paying = new Set();
+  async function loadUpcoming(focusId) {
+    const list = $("upcoming");
+    const { data, error } = await db.rpc("upcoming_recurring", { p_days: 7 });
+    list.removeAttribute("aria-busy");
+    if (error) {
+      list.innerHTML = `<li class="bill-item empty-item">Couldn't load bills.
+        <button class="link-btn" type="button" id="upRetry">Try again</button></li>`;
+      $("upRetry").onclick = () => loadUpcoming();
+      return;
+    }
+    if (!data.length) {
+      list.innerHTML = `<li class="bill-item empty-item">Nothing due in the next 7 days.
+        <a href="/bills" class="card-link">Add a bill</a> to get reminders.</li>`;
+      return;
+    }
+    const t = today();
+    list.innerHTML = data.map((b) => {
+      const income = b.type === "income";
+      const name = esc(b.name);
+      const label = dueLabel(Number(b.days_left));
+      const when = shortDate(b.next_due, t);
+      const word = income ? "received" : "paid";
+      return `<li class="bill-item" data-id="${esc(b.id)}">
+        <div class="bill-main">
+          <div class="bill-name">${name}${b.auto_post ? ` <span class="pill">Auto</span>` : ""}</div>
+          <div class="bill-meta"><span class="due ${b.overdue ? "overdue" : Number(b.days_left) <= 3 ? "soon" : "later"}">${label}</span> · ${esc(when)}</div>
+        </div>
+        <div class="amt ${income ? "pos" : "neg"}">${income ? "+" : "−"}${money(b.amount)}</div>
+        <button class="btn sm mark-paid" type="button"
+          aria-label="Mark ${name} ${word}, ${esc(label.toLowerCase())}, ${esc(when)}">Mark ${word}</button>
+      </li>`;
+    }).join("");
+    list.querySelectorAll("li[data-id]").forEach((li) => {
+      const b = data.find((x) => x.id === li.dataset.id);
+      li.querySelector(".mark-paid").onclick = (e) => markPaid(b, e.currentTarget);
+    });
+    if (focusId) {
+      const li = list.querySelector(`li[data-id="${CSS.escape(focusId)}"]`);
+      (li?.querySelector(".mark-paid") || $("upcomingHeading")).focus();
+    }
+  }
+
+  async function markPaid(b, btn) {
+    if (paying.has(b.id)) return;
+    paying.add(b.id);
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    try {
+      const { error } = await db.rpc("mark_recurring_paid", { p_id: b.id });
+      if (error) throw error;
+      toast(`${b.type === "income" ? "Received" : "Paid"} ${b.name}, ${money(b.amount)}.`, "ok");
+      await Promise.all([loadUpcoming(b.id), load()]);   // balances changed too
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = b.type === "income" ? "Mark received" : "Mark paid";
+      toast(e?.code === "P0002" ? "That bill no longer exists. Refresh and try again."
+        : `Couldn't mark it ${b.type === "income" ? "received" : "paid"}. ${e?.message || "Check your connection and try again."}`);
+    } finally {
+      paying.delete(b.id);
+    }
+  }
+
   monthInput.addEventListener("change", load);
-  if (db) load();
+  if (db) {
+    await postDueBills();      // so balances and the bills card include auto-posted bills
+    load();
+    loadUpcoming();
+  }
 </script>
 {% endblock %}

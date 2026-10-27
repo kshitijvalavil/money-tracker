@@ -1,0 +1,65 @@
+occurred_on,amount,type,note,account,category
+2026-01-05,649.00,expense,NETFLIX.COM 4829,Card,Entertainment
+2026-02-05,649.00,expense,NETFLIX.COM 5531,Card,Entertainment
+2026-03-06,649.00,expense,NETFLIX.COM 6620,Card,Entertainment
+2026-04-05,649.00,expense,NETFLIX.COM 7012,Card,Entertainment
+2026-05-05,649.00,expense,NETFLIX.COM 8193,Card,Entertainment
+2026-06-06,649.00,expense,NETFLIX.COM 9921,Card,Entertainment
+2025-12-08,500.00,expense,Gym - FitLife,Bank,Health
+2025-12-15,500.00,expense,Gym - FitLife,Bank,Health
+2025-12-22,500.00,expense,Gym - FitLife,Bank,Health
+2025-12-29,500.00,expense,Gym - FitLife,Bank,Health
+2026-01-05,500.00,expense,Gym - FitLife,Bank,Health
+2026-01-12,500.00,expense,Gym - FitLife,Bank,Health
+2026-01-19,500.00,expense,Gym - FitLife,Bank,Health
+2026-01-26,500.00,expense,Gym - FitLife,Bank,Health
+2023-03-15,12000.00,expense,LIC Premium,Bank,Bills
+2024-03-14,12000.00,expense,LIC Premium,Bank,Bills
+2025-03-15,12000.00,expense,LIC Premium,Bank,Bills
+2026-03-16,12000.00,expense,LIC Premium,Bank,Bills
+2026-01-31,15000.00,expense,Rent,Bank,Rent
+2026-02-28,15000.00,expense,Rent,Bank,Rent
+2026-03-31,15000.00,expense,Rent,Bank,Rent
+2026-04-30,15000.00,expense,Rent,Bank,Rent
+2026-05-31,15000.00,expense,Rent,Bank,Rent
+2026-01-01,50000.00,income,Salary ACME Ltd,Bank,Salary
+2026-02-01,50000.00,income,Salary ACME Ltd,Bank,Salary
+2026-03-01,52000.00,income,Salary ACME Ltd,Bank,Salary
+2026-04-01,50000.00,income,Salary ACME Ltd,Bank,Salary
+2026-05-01,50000.00,income,Salary ACME Ltd,Bank,Salary
+2026-06-01,53000.00,income,Salary ACME Ltd,Bank,Salary
+2026-01-03,230.00,expense,BigBasket order,Card,Food
+2026-01-19,1890.00,expense,BigBasket order,Card,Food
+2026-02-02,640.00,expense,BigBasket order,Card,Food
+2026-02-27,75.00,expense,BigBasket order,Card,Food
+2026-03-09,3200.00,expense,BigBasket order,Card,Food
+2026-04-14,410.00,expense,BigBasket order,Card,Food
+2026-05-02,2750.00,expense,BigBasket order,Card,Food
+2026-04-20,85000.00,expense,Laptop - Croma,Card,Shopping
+2026-01-10,1000.00,expense,Electricity bill,Bank,Bills
+2026-02-10,1150.00,expense,Electricity bill,Bank,Bills
+2026-03-10,1320.00,expense,Electricity bill,Bank,Bills
+2026-04-10,1520.00,expense,Electricity bill,Bank,Bills
+2026-05-10,1750.00,expense,Electricity bill,Bank,Bills
+2026-05-01,300.00,expense,Swiggy,Card,Food
+2026-05-04,300.00,expense,Swiggy,Card,Food
+2026-05-06,300.00,expense,Swiggy,Card,Food
+2026-05-10,300.00,expense,Swiggy,Card,Food
+2026-05-13,300.00,expense,Swiggy,Card,Food
+2026-05-15,300.00,expense,Swiggy,Card,Food
+2026-05-18,300.00,expense,Swiggy,Card,Food
+2026-01-02,5000.00,transfer,To savings,Bank,
+2026-02-02,5000.00,transfer,To savings,Bank,
+2026-03-02,5000.00,transfer,To savings,Bank,
+2026-04-02,5000.00,transfer,To savings,Bank,
+2026-05-02,5000.00,transfer,To savings,Bank,
+2026-01-01,119.00,expense,Spotify Premium,Card,Entertainment
+2026-02-01,119.00,expense,Spotify Premium,Card,Entertainment
+2026-03-01,119.00,expense,Spotify Premium,Card,Entertainment
+2026-04-01,119.00,expense,Spotify Premium,Card,Entertainment
+2026-05-21,119.00,expense,Spotify Premium,Card,Entertainment
+2026-06-01,500.00,expense,Spotify Premium,Card,Entertainment
+2026-02-03,299.00,expense,Jio recharge #101,Bank,Bills
+2026-03-03,299.01,expense,Jio recharge #102,Bank,Bills
+2026-03-31,299.00,expense,Jio recharge #103,Bank,Bills
+2026-04-28,299.01,expense,Jio recharge #104,Bank,Bills

@@ -1,0 +1,552 @@
+{% extends "_shell.html" %}
+{% block title %}Bills — Money Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Bills</h1>
+    <p class="page-sub" id="monthlyTotal" aria-live="polite"></p>
+  </div>
+  <button class="btn" id="addBillBtn" type="button">Add bill</button>
+</div>
+
+<div class="card">
+  <div class="card-head">
+    <h2 id="billsHeading" tabindex="-1">Your bills</h2>
+    <span class="bulk-status" id="billsStatus" role="status" aria-live="polite"></span>
+  </div>
+  <div class="table-wrap">
+    <table id="billsTable">
+      <caption class="sr-only">Recurring bills and income, soonest first</caption>
+      <thead><tr>
+        <th scope="col">Bill</th>
+        <th scope="col" style="text-align:right">Amount</th>
+        <th scope="col">Next due</th>
+        <th scope="col">Auto-post</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr></thead>
+      <tbody id="billRows"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="grid cols-2 bills-lower">
+  <div class="card" id="formCard">
+    <h2 id="formTitle" tabindex="-1">Add a bill</h2>
+    <p class="card-intro" id="formIntro">Rent, subscriptions, insurance, or income that repeats.
+      We'll remind you when it's due.</p>
+    <form id="billForm" novalidate>
+      <div class="field"><label for="fName">Name</label>
+        <input type="text" id="fName" maxlength="80" required autocomplete="off"
+               aria-describedby="fNameErr">
+        <div class="field-error" id="fNameErr" hidden></div></div>
+      <div class="row">
+        <div class="field"><label for="fType">Type</label>
+          <select id="fType">
+            <option value="expense">Bill (money out)</option>
+            <option value="income">Income (money in)</option>
+          </select></div>
+        <div class="field"><label for="fAmount">Amount (₹)</label>
+          <input type="number" id="fAmount" step="0.01" min="0.01" inputmode="decimal" required
+                 aria-describedby="fAmountErr">
+          <div class="field-error" id="fAmountErr" hidden></div></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="fAccount">Account</label>
+          <select id="fAccount" aria-describedby="fAccountErr"></select>
+          <div class="field-error" id="fAccountErr" hidden></div></div>
+        <div class="field"><label for="fCategory">Category</label>
+          <select id="fCategory" aria-describedby="fCategoryErr"></select>
+          <div class="field-error" id="fCategoryErr" hidden></div></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="fFreq">Repeats</label>
+          <select id="fFreq">
+            <option value="weekly">Weekly</option>
+            <option value="monthly" selected>Monthly</option>
+            <option value="quarterly">Every 3 months</option>
+            <option value="yearly">Yearly</option>
+          </select></div>
+        <div class="field"><label for="fStart">First due date</label>
+          <input type="date" id="fStart" required aria-describedby="fStartHelp fStartErr">
+          <div class="field-help" id="fStartHelp">A past date sets the schedule; tracking starts
+            from the next due date on or after today.</div>
+          <div class="field-error" id="fStartErr" hidden></div></div>
+      </div>
+      <div class="field check-field">
+        <input type="checkbox" id="fAuto" aria-describedby="fAutoHelp">
+        <div>
+          <label for="fAuto" class="check-label">Post automatically on the due date</label>
+          <div class="field-help" id="fAutoHelp">Good for fixed debits like a gym or EMI. Leave
+            off to confirm each payment yourself with Mark paid.</div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn" type="submit" id="saveBtn">Add bill</button>
+        <button class="btn ghost" type="button" id="cancelEdit" hidden>Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" id="suggestCard">
+    <h2>Looks like a bill</h2>
+    <p class="card-intro">Payments that repeat in your transactions at a steady interval.
+      Add one to get reminders, or dismiss it.</p>
+    <ul class="suggest-list" id="suggestions" aria-label="Suggested bills"></ul>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, money, esc, toast, today, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
+  import { occurrence, firstSeqOnOrAfter, perMonth, dueLabel, shortDate, FREQ_LABEL, normaliseName,
+    tidyName, MIN_SUGGEST_CONFIDENCE }
+    from "{{ url_for('static', filename='js/recurring.js') }}";
+  const $ = (id) => document.getElementById(id);
+
+  let accounts = [], categories = [], bills = [];
+  let editingId = null;
+  const inFlight = new Set();          // bill ids with a request running
+
+  // --- Plain-language errors (SQLSTATE codes from the database) ----------
+  function friendly(err) {
+    switch (err?.code) {
+      case "P0002": return "That bill no longer exists. Refresh the page and try again.";
+      case "22023": return "The category doesn't match the type. Bills need an expense category, income needs an income category.";
+      case "23514": return "Check the details: a name up to 80 characters and an amount above zero.";
+      case "23503": return "That account or category no longer exists. Pick another one.";
+      case "42501": return "You've been signed out. Sign in again to continue.";
+      default: return err?.message ? `Something went wrong: ${err.message}` : "Check your connection and try again.";
+    }
+  }
+
+  const nameOf = (list, id) => list.find((x) => x.id === id)?.name || "—";
+
+  // --- Monthly total -------------------------------------------------------
+  function renderTotal() {
+    const active = bills.filter((b) => b.active && b.type === "expense");
+    const total = active.reduce((n, b) => n + perMonth(b.amount, b.frequency), 0);
+    $("monthlyTotal").textContent = active.length
+      ? `Bills ≈ ${money(total)} / month across ${active.length} active ${active.length === 1 ? "bill" : "bills"}`
+      : "";
+  }
+
+  // --- List states ---------------------------------------------------------
+  function showLoading() {
+    $("billsTable").setAttribute("aria-busy", "true");
+    const widths = ["w-80", "w-50", "w-60", "w-40", "w-70"];
+    $("billRows").innerHTML = Array.from({ length: 3 }, () => `<tr class="skeleton-row" aria-hidden="true">
+      ${widths.map((w) => `<td><span class="skel ${w}"></span></td>`).join("")}</tr>`).join("")
+      + `<tr><td colspan="5" class="sr-only">Loading bills…</td></tr>`;
+  }
+
+  function showError(message) {
+    $("billsTable").removeAttribute("aria-busy");
+    $("billRows").innerHTML = `<tr><td colspan="5" class="empty state">
+      <div class="state-title">Couldn't load your bills</div>
+      <div class="state-body">${esc(message)}</div>
+      <button class="btn ghost sm" id="retry" type="button">Try again</button></td></tr>`;
+    $("retry").onclick = () => load(true);
+  }
+
+  function rowHtml(b) {
+    const t = today();
+    const income = b.type === "income";
+    const days = Math.round((Date.parse(b.next_due) - Date.parse(t)) / 864e5);
+    const state = !b.active ? "paused" : days < 0 ? "overdue" : days <= 3 ? "soon" : "later";
+    const name = esc(b.name);
+    const dueText = b.active ? dueLabel(days) : "Paused";
+    const when = shortDate(b.next_due, t);
+    const payWord = income ? "received" : "paid";
+    const meta = [FREQ_LABEL[b.frequency], nameOf(accounts, b.account_id), nameOf(categories, b.category_id)]
+      .map(esc).join(" · ");
+    return `<tr data-id="${esc(b.id)}" class="${b.active ? "" : "paused"}">
+      <td class="c-bill">
+        <div class="bill-name">${name}${income ? ` <span class="pill">Income</span>` : ""}${b.active ? "" : ` <span class="pill">Paused</span>`}</div>
+        <div class="bill-meta">${meta}</div>
+        <div class="row-msg" role="alert" hidden></div>
+      </td>
+      <td class="amt ${income ? "pos" : "neg"}">${income ? "+" : "−"}${money(b.amount)}</td>
+      <td class="c-due"><span class="cell-label" aria-hidden="true">Next due</span>
+        <span class="due ${state}">${dueText}</span>
+        ${b.active ? `<div class="bill-meta">${esc(when)}</div>` : ""}</td>
+      <td class="c-auto"><label class="switch">
+          <input type="checkbox" role="switch" class="auto-toggle" ${b.auto_post ? "checked" : ""}
+                 aria-label="Post ${name} automatically on its due date">
+          <span class="switch-ui" aria-hidden="true"></span>
+          <span class="switch-text" aria-hidden="true">${b.auto_post ? "On" : "Off"}</span>
+        </label></td>
+      <td class="row-actions">
+        ${b.active ? `<button class="btn sm mark-paid" type="button"
+            aria-label="Mark ${name} ${payWord}, ${esc(dueText.toLowerCase())}, ${esc(when)}">Mark ${payWord}</button>
+          <button class="btn ghost sm skip" type="button"
+            aria-label="Skip the ${esc(when)} ${name} payment">Skip</button>` : ""}
+        <span class="more-actions">
+          <button class="link-btn edit" type="button" aria-label="Edit ${name}">Edit</button>
+          <button class="link-btn pause" type="button" aria-label="${b.active ? "Pause" : "Resume"} ${name}">${b.active ? "Pause" : "Resume"}</button>
+          <button class="link-btn danger delete" type="button" aria-label="Delete ${name}">Delete</button>
+        </span>
+      </td>
+    </tr>`;
+  }
+
+  function render() {
+    $("billsTable").removeAttribute("aria-busy");
+    renderTotal();
+    if (!bills.length) {
+      $("billRows").innerHTML = `<tr><td colspan="5" class="empty state">
+        <div class="state-icon" aria-hidden="true">🧾</div>
+        <div class="state-title">No bills yet</div>
+        <div class="state-body">Add rent, subscriptions or insurance and we'll show what's due and
+          when, so nothing slips. Repeating payments we spot appear under "Looks like a bill".</div>
+        <button class="btn ghost sm" type="button" id="emptyAdd">Add your first bill</button></td></tr>`;
+      $("emptyAdd").onclick = () => startAdd();
+      return;
+    }
+    $("billRows").innerHTML = bills.map(rowHtml).join("");
+    $("billRows").querySelectorAll("tr[data-id]").forEach((tr) => {
+      const b = bills.find((x) => x.id === tr.dataset.id);
+      tr.querySelector(".mark-paid")?.addEventListener("click", () => markPaid(tr, b));
+      tr.querySelector(".skip")?.addEventListener("click", () => skip(tr, b));
+      tr.querySelector(".edit").addEventListener("click", () => startEdit(b));
+      tr.querySelector(".pause").addEventListener("click", () => togglePause(tr, b));
+      tr.querySelector(".delete").addEventListener("click", () => remove(tr, b));
+      tr.querySelector(".auto-toggle").addEventListener("change", (e) => toggleAuto(tr, b, e.target));
+    });
+  }
+
+  async function loadLists() {
+    const [a, c] = await Promise.all([
+      db.from("accounts").select("id, name").order("name"),
+      db.from("categories").select("id, name, kind").order("name"),
+    ]);
+    if (a.error || c.error) throw (a.error || c.error);
+    accounts = a.data; categories = c.data;
+    $("fAccount").innerHTML = accounts.length
+      ? accounts.map((x) => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("")
+      : `<option value="">No accounts yet</option>`;
+    fillCategories();
+  }
+
+  // Active bills soonest first, paused ones after.
+  async function load(withSkeleton) {
+    if (withSkeleton) showLoading();
+    try {
+      if (!accounts.length) await loadLists();
+      const { data, error } = await db.from("recurring").select("*").order("next_due");
+      if (error) throw error;
+      bills = data.sort((x, y) => (y.active - x.active) || (x.next_due < y.next_due ? -1 : x.next_due > y.next_due ? 1 : 0));
+      render();
+    } catch (e) {
+      showError(e?.message || "Check your connection and try again.");
+    }
+  }
+
+  // --- Row actions ---------------------------------------------------------
+  function setBusy(tr, busy, label) {
+    tr.classList.toggle("busy", busy);
+    if (busy) tr.setAttribute("aria-busy", "true"); else tr.removeAttribute("aria-busy");
+    tr.querySelectorAll("button, input").forEach((el) => (el.disabled = busy));
+    const mp = tr.querySelector(".mark-paid");
+    if (mp && label) mp.textContent = label;
+  }
+  function rowError(tr, message) {
+    const box = tr.querySelector(".row-msg");
+    box.hidden = !message;
+    box.textContent = message || "";
+  }
+  // Re-render, then put focus back on the same control of the same row.
+  async function reloadKeepingFocus(id, selector) {
+    await load(false);
+    const tr = $("billRows").querySelector(`tr[data-id="${CSS.escape(id)}"]`);
+    (tr?.querySelector(selector) || tr?.querySelector(".edit") || $("billsHeading")).focus();
+  }
+
+  // Runs one write for a row; returns true on success.
+  async function run(tr, b, label, fn) {
+    if (inFlight.has(b.id)) return false;
+    inFlight.add(b.id);
+    rowError(tr, "");
+    setBusy(tr, true, label);
+    try {
+      const { error } = await fn();
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      setBusy(tr, false);
+      const tr2 = $("billRows").querySelector(`tr[data-id="${CSS.escape(b.id)}"]`);
+      if (tr2) render();                          // restore labels/toggle state
+      const row = $("billRows").querySelector(`tr[data-id="${CSS.escape(b.id)}"]`);
+      if (row) rowError(row, friendly(e));
+      toast(friendly(e));
+      return false;
+    } finally {
+      inFlight.delete(b.id);
+    }
+  }
+
+  async function markPaid(tr, b) {
+    const word = b.type === "income" ? "Received" : "Paid";
+    const ok = await run(tr, b, "Saving…", () => db.rpc("mark_recurring_paid", { p_id: b.id }));
+    if (!ok) return;
+    await reloadKeepingFocus(b.id, ".mark-paid");
+    const now = bills.find((x) => x.id === b.id);
+    toast(`${word} ${b.name}, ${money(b.amount)}. Next due ${shortDate(now.next_due, today())}.`, "ok");
+  }
+
+  async function skip(tr, b) {
+    const was = shortDate(b.next_due, today());
+    const ok = await run(tr, b, null, () => db.rpc("skip_recurring", { p_id: b.id }));
+    if (!ok) return;
+    await reloadKeepingFocus(b.id, ".skip");
+    const now = bills.find((x) => x.id === b.id);
+    toast(`Skipped ${b.name} for ${was}. Nothing was recorded. Next due ${shortDate(now.next_due, today())}.`, "ok");
+  }
+
+  async function toggleAuto(tr, b, input) {
+    const on = input.checked;
+    const ok = await run(tr, b, null, () => db.from("recurring").update({ auto_post: on }).eq("id", b.id));
+    if (!ok) return;
+    await reloadKeepingFocus(b.id, ".auto-toggle");
+    toast(on ? `${b.name} will post automatically on its due date.`
+             : `Auto-post off. Use Mark paid when ${b.name} is due.`, "ok");
+  }
+
+  async function togglePause(tr, b) {
+    let patch = { active: false };
+    if (!b.active) {
+      // Resuming skips dates missed while paused instead of posting them.
+      const n = firstSeqOnOrAfter(b.start_date, b.frequency, today(), b.next_seq);
+      patch = { active: true, next_seq: n, next_due: occurrence(b.start_date, b.frequency, n) };
+    }
+    const ok = await run(tr, b, null, () => db.from("recurring").update(patch).eq("id", b.id));
+    if (!ok) return;
+    await reloadKeepingFocus(b.id, ".pause");
+    toast(b.active
+      ? `Paused ${b.name}. It won't come due or post until you resume it.`
+      : `Resumed ${b.name}. Next due ${shortDate(patch.next_due, today())}.`, "ok");
+  }
+
+  async function remove(tr, b) {
+    if (inFlight.has(b.id)) return;
+    if (!confirm(`Delete "${b.name}"? Payments already recorded stay in your transactions.`)) return;
+    const next = tr.nextElementSibling?.dataset.id || tr.previousElementSibling?.dataset.id;
+    const ok = await run(tr, b, null, () => db.from("recurring").delete().eq("id", b.id));
+    if (!ok) return;
+    if (editingId === b.id) resetForm();
+    await load(false);
+    loadSuggestions();
+    const nextRow = next && $("billRows").querySelector(`tr[data-id="${CSS.escape(next)}"]`);
+    (nextRow?.querySelector(".mark-paid, .edit") || $("billsHeading")).focus();
+    toast(`Deleted ${b.name}.`, "ok");
+  }
+
+  // --- Form ----------------------------------------------------------------
+  function fillCategories(selected) {
+    const kind = $("fType").value;
+    const list = categories.filter((c) => c.kind === kind);
+    $("fCategory").innerHTML = list.length
+      ? list.map((c) => `<option value="${esc(c.id)}"${c.id === selected ? " selected" : ""}>${esc(c.name)}</option>`).join("")
+      : `<option value="">No ${kind} categories yet</option>`;
+  }
+  $("fType").addEventListener("change", () => fillCategories());
+
+  function setFieldError(input, errEl, message) {
+    errEl.hidden = !message;
+    errEl.textContent = message || "";
+    if (message) input.setAttribute("aria-invalid", "true"); else input.removeAttribute("aria-invalid");
+  }
+  function clearErrors() {
+    [["fName", "fNameErr"], ["fAmount", "fAmountErr"], ["fAccount", "fAccountErr"],
+     ["fCategory", "fCategoryErr"], ["fStart", "fStartErr"]].forEach(([i, e]) => setFieldError($(i), $(e), ""));
+  }
+
+  function resetForm() {
+    editingId = null;
+    $("billForm").reset();
+    $("fFreq").value = "monthly";
+    $("fStart").value = today();
+    fillCategories();
+    clearErrors();
+    $("formTitle").textContent = "Add a bill";
+    $("formIntro").textContent = "Rent, subscriptions, insurance, or income that repeats. We'll remind you when it's due.";
+    $("saveBtn").textContent = "Add bill";
+    $("cancelEdit").hidden = true;
+  }
+
+  function focusForm() {
+    $("formCard").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    $("fName").focus({ preventScroll: true });
+  }
+
+  function startAdd() { resetForm(); focusForm(); }
+  $("addBillBtn").onclick = startAdd;
+
+  function fill(v) {
+    $("fName").value = v.name ?? "";
+    $("fType").value = v.type || "expense";
+    fillCategories(v.category_id);
+    $("fAmount").value = v.amount ?? "";
+    if (v.account_id && accounts.some((a) => a.id === v.account_id)) $("fAccount").value = v.account_id;
+    $("fFreq").value = v.frequency || "monthly";
+    $("fStart").value = v.start_date || today();
+    $("fAuto").checked = !!v.auto_post;
+  }
+
+  function startEdit(b) {
+    resetForm();
+    editingId = b.id;
+    fill(b);
+    $("formTitle").textContent = `Edit ${b.name}`;
+    $("formIntro").textContent = "Changing how often it repeats or the first due date moves the next due date to the next one on or after today.";
+    $("saveBtn").textContent = "Save changes";
+    $("cancelEdit").hidden = false;
+    focusForm();
+  }
+  $("cancelEdit").onclick = () => {
+    const id = editingId;
+    resetForm();
+    const tr = id && $("billRows").querySelector(`tr[data-id="${CSS.escape(id)}"]`);
+    (tr?.querySelector(".edit") || $("billsHeading")).focus();
+  };
+
+  function readForm() {
+    clearErrors();
+    const v = {
+      name: $("fName").value.trim(),
+      type: $("fType").value,
+      amount: Math.round(parseFloat($("fAmount").value) * 100) / 100,
+      account_id: $("fAccount").value,
+      category_id: $("fCategory").value,
+      frequency: $("fFreq").value,
+      start_date: $("fStart").value,
+      auto_post: $("fAuto").checked,
+    };
+    const errs = [];
+    if (!v.name) errs.push(["fName", "fNameErr", "Give it a name, like Rent or Netflix."]);
+    if (!(v.amount > 0)) errs.push(["fAmount", "fAmountErr", "Enter an amount above zero."]);
+    if (!v.account_id) errs.push(["fAccount", "fAccountErr", "Add an account first, on the Accounts page."]);
+    if (!v.category_id) errs.push(["fCategory", "fCategoryErr", `You need an ${v.type} category for this.`]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v.start_date)) errs.push(["fStart", "fStartErr", "Pick the first due date."]);
+    errs.forEach(([i, e, m]) => setFieldError($(i), $(e), m));
+    if (errs.length) { $(errs[0][0]).focus(); return null; }
+    return v;
+  }
+
+  let saving = false;
+  $("billForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (saving) return;
+    const v = readForm();
+    if (!v) return;
+    saving = true;
+    $("saveBtn").disabled = true;
+    const label = $("saveBtn").textContent;
+    $("saveBtn").textContent = "Saving…";
+    try {
+      let row = { ...v };
+      const existing = editingId && bills.find((b) => b.id === editingId);
+      const scheduleChanged = !existing || existing.start_date !== v.start_date || existing.frequency !== v.frequency;
+      if (scheduleChanged) {
+        // Track from the next due date on or after today, and never reuse an
+        // occurrence number that already has a payment recorded.
+        let minSeq = 0;
+        if (existing) {
+          const { data, error } = await db.from("transactions").select("recurring_seq")
+            .eq("recurring_id", existing.id).order("recurring_seq", { ascending: false }).limit(1);
+          if (error) throw error;
+          if (data?.length) minSeq = Number(data[0].recurring_seq) + 1;
+        }
+        const n = firstSeqOnOrAfter(v.start_date, v.frequency, today(), minSeq);
+        row.next_seq = n;
+        row.next_due = occurrence(v.start_date, v.frequency, n);
+      }
+      const { error } = existing
+        ? await db.from("recurring").update(row).eq("id", existing.id)
+        : await db.from("recurring").insert(row);
+      if (error) throw error;
+      const id = existing?.id;
+      toast(existing ? `Saved ${v.name}.` : `Added ${v.name}. Next due ${shortDate(row.next_due, today())}.`, "ok");
+      resetForm();
+      await load(false);
+      loadSuggestions();
+      const tr = id && $("billRows").querySelector(`tr[data-id="${CSS.escape(id)}"]`);
+      (tr?.querySelector(".edit") || $("billsHeading")).focus();
+    } catch (err) {
+      toast(friendly(err));
+      $("saveBtn").textContent = label;
+    } finally {
+      saving = false;
+      $("saveBtn").disabled = false;
+      if ($("saveBtn").textContent === "Saving…") $("saveBtn").textContent = editingId ? "Save changes" : "Add bill";
+    }
+  });
+
+  // --- Suggestions (from suggest_recurring) --------------------------------
+  const DISMISS_KEY = "bills.dismissedSuggestions";
+  function dismissed() {
+    try { return new Set(JSON.parse(sessionStorage.getItem(DISMISS_KEY) || "[]")); } catch (e) { return new Set(); }
+  }
+  function dismiss(key) {
+    const set = dismissed(); set.add(key);
+    try { sessionStorage.setItem(DISMISS_KEY, JSON.stringify([...set])); } catch (e) {}
+  }
+
+  async function loadSuggestions() {
+    const list = $("suggestions");
+    const { data, error } = await db.rpc("suggest_recurring");
+    if (error) {
+      list.innerHTML = `<li class="suggest-empty">Suggestions aren't available right now.</li>`;
+      return;
+    }
+    const hide = dismissed();
+    const items = (data || []).filter((sg) => Number(sg.confidence) >= MIN_SUGGEST_CONFIDENCE
+      && !hide.has(`${sg.type}|${normaliseName(sg.name)}`));
+    if (!items.length) {
+      list.innerHTML = `<li class="suggest-empty">Nothing new spotted. We look for payments that
+        repeat at least 3 times at a steady interval.</li>`;
+      return;
+    }
+    list.innerHTML = items.map((sg, i) => {
+      const name = esc(tidyName(sg.name));
+      return `<li class="suggest" data-i="${i}">
+        <div class="suggest-text">
+          <div class="bill-name">${name}</div>
+          <div class="bill-meta">${sg.type === "income" ? "+" : ""}${money(sg.amount)} · ${esc(FREQ_LABEL[sg.frequency] || sg.frequency)}
+            · seen ${Number(sg.occurrences)} times, last ${esc(shortDate(sg.last_seen, today()))}</div>
+        </div>
+        <div class="suggest-actions">
+          <button class="btn ghost sm add-sugg" type="button" aria-label="Add ${name} as a bill">Add as bill</button>
+          <button class="link-btn dismiss" type="button" aria-label="Dismiss the ${name} suggestion">Dismiss</button>
+        </div></li>`;
+    }).join("");
+    list.querySelectorAll("li.suggest").forEach((li) => {
+      const sg = items[Number(li.dataset.i)];
+      li.querySelector(".add-sugg").onclick = () => {
+        resetForm();
+        fill({ ...sg, name: tidyName(sg.name), start_date: sg.next_guess, auto_post: false });
+        $("formIntro").textContent = "Filled in from your transactions. Check the details, then add it.";
+        focusForm();
+      };
+      li.querySelector(".dismiss").onclick = () => {
+        dismiss(`${sg.type}|${normaliseName(sg.name)}`);
+        const next = li.nextElementSibling || li.previousElementSibling;
+        li.remove();
+        if (!list.querySelector("li.suggest")) {
+          list.innerHTML = `<li class="suggest-empty">No more suggestions for now.</li>`;
+          $("billsHeading").focus();
+        } else next?.querySelector(".dismiss")?.focus();
+        toast(`Dismissed. We won't suggest ${tidyName(sg.name)} again this session.`, "ok");
+      };
+    });
+  }
+
+  if (db) {
+    resetForm();
+    showLoading();
+    await postDueBills();      // render after auto-posting so dates are current
+    load(true);
+    loadSuggestions();
+  }
+</script>
+{% endblock %}

@@ -72,6 +72,11 @@ def budgets():
     return render_template("budgets.html", page="budgets")
 
 
+@app.route("/bills")
+def bills():
+    return render_template("bills.html", page="bills")
+
+
 @app.route("/reports")
 def reports():
     return render_template("reports.html", page="reports")

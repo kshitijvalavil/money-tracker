@@ -118,3 +118,29 @@ export async function refreshImportsBadge() {
   if (error) return; // The badge is only a hint; never shout about it.
   setImportsBadge(count);
 }
+
+// --- Recurring bills: post due auto-post bills once per page load ----------
+// No server cron: the shell calls this on every page load (post_due_recurring
+// is idempotent). Pages that show bills or balances can `await postDueBills()`
+// first so they render after posting; every caller shares one request.
+let postedThisLoad = null;
+export function postDueBills() {
+  if (!db) return Promise.resolve(0);
+  if (!postedThisLoad) {
+    postedThisLoad = (async () => {
+      try {
+        const { data, error } = await db.rpc("post_due_recurring");
+        if (error) return 0;              // e.g. migration not applied yet: stay quiet
+        const n = Number(data) || 0;
+        if (n > 0) {
+          toast(`Posted ${n} ${n === 1 ? "bill" : "bills"}.`, "ok");
+          window.dispatchEvent(new CustomEvent("bills:posted", { detail: { count: n } }));
+        }
+        return n;
+      } catch (e) {
+        return 0;
+      }
+    })();
+  }
+  return postedThisLoad;
+}
