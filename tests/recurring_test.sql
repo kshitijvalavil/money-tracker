@@ -64,7 +64,7 @@ begin
         'public.skip_recurring(uuid)',
         'public.reschedule_recurring(uuid,date,text)',
         'public.post_due_recurring(date)',
-        'public.upcoming_recurring(integer)']
+        'public.upcoming_recurring(integer,date)']
     loop
         assert not has_function_privilege('anon', f, 'execute'), format('anon can execute %s', f);
         assert has_function_privilege('authenticated', f, 'execute'), format('authenticated cannot execute %s', f);
@@ -543,6 +543,67 @@ do $$ begin
     perform public.upcoming_recurring(-1);
     raise exception 'negative days should be rejected';
 exception when sqlstate '22023' then null; end $$;
+do $$ begin
+    perform public.upcoming_recurring(7, null);
+    raise exception 'null as-of should be rejected';
+exception when sqlstate '22023' then null; end $$;
+
+-- SB-11: the caller's local date drives days_left / overdue / the window.
+-- Simulates 01:00 IST on day D+1 while the server's UTC date is still D.
+do $$
+declare v_names text[]; v_days int[]; v_over boolean[]; d date := current_date;
+begin
+    -- Explicit as-of = server date matches the default.
+    assert (select array_agg(name || ':' || days_left || ':' || overdue order by next_due, name) from public.upcoming_recurring(7, d))
+         = (select array_agg(name || ':' || days_left || ':' || overdue order by next_due, name) from public.upcoming_recurring(7)),
+        'upcoming_recurring(7, current_date) should equal upcoming_recurring(7)';
+
+    -- Local date one day ahead: 'Today' becomes overdue by 1, 'Soon' is 2 days away.
+    select array_agg(name order by next_due, name), array_agg(days_left order by next_due, name),
+           array_agg(overdue order by next_due, name)
+      into v_names, v_days, v_over
+      from public.upcoming_recurring(7, d + 1);
+    assert v_names = array['Overdue', 'Today', 'Soon'], format('as-of D+1 names %s', v_names);
+    assert v_days = array[-3, -1, 2], format('as-of D+1 days_left %s', v_days);
+    assert v_over = array[true, true, false], format('as-of D+1 overdue %s', v_over);
+
+    -- The window moves with the local date: 'Later' (D+40) is in at as-of D+33 with 7 days.
+    assert exists (select 1 from public.upcoming_recurring(7, d + 33) where name = 'Later' and days_left = 7),
+        'window should be relative to p_as_of';
+    assert not exists (select 1 from public.upcoming_recurring(7, d + 32) where name = 'Later'),
+        'Later is 8 days away at D+32';
+
+    -- A day behind (e.g. a clock in another zone): 'Today' is 1 day away, not overdue.
+    assert (select days_left || ':' || overdue from public.upcoming_recurring(7, d - 1) where name = 'Today') = '1:false',
+        'as-of D-1 should show Today as due tomorrow';
+
+    -- Named-argument call, as supabase.rpc sends it.
+    assert (select count(*) from public.upcoming_recurring(p_as_of => d + 1)) = 3, 'named p_as_of with default p_days';
+end $$;
+
+-- Only one upcoming_recurring exists, so the RPC is never ambiguous.
+reset role;
+do $$ begin
+    assert (select count(*) from pg_proc where proname = 'upcoming_recurring'
+             and pronamespace = 'public'::regnamespace) = 1, 'more than one upcoming_recurring overload';
+    assert to_regprocedure('public.upcoming_recurring(integer)') is null, 'old one-argument signature still exists';
+end $$;
+set role app_user;
+set request.jwt.claim.sub = :'C';
+
+-- post_due_recurring and mark_recurring_paid already take the caller's date (SB-11).
+do $$
+declare v_id uuid; v_tx uuid;
+begin
+    assert (select pg_get_function_arguments('public.post_due_recurring(date)'::regprocedure))
+         = 'p_as_of date DEFAULT CURRENT_DATE', 'post_due_recurring signature';
+    assert (select pg_get_function_arguments('public.mark_recurring_paid(uuid,date)'::regprocedure))
+         = 'p_id uuid, p_paid_on date DEFAULT CURRENT_DATE', 'mark_recurring_paid signature';
+    select id into v_id from public.recurring where name = 'Soon';
+    v_tx := public.mark_recurring_paid(v_id, current_date + 1);       -- local date ahead of UTC
+    assert (select occurred_on from public.transactions where id = v_tx) = current_date + 1,
+        'mark_recurring_paid should use the caller''s date';
+end $$;
 
 -- ============================================================================
 -- reschedule_recurring (as C; C's other bills are manual-only, so post_due

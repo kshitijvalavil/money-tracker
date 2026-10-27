@@ -29,8 +29,10 @@
 --      that band (3 x in_band >= 2 x gaps; decision 13).
 --   6. name, account_id and category_id come from the latest kept row, by
 --      (occurred_on, id). amount is round(median of the kept amounts, 2).
---      next_guess is the first anchored occurrence after last_seen, anchored
---      to the first kept date (same month-end clamping as recurring_occurrence).
+--      next_guess is the later of: the first anchored occurrence after
+--      last_seen (anchored to the first kept date, same month-end clamping as
+--      recurring_occurrence), and one period after last_seen (SB-12: a 28-day
+--      plan on a monthly grid must not be guessed as already overdue).
 --      confidence = round(gaps in band / all gaps x kept rows / group rows, 2).
 --      Sorted by confidence desc, occurrences desc, key and type in C order.
 --
@@ -179,6 +181,12 @@ begin
             exit when v_next > v_dates[array_length(v_dates, 1)];
             v_k := v_k + 1;
         end loop;
+        -- SB-12: never earlier than one period after the last payment.
+        v_next := greatest(v_next, case when v_freq = 'weekly'
+                    then v_dates[array_length(v_dates, 1)] + 7
+                    else (v_dates[array_length(v_dates, 1)]
+                          + make_interval(months => v_months))::date
+                  end);
 
         r_key    := r_key    || g.k;
         r_name   := r_name   || left(btrim(v_latest.note), 80);

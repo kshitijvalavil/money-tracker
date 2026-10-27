@@ -16,6 +16,10 @@
   --neg-bg: #fbe9e7;
   --radius: 14px;
   --shadow: 0 1px 3px rgba(20, 27, 45, 0.06), 0 8px 24px rgba(20, 27, 45, 0.05);
+  --btn: #2f5fe0;            /* white text 5.5:1 */
+  --btn-hover: #2449b8;
+  --toast-ok: #137a4b;
+  --toast-err: #c0392b;
   --badge-bg: #2f5fe0;
   --badge-ink: #ffffff;
   --skel: #eceef2;
@@ -40,6 +44,12 @@
   --neg: #f2695c;
   --neg-bg: #381f1d;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.4);
+  /* Buttons and toasts carry white text, so they stay dark enough for 4.5:1
+     (#3d64d8 is 5.2:1) while still standing out from the card (3.2:1). */
+  --btn: #3d64d8;
+  --btn-hover: #3559c9;
+  --toast-ok: #1f7a52;
+  --toast-err: #b8382c;
   /* Dark ink on the lighter dark-mode blue keeps the count above 4.5:1. */
   --badge-bg: #6f92f3;
   --badge-ink: #0e1320;
@@ -131,11 +141,11 @@ input:focus, select:focus { outline: 2px solid var(--brand-ring); border-color: 
 .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 
 .btn {
-  background: var(--brand); color: #fff; border: none; padding: 10px 20px;
+  background: var(--btn); color: #fff; border: none; padding: 10px 20px;
   border-radius: 10px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
   transition: background .15s;
 }
-.btn:hover { background: var(--brand-dark); }
+.btn:hover { background: var(--btn-hover); }
 .btn.ghost { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
 .btn.ghost:hover { background: var(--ghost-hover); }
 .btn.sm { padding: 6px 12px; font-size: 0.85rem; }
@@ -179,8 +189,8 @@ td.amt { text-align: right; font-weight: 600; white-space: nowrap; font-variant-
   font-size: 0.9rem; opacity: 0; pointer-events: none; transition: all .25s; z-index: 50;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast.error { background: var(--neg); }
-.toast.ok { background: var(--pos); }
+.toast.error { background: var(--toast-err); }
+.toast.ok { background: var(--toast-ok); }
 .notice { background: #fff8e1; border: 1px solid #ffe08a; color: #7a5b00;
           padding: 14px 18px; border-radius: 12px; margin-bottom: 20px; font-size: 0.9rem; }
 
@@ -222,12 +232,12 @@ td.amt { text-align: right; font-weight: 600; white-space: nowrap; font-variant-
 .theme-toggle:focus-visible, .signout:focus-visible {
   outline: 2px solid var(--brand); outline-offset: 2px;
 }
-.btn:disabled, .btn:disabled:hover { opacity: .55; cursor: not-allowed; background: var(--brand); }
+.btn:disabled, .btn:disabled:hover { opacity: .55; cursor: not-allowed; background: var(--btn); }
 .btn.ghost:disabled, .btn.ghost:disabled:hover { background: var(--bg); }
 /* Soft-disabled: still focusable/clickable so it can explain why (e.g. an
    import with no category of its kind); the click handler sends nothing. */
 .btn[data-needs-category], .btn[data-needs-category]:hover {
-  opacity: .55; cursor: not-allowed; background: var(--brand);
+  opacity: .55; cursor: not-allowed; background: var(--btn);
 }
 .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
 .icon-btn:disabled:hover { color: var(--muted); }
@@ -339,7 +349,9 @@ select:disabled { opacity: .6; cursor: not-allowed; }
 .card-link:hover { text-decoration: underline; }
 .bills-lower { margin-top: 16px; align-items: start; }
 
-.bill-name { font-weight: 600; }
+/* Long unbroken names (up to 80 chars) must wrap, not widen the page (SB-10). */
+.bill-name { font-weight: 600; overflow-wrap: anywhere; }
+.bill-meta { overflow-wrap: anywhere; }
 .bill-meta { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
 .due { font-weight: 600; font-size: 0.9rem; }
 .due.overdue { color: var(--neg); }

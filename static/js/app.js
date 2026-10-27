@@ -29,9 +29,13 @@ const inr = new Intl.NumberFormat("en-IN", {
 export const money = (n) => inr.format(Number(n) || 0);
 
 // Current month as YYYY-MM
-export const thisMonth = () => new Date().toISOString().slice(0, 7);
+// Dates use the browser's local calendar day (SB-11): toISOString() is UTC, so
+// in India it gave yesterday's date between 00:00 and 05:30.
+export const localDate = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+export const thisMonth = () => localDate().slice(0, 7);
 // Today as YYYY-MM-DD
-export const today = () => new Date().toISOString().slice(0, 10);
+export const today = () => localDate();
 
 // Escape text before putting it in HTML.
 export const esc = (s) =>
@@ -129,7 +133,7 @@ export function postDueBills() {
   if (!postedThisLoad) {
     postedThisLoad = (async () => {
       try {
-        const { data, error } = await db.rpc("post_due_recurring");
+        const { data, error } = await db.rpc("post_due_recurring", { p_as_of: today() });
         if (error) return 0;              // e.g. migration not applied yet: stay quiet
         const n = Number(data) || 0;
         if (n > 0) {

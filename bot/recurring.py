@@ -37,8 +37,10 @@ detect(transactions, min_occurrences=3, existing_names=())
            amount      the median of the kept amounts, rounded half up to 2 dp
            account_id, category_id  taken from the latest kept row
            last_seen   the latest kept date
-           next_guess  the first occurrence(first kept date, freq, k), k >= 1,
-                       that falls after last_seen
+           next_guess  the later of: the first occurrence(first kept date,
+                       freq, k), k >= 1, after last_seen; and
+                       occurrence(last_seen, freq, 1), one period after the
+                       last payment (SB-12: 28-day plans on a monthly grid)
            confidence  (gaps inside the band / all gaps)
                        x (kept rows / group rows), rounded half up to 2 dp
          The latest row is the one with the greatest (occurred_on, str(id)).
@@ -134,6 +136,9 @@ def detect(transactions, min_occurrences=3, existing_names=()):
         k = 1
         while occurrence(dates[0], freq, k) <= last_seen:
             k += 1
+        # SB-12: never earlier than one period after the last payment, so a
+        # 28-day plan on a monthly grid is not guessed as already overdue.
+        next_guess = max(occurrence(dates[0], freq, k), occurrence(last_seen, freq, 1))
         out.append({
             "name": (latest.get("note") or "").strip(" ")[:80],
             "type": typ,
@@ -142,7 +147,7 @@ def detect(transactions, min_occurrences=3, existing_names=()):
             "account_id": latest.get("account_id"),
             "category_id": latest.get("category_id"),
             "last_seen": last_seen,
-            "next_guess": occurrence(dates[0], freq, k),
+            "next_guess": next_guess,
             "occurrences": len(dates),
             "confidence": _round2(Decimal(in_band * len(kept)) / Decimal(len(gaps) * len(rows))),
             "_key": key,

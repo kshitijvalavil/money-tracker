@@ -5,12 +5,14 @@
 import { occurrence, addDays, daysBetween, normaliseName, FREQUENCIES } from "./recurring.js";
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()));
-const ym = (d) => d.toISOString().slice(0, 10);
+// Local calendar dates, like the app's today() (SB-11). toISOString() is UTC.
+const localDate = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function seed() {
   const now = new Date();
-  const thisMonth = now.toISOString().slice(0, 7);
-  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString().slice(0, 7);
+  const thisMonth = localDate(now).slice(0, 7);
+  const lastMonth = localDate(new Date(now.getFullYear(), now.getMonth() - 1, 15)).slice(0, 7);
   const day = (m, d) => `${m}-${String(d).padStart(2, "0")}`;
 
   const accounts = [
@@ -73,7 +75,7 @@ function seed() {
   // overdue bill, one due soon, one auto-posting today and one far off.
   // Each is anchored to a start date a few periods back (next_seq > 0), just
   // as a real bill would be after a few months of use.
-  const today = now.toISOString().slice(0, 10);
+  const today = localDate(now);
   const bill = (name, amount, account, category, frequency, dueInDays, back, extra = {}) => {
     const start_date = occurrence(addDays(today, dueInDays), frequency, -back);
     return {
@@ -110,7 +112,8 @@ function seed() {
 function fail(code, message) { const e = new Error(message); e.code = code; throw e; }
 
 // ---- recurring bills (mirror migration 0007 / 0008) ------------------------
-const todayUTC = () => new Date().toISOString().slice(0, 10);
+const todayLocal = () => localDate();
+const MAX_AMOUNT = 999999999999.99;       // numeric(14,2)
 const median = (xs) => {
   const a = [...xs].sort((x, y) => x - y), m = a.length >> 1;
   return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
@@ -124,6 +127,8 @@ function checkRecurring(s, r) {
   if (name.length < 1 || name.length > 80) fail("23514", "name must be 1 to 80 characters");
   if (!["income", "expense"].includes(r.type)) fail("23514", "type must be income or expense");
   if (!(Number(r.amount) > 0)) fail("23514", "amount must be greater than zero");
+  if (Number(r.amount) > MAX_AMOUNT) fail("22003", "numeric field overflow");
+  r.amount = Math.round(Number(r.amount) * 100) / 100;      // numeric(14,2) rounds to cents
   if (!FREQUENCIES.includes(r.frequency)) fail("23514", "bad frequency");
   if (!r.start_date) fail("23502", "start_date is required");
   if (!(Number.isInteger(r.next_seq) && r.next_seq >= 0)) fail("23514", "next_seq must be >= 0");
@@ -180,7 +185,7 @@ function suggestRecurring(s, minOcc = 3) {
 }
 
 function recurringRpc(s, name, p = {}) {
-  const today = todayUTC();
+  const today = todayLocal();
   const find = (id) => s.recurring.find((r) => r.id === id) || fail("P0002", `recurring ${id} not found`);
   const advance = (r) => { r.next_seq += 1; r.next_due = occurrence(r.start_date, r.frequency, r.next_seq); };
   // Post occurrence next_seq once (unique on recurring_id + recurring_seq).
@@ -229,12 +234,13 @@ function recurringRpc(s, name, p = {}) {
     return posted;
   }
   if (name === "upcoming_recurring") {
-    const until = addDays(today, p.p_days ?? 30);
+    const asOf = p.p_as_of || today;
+    const until = addDays(asOf, p.p_days ?? 30);
     return s.recurring.filter((r) => r.active && r.next_due <= until)
       .sort((a, b) => (a.next_due < b.next_due ? -1 : a.next_due > b.next_due ? 1
         : a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
       .map((r) => {
-        const days_left = daysBetween(today, r.next_due);
+        const days_left = daysBetween(asOf, r.next_due);
         return { id: r.id, name: r.name, type: r.type, amount: r.amount, next_due: r.next_due,
           days_left, overdue: days_left < 0, auto_post: r.auto_post };
       });
@@ -331,7 +337,7 @@ function rpc(s, name, params) {
     const base = new Date();
     for (let i = 11; i >= 0; i--) {
       const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
-      const key = d.toISOString().slice(0, 7);
+      const key = localDate(d).slice(0, 7);
       out.push({
         month: key,
         income: sum(s.transactions.filter((t) => t.type === "income" && inMonth(t, key))),

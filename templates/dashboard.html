@@ -112,7 +112,7 @@
   const paying = new Set();
   async function loadUpcoming(focusId) {
     const list = $("upcoming");
-    const { data, error } = await db.rpc("upcoming_recurring", { p_days: 7 });
+    const { data, error } = await db.rpc("upcoming_recurring", { p_days: 7, p_as_of: today() });
     list.removeAttribute("aria-busy");
     if (error) {
       list.innerHTML = `<li class="bill-item empty-item">Couldn't load bills.
@@ -158,7 +158,7 @@
     btn.disabled = true;
     btn.textContent = "Saving…";
     try {
-      const { error } = await db.rpc("mark_recurring_paid", { p_id: b.id });
+      const { error } = await db.rpc("mark_recurring_paid", { p_id: b.id, p_paid_on: today() });
       if (error) throw error;
       toast(`${b.type === "income" ? "Received" : "Paid"} ${b.name}, ${money(b.amount)}.`, "ok");
       await Promise.all([loadUpcoming(b.id), load()]);   // balances changed too

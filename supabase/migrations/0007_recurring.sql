@@ -13,7 +13,7 @@
 --   skip_recurring(p_id)                            -> void
 --   reschedule_recurring(p_id, p_start, p_frequency) -> void (keeps history linked)
 --   post_due_recurring(p_as_of)                     -> number of transactions posted
---   upcoming_recurring(p_days)                      -> due-soon and overdue bills
+--   upcoming_recurring(p_days, p_as_of)             -> due-soon and overdue bills
 --
 -- Posting is idempotent: transactions carry (recurring_id, recurring_seq),
 -- unique per bill, so the same occurrence can never be posted twice, even by
@@ -367,7 +367,14 @@ begin
 end;
 $$;
 
-create or replace function public.upcoming_recurring(p_days int default 30)
+-- p_as_of is the caller's local "today". The server's current_date is UTC,
+-- which is the previous day in India between 00:00 and 05:30 IST, so the app
+-- passes the browser's local date (SB-11). The one-argument version from the
+-- first draft of this migration is dropped so the RPC is never ambiguous.
+drop function if exists public.upcoming_recurring(int);
+create or replace function public.upcoming_recurring(
+    p_days  int  default 30,
+    p_as_of date default current_date)
 returns table (id uuid, name text, type text, amount numeric, next_due date,
                days_left int, overdue boolean, auto_post boolean)
 language plpgsql
@@ -382,16 +389,19 @@ begin
     if p_days is null or p_days < 0 then
         raise exception 'days must be >= 0' using errcode = '22023';
     end if;
+    if p_as_of is null then
+        raise exception 'as-of date is required' using errcode = '22023';
+    end if;
 
     return query
         select r.id, r.name, r.type, r.amount, r.next_due,
-               (r.next_due - current_date)::int,
-               r.next_due < current_date,
+               (r.next_due - p_as_of)::int,
+               r.next_due < p_as_of,
                r.auto_post
           from public.recurring r
          where r.user_id = auth.uid()
            and r.active
-           and r.next_due <= current_date + p_days
+           and r.next_due <= p_as_of + p_days
          order by r.next_due, r.name;
 end;
 $$;
@@ -403,10 +413,10 @@ revoke execute on function public.mark_recurring_paid(uuid, date) from public, a
 revoke execute on function public.skip_recurring(uuid) from public, anon;
 revoke execute on function public.reschedule_recurring(uuid, date, text) from public, anon;
 revoke execute on function public.post_due_recurring(date) from public, anon;
-revoke execute on function public.upcoming_recurring(int) from public, anon;
+revoke execute on function public.upcoming_recurring(int, date) from public, anon;
 grant execute on function public.recurring_occurrence(date, text, int) to authenticated;
 grant execute on function public.mark_recurring_paid(uuid, date) to authenticated;
 grant execute on function public.skip_recurring(uuid) to authenticated;
 grant execute on function public.reschedule_recurring(uuid, date, text) to authenticated;
 grant execute on function public.post_due_recurring(date) to authenticated;
-grant execute on function public.upcoming_recurring(int) to authenticated;
+grant execute on function public.upcoming_recurring(int, date) to authenticated;

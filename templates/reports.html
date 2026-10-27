@@ -26,7 +26,7 @@
 
 {% block page_script %}
 <script type="module">
-  import { db, money, esc, thisMonth, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  import { db, money, esc, thisMonth, toast, today } from "{{ url_for('static', filename='js/app.js') }}";
   const $ = (id) => document.getElementById(id);
   $("month").value = thisMonth();
 
@@ -107,7 +107,7 @@
 
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const a = document.createElement("a");
-    a.href = url; a.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.href = url; a.download = `transactions-${today()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }

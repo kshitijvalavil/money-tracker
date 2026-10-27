@@ -68,8 +68,8 @@ def seed_script(mutate_js):
 """ % mutate_js
 
 
-def page_with(browser, mutate_js="", width=1280, theme="light"):
-    ctx = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=theme)
+def page_with(browser, mutate_js="", width=1280, theme="light", **ctx_opts):
+    ctx = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=theme, **ctx_opts)
     ctx.add_init_script(seed_script(mutate_js))
     pg = ctx.new_page()
     pg.on("console", lambda m: errors.append(f"console.error: {m.text}") if m.type == "error" else None)
@@ -382,6 +382,111 @@ def main():
         settle(pg, 500)
         check("Nothing due in the next 7 days" in pg.inner_text("#upcoming"), "empty card copy")
         ctx.close()
+
+        # --- SB-12: "Add as bill" pre-fills a date on/after today, after last_seen ----
+        last_seen = iso(TODAY - dt.timedelta(days=40))
+        stale = iso(TODAY - dt.timedelta(days=10))      # a next_guess already in the past
+        stub = """const rpc = S.db.rpc.bind(S.db);
+            S.db.rpc = async (n, a) => n !== 'suggest_recurring' ? rpc(n, a) : ({ error: null, data: [
+              { name: 'Broadband', type: 'expense', amount: 799, frequency: 'monthly', account_id: null,
+                category_id: null, last_seen: '%s', next_guess: '%s', occurrences: 5, confidence: 1 } ] });""" % (last_seen, stale)
+        ctx, pg = page_with(b, stub)
+        open_bills(pg)
+        pg.locator("#suggestions li.suggest .add-sugg").first.click()
+        start = pg.input_value("#fStart")
+        check(start >= iso(TODAY) and start > last_seen and start <= iso(TODAY + dt.timedelta(days=31)),
+              f"SB-12: pre-filled first due {start} is after last_seen {last_seen} and not before today")
+        pg.click("#saveBtn")
+        settle(pg)
+        bb = bill(pg, "Broadband")
+        check(bb and bb["next_due"] >= iso(TODAY), "SB-12: the new bill is not overdue")
+        ctx.close()
+
+        # --- SB-11: local dates (IST just after midnight, when UTC is still yesterday) ----
+        rec = """S.calls = []; const rpc = S.db.rpc.bind(S.db);
+            S.db.rpc = (n, a) => { S.calls.push([n, a || null]); return rpc(n, a); };"""
+        ist = {"timezone_id": "Asia/Kolkata"}
+        for path in ("/bills", "/"):
+            ctx, pg = page_with(b, rec, **ist)
+            pg.clock.set_fixed_time("2026-11-01T02:00:00+05:30")      # UTC: 31 Oct 20:30
+            pg.goto(BASE + path, wait_until="networkidle")
+            settle(pg, 700)
+            calls = ev(pg, "() => window.__qaStore.calls")
+            post = [a for n, a in calls if n == "post_due_recurring"]
+            check(post and post[0] == {"p_as_of": "2026-11-01"},
+                  f"SB-11: post_due_recurring gets the local date on {path} ({post})")
+            if path == "/":
+                up = [a for n, a in calls if n == "upcoming_recurring"]
+                check(up and up[0].get("p_as_of") == "2026-11-01", f"SB-11: upcoming_recurring gets p_as_of ({up})")
+                pg.locator("#upcoming li[data-id] .mark-paid").first.click()
+            else:
+                check(pg.input_value("#fStart") == "2026-11-01", f"SB-11: add form defaults to the local date ({pg.input_value('#fStart')})")
+                g = bill(pg, "Gym membership")
+                gtx = ev(pg, f"() => window.__qaStore.txFor({json.dumps(g['id'])}).map(t => t.occurred_on)")
+                check(gtx == ["2026-11-01"], f"SB-11: auto-posted on the local date ({gtx})")
+                row(pg, "Netflix").locator(".mark-paid").click()
+            settle(pg)
+            paid = [a for n, a in ev(pg, "() => window.__qaStore.calls") if n == "mark_recurring_paid"]
+            check(paid and paid[0].get("p_paid_on") == "2026-11-01", f"SB-11: mark paid sends p_paid_on on {path} ({paid})")
+            ctx.close()
+
+        # --- SB-10: an 80-character name with no spaces wraps at 390px ----------------------
+        long_name = "N" * 80
+        seed_long = f"""const a = S.all('accounts')[0], c = S.all('categories').find(x => x.kind === 'expense');
+            S.insert('recurring', {{ name: '{long_name}', type: 'expense', amount: 9, account_id: a.id,
+              category_id: c.id, frequency: 'monthly', start_date: '{iso(TODAY + dt.timedelta(days=2))}' }});"""
+        for path in ("/", "/bills"):
+            ctx, pg = page_with(b, seed_long, width=390)
+            pg.goto(BASE + path, wait_until="networkidle")
+            settle(pg, 700)
+            sw = pg.evaluate("() => document.documentElement.scrollWidth")
+            check(sw <= 390, f"SB-10: 80-char unbroken name doesn't scroll {path} sideways (scrollWidth {sw})")
+            ctx.close()
+
+        # --- SB-9: amount cap, decimals, 22003 ------------------------------------------------
+        ctx, pg = page_with(b)
+        open_bills(pg)
+        n0 = len(ev(pg, "() => window.__qaStore.all('recurring')"))
+        for amt, msg in (("1000000000000", "too large"), ("12.345", "2 decimal places")):
+            pg.click("#addBillBtn")
+            pg.fill("#fName", "Big one")
+            pg.fill("#fAmount", amt)
+            pg.click("#saveBtn")
+            settle(pg, 300)
+            check(msg in pg.inner_text("#fAmountErr") and pg.get_attribute("#fAmount", "aria-invalid") == "true",
+                  f"SB-9: {amt} refused inline ({pg.inner_text('#fAmountErr')!r})")
+        check(len(ev(pg, "() => window.__qaStore.all('recurring')")) == n0, "SB-9: nothing saved")
+        pg.fill("#fAmount", "999999999999.99")
+        pg.click("#saveBtn")
+        settle(pg)
+        check(bill(pg, "Big one") is not None, "SB-9: the maximum amount is accepted")
+        code = ev(pg, """() => { const a = window.__qaStore.all('accounts')[0],
+            c = window.__qaStore.all('categories').find(x => x.kind === 'expense');
+            return window.__qaStore.insert('recurring', { name: 'x', type: 'expense', amount: 1e12,
+              account_id: a.id, category_id: c.id, frequency: 'monthly', start_date: '2026-12-01' }).error?.code; }""")
+        check(code == "22003", f"SB-9: demo refuses amounts over the cap with 22003 ({code})")
+        ctx.close()
+
+        # --- Night mode: white text on buttons and toasts is at least 4.5:1 -----------------
+        contrast_js = """(sel) => { const el = document.querySelector(sel); if (!el) return null;
+            const rgb = getComputedStyle(el).backgroundColor.match(/\\d+/g).slice(0, 3).map(Number);
+            const L = rgb.map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+            const l = 0.2126 * L[0] + 0.7152 * L[1] + 0.0722 * L[2];
+            return Math.round(1.05 / (l + 0.05) * 100) / 100; }"""
+        for path, sel in (("/bills", "#addBillBtn"), ("/bills", "#billRows .mark-paid"), ("/transactions", ".btn"),
+                          ("/budgets", ".btn"), ("/imports", "#approveAll")):
+            ctx, pg = page_with(b, theme="dark")
+            pg.goto(BASE + path, wait_until="networkidle")
+            settle(pg, 600)
+            ratio = pg.evaluate(contrast_js, sel)
+            check(ratio is not None and ratio >= 4.5, f"night mode: white on {sel} at {path} is {ratio}:1")
+            if path == "/bills" and sel == "#addBillBtn":
+                for kind in ("ok", "error"):
+                    pg.evaluate(f"() => import('/static/js/app.js').then(m => m.toast('x', '{kind}'))")
+                    settle(pg, 300)
+                    r = pg.evaluate(contrast_js, "#toast")
+                    check(r and r >= 4.5, f"night mode: {kind} toast white text is {r}:1")
+            ctx.close()
 
         # --- Widths and themes ---------------------------------------------------------
         for theme in ("light", "dark"):

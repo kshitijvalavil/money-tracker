@@ -46,7 +46,7 @@
             <option value="income">Income (money in)</option>
           </select></div>
         <div class="field"><label for="fAmount">Amount (₹)</label>
-          <input type="number" id="fAmount" step="0.01" min="0.01" inputmode="decimal" required
+          <input type="number" id="fAmount" step="0.01" min="0.01" max="999999999999.99" inputmode="decimal" required
                  aria-describedby="fAmountErr">
           <div class="field-error" id="fAmountErr" hidden></div></div>
       </div>
@@ -107,6 +107,7 @@
 
   let accounts = [], categories = [], bills = [];
   let editingId = null;
+  const MAX_AMOUNT = 999999999999.99;     // numeric(14,2)
   const inFlight = new Set();          // bill ids with a request running
 
   // --- Plain-language errors (SQLSTATE codes from the database) ----------
@@ -116,6 +117,7 @@
       case "22023": return "That doesn't fit: bills need an expense category, income needs an income category, and the date and frequency must be set.";
       case "23514": return "That value isn't allowed. Use a name of up to 80 characters and an amount above zero.";
       case "23503": return "This category is used by a bill, so it can't be removed. Change or delete the bill first.";
+      case "22003": return `That amount is too large. The most a bill can be is ${money(MAX_AMOUNT)}.`;
       case "42501": return "You've been signed out. Sign in again to continue.";
       default: return err?.message ? `Something went wrong: ${err.message}` : "Check your connection and try again.";
     }
@@ -288,7 +290,7 @@
 
   async function markPaid(tr, b) {
     const word = b.type === "income" ? "Received" : "Paid";
-    const ok = await run(tr, b, "Saving…", () => db.rpc("mark_recurring_paid", { p_id: b.id }));
+    const ok = await run(tr, b, "Saving…", () => db.rpc("mark_recurring_paid", { p_id: b.id, p_paid_on: today() }));
     if (!ok) return;
     await reloadKeepingFocus(b.id, ".mark-paid");
     const now = bills.find((x) => x.id === b.id);
@@ -420,7 +422,8 @@
     const v = {
       name: $("fName").value.trim(),
       type: $("fType").value,
-      amount: Math.round(parseFloat($("fAmount").value) * 100) / 100,
+      amount: Number($("fAmount").value),
+      amountText: $("fAmount").value.trim(),
       account_id: $("fAccount").value,
       category_id: $("fCategory").value,
       frequency: $("fFreq").value,
@@ -429,7 +432,11 @@
     };
     const errs = [];
     if (!v.name) errs.push(["fName", "fNameErr", "Give it a name, like Rent or Netflix."]);
+    // numeric(14,2): above zero, at most 999,999,999,999.99, two decimals (SB-9).
     if (!(v.amount > 0)) errs.push(["fAmount", "fAmountErr", "Enter an amount above zero."]);
+    else if (v.amount > MAX_AMOUNT) errs.push(["fAmount", "fAmountErr", `That's too large. The most a bill can be is ${money(MAX_AMOUNT)}.`]);
+    else if (!/^\d+(\.\d{1,2})?$/.test(v.amountText)) errs.push(["fAmount", "fAmountErr", "Use at most 2 decimal places, like 649.50."]);
+    delete v.amountText;
     if (!v.account_id) errs.push(["fAccount", "fAccountErr", "Add an account first, on the Accounts page."]);
     if (!v.category_id) errs.push(["fCategory", "fCategoryErr", `You need an ${v.type} category for this.`]);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v.start_date)) errs.push(["fStart", "fStartErr", "Pick the first due date."]);
@@ -504,7 +511,7 @@
       // Decision 9: past payments of an auto-post bill are added now.
       let posted = 0;
       if (p.past > 0) {
-        const r = await db.rpc("post_due_recurring");
+        const r = await db.rpc("post_due_recurring", { p_as_of: today() });
         if (!r.error) posted = Number(r.data) || 0;
       }
       const id = existing?.id;
@@ -533,6 +540,21 @@
   function dismiss(key) {
     const set = dismissed(); set.add(key);
     try { sessionStorage.setItem(DISMISS_KEY, JSON.stringify([...set])); } catch (e) {}
+  }
+
+  // SB-12: pre-fill the first occurrence after last_seen that is on or after
+  // today, so a payment already made doesn't show as overdue. Use the
+  // database's next_guess when it already qualifies.
+  function firstDueFromSuggestion(sg) {
+    const t = today();
+    if (sg.next_guess && sg.next_guess >= t && sg.next_guess > sg.last_seen) return sg.next_guess;
+    let n = 1;
+    while (n < 2000) {
+      const d = occurrence(sg.last_seen, sg.frequency, n);
+      if (d > sg.last_seen && d >= t) return d;
+      n++;
+    }
+    return t;
   }
 
   async function loadSuggestions() {
@@ -567,7 +589,7 @@
       const sg = items[Number(li.dataset.i)];
       li.querySelector(".add-sugg").onclick = () => {
         resetForm();
-        fill({ ...sg, name: tidyName(sg.name), start_date: sg.next_guess, auto_post: false });
+        fill({ ...sg, name: tidyName(sg.name), start_date: firstDueFromSuggestion(sg), auto_post: false });
         $("formIntro").textContent = "Filled in from your transactions. Check the details, then add it.";
         focusForm();
       };

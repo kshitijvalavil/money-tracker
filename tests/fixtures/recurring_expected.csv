@@ -1,8 +1,9 @@
 name,type,amount,frequency,account,category,last_seen,next_guess,occurrences,confidence
 Gym - FitLife,expense,500.00,weekly,Bank,Health,2026-01-26,2026-02-02,8,1.00
-NETFLIX.COM 9921,expense,649.00,monthly,Card,Entertainment,2026-06-06,2026-07-05,6,1.00
+NETFLIX.COM 9921,expense,649.00,monthly,Card,Entertainment,2026-06-06,2026-07-06,6,1.00
 Salary ACME Ltd,income,50000.00,monthly,Bank,Salary,2026-06-01,2026-07-01,6,1.00
 Rent,expense,15000.00,monthly,Bank,Rent,2026-05-31,2026-06-30,5,1.00
-Jio recharge #104,expense,299.01,monthly,Bank,Bills,2026-04-28,2026-05-03,4,1.00
-LIC Premium,expense,12000.00,yearly,Bank,Bills,2026-03-16,2027-03-15,4,1.00
-Spotify Premium,expense,119.00,monthly,Card,Entertainment,2026-05-21,2026-06-01,5,0.63
+Airtel prepaid,expense,399.00,monthly,Bank,Bills,2026-10-12,2026-11-12,4,1.00
+Jio recharge #104,expense,299.01,monthly,Bank,Bills,2026-04-28,2026-05-28,4,1.00
+LIC Premium,expense,12000.00,yearly,Bank,Bills,2026-03-16,2027-03-16,4,1.00
+Spotify Premium,expense,119.00,monthly,Card,Entertainment,2026-05-21,2026-06-21,5,0.63

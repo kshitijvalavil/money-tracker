@@ -94,7 +94,8 @@ def test_true_positives():
     nf = s["netflix com"]
     assert (nf["frequency"], nf["amount"], nf["occurrences"]) == ("monthly", Decimal("649.00"), 6)
     assert nf["account_id"] == "Card" and nf["category_id"] == "Entertainment"
-    assert nf["next_guess"] == date(2026, 7, 5) and nf["confidence"] == Decimal("1.00")
+    # last paid 6 Jun (a day late): one period later beats the 5 Jul grid date
+    assert nf["next_guess"] == date(2026, 7, 6) and nf["confidence"] == Decimal("1.00")
 
     gym = s["gym fitlife"]
     assert gym["frequency"] == "weekly" and gym["occurrences"] == 8
@@ -102,7 +103,7 @@ def test_true_positives():
 
     ins = s["lic premium"]
     assert ins["frequency"] == "yearly" and ins["amount"] == Decimal("12000.00")
-    assert ins["next_guess"] == date(2027, 3, 15)
+    assert ins["next_guess"] == date(2027, 3, 16)  # last paid 16 Mar, + 1 year
 
     rent = s["rent"]
     assert rent["frequency"] == "monthly" and rent["occurrences"] == 5
@@ -124,7 +125,7 @@ def test_negatives_not_suggested():
     assert "apollo pharmacy" not in s, "chance cluster: under half the group kept"
     assert "blue tokai cafe" not in s, "median gap monthly but under 2/3 of gaps in band"
     assert "to savings" not in s, "transfers ignored"
-    assert len(s) == 7
+    assert len(s) == 8
 
 
 def test_drift_boundary_is_inclusive():
@@ -169,6 +170,31 @@ def test_median_gap_between_bands_is_rejected():
     # gaps 40,40,40 -> median 40: between monthly (<=35) and quarterly (>=85)
     rows = [tx(d, 100) for d in ["2026-01-01", "2026-02-10", "2026-03-22", "2026-05-01"]]
     assert detect(rows) == []
+
+
+def test_28_day_plan_next_guess_not_in_the_past():
+    # SB-12: a 28-day recharge looks monthly; the grid (anchored to 20 Jul)
+    # would say 20 Oct, before the 12 Oct payment's next cycle. The guess must
+    # be after last_seen and at least one period later.
+    days = ["2026-07-20", "2026-08-17", "2026-09-14", "2026-10-12"]
+    (s,) = detect([tx(d, 399, note="Airtel prepaid") for d in days])
+    assert s["frequency"] == "monthly" and s["last_seen"] == date(2026, 10, 12)
+    assert s["next_guess"] == date(2026, 11, 12)
+    assert s["next_guess"] >= occurrence(s["last_seen"], "monthly", 1) > s["last_seen"]
+
+
+def test_next_guess_keeps_grid_when_later():
+    # on-time payments: grid and last_seen + period agree (rent clamps to 30 Jun)
+    days = ["2026-01-31", "2026-02-28", "2026-03-31"]
+    assert detect([tx(d, 100) for d in days])[0]["next_guess"] == date(2026, 4, 30)
+    # last paid 28 Feb on a 31st grid: 28 Feb + 1 month = 28 Mar, the grid's
+    # 31 Mar is later and wins (no drift to the 28th)
+    days = ["2025-12-31", "2026-01-31", "2026-02-28"]
+    assert detect([tx(d, 100) for d in days])[0]["next_guess"] == date(2026, 3, 31)
+    # paid early on the last cycle (10 Apr, grid 15th): grid says 15 Apr, but
+    # one period after the payment is later -> 10 May
+    days = ["2026-01-15", "2026-02-15", "2026-03-15", "2026-04-10"]
+    assert detect([tx(d, 100) for d in days])[0]["next_guess"] == date(2026, 5, 10)
 
 
 def test_two_thirds_of_gaps_must_be_in_band():
