@@ -113,7 +113,7 @@ begin
         'public.mark_recurring_paid(uuid, date)',
         'public.skip_recurring(uuid)',
         'public.post_due_recurring(date)',
-        'public.upcoming_recurring(integer)',
+        'public.upcoming_recurring(integer, date)',   -- SB-11: p_as_of added
         'public.suggest_recurring(integer)',
         'public.reschedule_recurring(uuid, date, text)']          -- decision 12
     loop
