@@ -139,18 +139,37 @@
     const { data, error } = await q;
     if (error) return toast(error.message);
 
+    // Labels for the shown rows: fetch labels and the join table, then map
+    // transaction_id -> [names]. Two small queries work in demo and for real.
+    const labelsByTx = {};
+    const [allLabels, txLabels] = await Promise.all([
+      db.from("labels").select("id, name"),
+      db.from("transaction_labels").select("transaction_id, label_id"),
+    ]);
+    if (!allLabels.error && !txLabels.error) {
+      const nameOf = Object.fromEntries(allLabels.data.map((l) => [l.id, l.name]));
+      for (const tl of txLabels.data) {
+        (labelsByTx[tl.transaction_id] ||= []).push(nameOf[tl.label_id]);
+      }
+      for (const id in labelsByTx) labelsByTx[id].sort((a, b) => a.localeCompare(b));
+    }
+
     $("rows").innerHTML = data.length ? data.map((t) => {
       const sign = t.type === "income" ? "+" : t.type === "expense" ? "−" : "";
       const cls = t.type === "income" ? "pos" : t.type === "expense" ? "neg" : "";
       const cat = t.type === "transfer"
         ? `→ ${esc(t.to_acc?.name || "—")}`
         : esc(t.categories?.name || "—");
+      const names = labelsByTx[t.id] || [];
+      const chips = names.map((n) => `<span class="chip">${esc(n)}</span>`).join("");
       return `<tr>
         <td>${t.occurred_on}</td>
         <td><span class="pill">${t.type}</span></td>
         <td>${cat}</td>
         <td>${esc(t.from_acc?.name || "—")}</td>
-        <td>${esc(t.note)}</td>
+        <td>${esc(t.note)}
+          <div class="chips">${chips}<button class="chip add" title="Edit labels"
+            data-labels="${t.id}" data-current="${esc(names.join(", "))}">🏷 ${names.length ? "Edit" : "Label"}</button></div></td>
         <td class="amt ${cls}">${sign}${money(t.amount)}</td>
         <td><button class="icon-btn" title="Delete" data-del="${t.id}">✕</button></td>
       </tr>`;
@@ -161,6 +180,19 @@
         if (!confirm("Delete this transaction?")) return;
         const { error } = await db.from("transactions").delete().eq("id", b.dataset.del);
         if (error) return toast(error.message);
+        loadRows();
+      };
+    });
+
+    $("rows").querySelectorAll("[data-labels]").forEach((b) => {
+      b.onclick = async () => {
+        const next = prompt("Labels (comma separated):", b.dataset.current || "");
+        if (next === null) return;
+        const list = next.split(",").map((s) => s.trim()).filter(Boolean);
+        const { error } = await db.rpc("set_transaction_labels",
+          { p_transaction_id: b.dataset.labels, p_labels: list });
+        if (error) return toast(error.message);
+        toast("Labels updated.", "ok");
         loadRows();
       };
     });

@@ -77,6 +77,16 @@ def bills():
     return render_template("bills.html", page="bills")
 
 
+@app.route("/goals")
+def goals():
+    return render_template("goals.html", page="goals")
+
+
+@app.route("/insights")
+def insights():
+    return render_template("insights.html", page="insights")
+
+
 @app.route("/reports")
 def reports():
     return render_template("reports.html", page="reports")

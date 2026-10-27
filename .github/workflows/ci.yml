@@ -73,6 +73,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint2_adversarial_ui.py
+      - name: Sprint 3 goals / labels / insights UI tests
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint3_ui_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

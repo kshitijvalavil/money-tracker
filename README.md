@@ -1,7 +1,8 @@
 # 💰 Money Tracker
 
 A personal money tracker: accounts, income & expenses, transfers between your
-own accounts, monthly budgets, and reports — all in Indian Rupees (₹).
+own accounts, monthly budgets, recurring bills, savings goals, labels and
+reports and insights — all in Indian Rupees (₹).
 
 **One-click deploy** (opens Render pre-configured from `render.yaml` — you just
 paste your two Supabase values and click Apply):
@@ -21,7 +22,7 @@ paste your two Supabase values and click Apply):
 
 ```
 app.py                     Flask app (serves the pages)
-templates/                 the pages (dashboard, transactions, accounts, budgets, reports, login)
+templates/                 the pages (dashboard, transactions, accounts, budgets, goals, bills, reports, insights, login)
 static/                    CSS and JavaScript
 supabase/migrations/       the SQL to set up your database (run in order)
 tests/                     a SQL test of the schema, security rules and money logic
@@ -34,7 +35,8 @@ tests/                     a SQL test of the schema, security rules and money lo
 1. Create a free project at [supabase.com](https://supabase.com).
 2. Open **SQL Editor** and run each file in `supabase/migrations/` **in order**:
    `0001_schema.sql`, `0002_rls.sql`, `0003_functions.sql`, `0004_seed_trigger.sql`,
-   `0005_imports.sql`, `0006_approve_import.sql`, `0007_recurring.sql`, `0008_suggest_recurring.sql`.
+   `0005_imports.sql`, `0006_approve_import.sql`, `0007_recurring.sql`, `0008_suggest_recurring.sql`,
+   `0009_goals_labels.sql`.
    (Paste the contents of each, run, then the next.)
 3. Create your own account: **Authentication → Users → Add user** (set an email
    and password). The seed trigger gives you starter categories and a Cash
