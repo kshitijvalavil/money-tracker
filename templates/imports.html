@@ -91,6 +91,13 @@
     return accounts.map((a) =>
       `<option value="${a.id}"${a.id === selectedId ? " selected" : ""}>${esc(a.name)}</option>`).join("");
   }
+  // The real approve_import needs a category of the import's kind (income or
+  // expense). Without one the row can't be approved, so say so up front.
+  const hasCategory = (kind) => categories.some((c) => c.kind === kind);
+  const approvable = () => pending.filter((p) => hasCategory(p.direction));
+  const noCategoryHint = (kind) =>
+    `Add an ${kind === "income" ? "income" : "expense"} category first. You don't have one yet, so this can't be approved.`;
+
   function categoryOptions(kind) {
     const list = categories.filter((c) => c.kind === kind);
     return list.length
@@ -133,7 +140,7 @@
   }
 
   function updateBulkButton() {
-    const n = pending.length;
+    const n = approvable().length;
     const btn = $("approveAll");
     btn.hidden = n === 0 || accounts.length === 0;
     if (!bulkRunning) btn.textContent = n > 1 ? `Approve all ${n}` : "Approve all";
@@ -150,18 +157,24 @@
       const sign = kind === "income" ? "+" : "−";
       const guess = guessAccountId(p);
       const what = esc(describe(p));
-      return `<tr data-id="${esc(p.id)}">
-        <td class="nowrap">${esc(p.occurred_on)}</td>
-        <td><span class="pill">${esc(sourceLabel(p.source))}</span></td>
-        <td>${esc(p.note || "—")}${p.account_hint
+      const blocked = !hasCategory(kind);
+      const hintId = `nocat-${esc(p.id)}`;
+      return `<tr data-id="${esc(p.id)}"${blocked ? ' data-blocked="1"' : ""}>
+        <td class="c-date nowrap">${esc(p.occurred_on)}</td>
+        <td class="c-source"><span class="pill">${esc(sourceLabel(p.source))}</span></td>
+        <td class="c-note">${esc(p.note || "—")}${p.account_hint
           ? ` <span class="pill" title="Account hint from the email">…${esc(p.account_hint)}</span>` : ""}
           <div class="row-msg" role="alert" hidden></div></td>
-        <td><select class="sel-account cell-select" aria-label="Account for ${what}"${noAcc}>${accountOptions(guess)}</select>
+        <td class="c-account"><span class="cell-label" aria-hidden="true">Account</span>
+          <select class="sel-account cell-select" aria-label="Account for ${what}"${noAcc}>${accountOptions(guess)}</select>
           ${guess ? `<div class="match-note">Matched from email</div>` : ""}</td>
-        <td><select class="sel-category cell-select" aria-label="Category for ${what}">${categoryOptions(kind)}</select></td>
+        <td class="c-category"><span class="cell-label" aria-hidden="true">Category</span>
+          <select class="sel-category cell-select" aria-label="Category for ${what}"${blocked ? " disabled" : ""}>${categoryOptions(kind)}</select>
+          ${blocked ? `<div class="cell-hint" id="${hintId}">Add an ${kind === "income" ? "income" : "expense"} category first.</div>` : ""}</td>
         <td class="amt ${cls}">${sign}${money(p.amount)}</td>
         <td class="row-actions">
-          <button class="btn sm approve" aria-label="Approve ${what}"${noAcc}>Approve</button>
+          <button class="btn sm approve" aria-label="Approve ${what}"${noAcc}${blocked
+            ? ` data-needs-category="1" aria-describedby="${hintId}"` : ""}>Approve</button>
           <button class="icon-btn reject" aria-label="Reject ${what}" title="Reject — don't add this">✕</button>
         </td>
       </tr>`;
@@ -198,7 +211,8 @@
   function lockRow(tr, locked) {
     tr.querySelectorAll("button, select").forEach((el) => {
       const needsAccount = el.classList.contains("approve") || el.classList.contains("sel-account");
-      el.disabled = locked || (needsAccount && accounts.length === 0);
+      const noCat = el.classList.contains("sel-category") && tr.dataset.blocked;
+      el.disabled = locked || noCat || (needsAccount && accounts.length === 0);
     });
   }
 
@@ -260,12 +274,14 @@
   async function approveRow(tr) {
     if (bulkRunning) return;
     const p = pending.find((x) => x.id === tr.dataset.id);
-    const accName = tr.querySelector(".sel-account").selectedOptions[0]?.textContent || "your tracker";
+    if (tr.dataset.blocked) return toast(noCategoryHint(p.direction));
     const res = await approveRequest(tr);
     if (res.skipped) return;
     if (res.already) { toast(res.message, "ok"); return removeRow(tr); }
     if (!res.ok) return toast(`Couldn't approve. ${res.message}`);
-    toast(`Added ${money(p.amount)} to ${accName}.`, "ok");
+    // approve_import may hand back an existing transaction for the same email,
+    // so don't claim which account it went to.
+    toast(`Added ${money(p.amount)}${p.note ? ` (${p.note})` : ""} to your tracker.`, "ok");
     removeRow(tr);
   }
 
@@ -295,7 +311,7 @@
   $("approveAll").onclick = async () => {
     if (bulkRunning) return;
     const rows = [...$("rows").querySelectorAll("tr[data-id]")]
-      .filter((tr) => !inFlight.has(tr.dataset.id) && !tr.classList.contains("leaving"));
+      .filter((tr) => !inFlight.has(tr.dataset.id) && !tr.classList.contains("leaving") && !tr.dataset.blocked);
     if (!rows.length) return;
     const n = rows.length;
     if (!confirm(`Add all ${n} transactions to your tracker, using the account and category shown on each row?`)) return;
@@ -326,10 +342,12 @@
       .forEach((tr) => lockRow(tr, false));
     updateBulkButton();
 
-    const skippedNote = already ? ` ${already} ${already === 1 ? "was" : "were"} already handled.` : "";
+    const blockedLeft = pending.length - approvable().length;
+    const skippedNote = (already ? ` ${already} ${already === 1 ? "was" : "were"} already handled.` : "")
+      + (blockedLeft ? ` ${blockedLeft} still ${blockedLeft === 1 ? "needs" : "need"} a category.` : "");
     const summary = failed
       ? `Approved ${done} of ${n}. ${failed} couldn't be added — see the highlighted ${failed === 1 ? "row" : "rows"}.${skippedNote}`
-      : already
+      : (already || blockedLeft)
         ? `Approved ${done}.${skippedNote}`
         : n === 1 ? "Approved. It's in your tracker now." : `Approved all ${n}. They're in your tracker now.`;
     $("bulkStatus").textContent = failed ? summary : "";

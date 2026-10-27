@@ -62,7 +62,7 @@ def parse_api_message(msg):
     body = _find_body(payload, "text/plain")
     if body is None:
         raw_html = _find_body(payload, "text/html")
-        body = _html_to_text(raw_html) if raw_html else msg.get("snippet", "")
+        body = _html_to_text(raw_html) if raw_html else (msg.get("snippet") or "")
     body = re.sub(r"[ \t\r\f\v]+", " ", body).strip()
 
     date = None

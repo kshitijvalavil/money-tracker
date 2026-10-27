@@ -22,6 +22,8 @@ jobs:
         run: python3 tests/test_parsers.py
       - name: Scanner tests
         run: python3 tests/test_scanner.py
+      - name: Scanner adversarial tests
+        run: python3 tests/test_scanner_adversarial.py
       - name: Scanner dry run on fixtures
         run: python3 -m bot.scanner --from-dir tests/fixtures
       - name: Database tests (schema, RLS, money math)
@@ -55,6 +57,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/smoke_test.py
+      - name: Imports page tests
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/imports_ui_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

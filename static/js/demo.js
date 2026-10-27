@@ -99,9 +99,9 @@ function importRpc(s, name, params) {
   if (!s.accounts.some((a) => a.id === params.p_account_id)) {
     fail("P0002", `account ${params.p_account_id} not found`);
   }
-  const cat = params.p_category_id && s.categories.find((c) => c.id === params.p_category_id);
-  if (params.p_category_id && !cat) fail("P0002", `category ${params.p_category_id} not found`);
-  if (cat && cat.kind !== imp.direction) {
+  const cat = s.categories.find((c) => c.id === params.p_category_id);
+  if (!cat) fail("P0002", `category ${params.p_category_id} not found`);
+  if (cat.kind !== imp.direction) {
     fail("22023", `category kind ${cat.kind} does not match import direction ${imp.direction}`);
   }
   // Same source email already imported: reuse that transaction (dedup).

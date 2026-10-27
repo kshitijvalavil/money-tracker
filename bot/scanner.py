@@ -26,7 +26,12 @@ import urllib.parse
 import urllib.request
 from datetime import date, datetime
 
+from bot.gmail_source import _html_to_text
 from bot.parsers import parse_email
+
+# Largest value numeric(14, 2) can hold; bigger amounts would make PostgREST
+# reject the whole bulk insert, so such rows are dropped.
+MAX_AMOUNT = 999999999999.99
 
 # Exactly the pending_imports columns we send (PostgREST bulk insert needs
 # every object to carry the same keys).
@@ -57,7 +62,7 @@ def to_row(parsed):
         amount = round(float(parsed.get("amount") or 0), 2)
     except (TypeError, ValueError):
         return None
-    if amount <= 0 or parsed.get("direction") not in ("income", "expense"):
+    if amount <= 0 or amount > MAX_AMOUNT or parsed.get("direction") not in ("income", "expense"):
         return None
     occurred_on = _iso_date(parsed.get("occurred_on"))
     if not occurred_on or not parsed.get("source_message_id"):
@@ -147,7 +152,16 @@ def load_eml(path):
     with open(path, "rb") as f:
         msg = email.message_from_binary_file(f, policy=email.policy.default)
     part = msg.get_body(preferencelist=("plain", "html"))
-    body = part.get_content() if part else ""
+    body = ""
+    if part is not None:
+        try:
+            body = part.get_content()
+        except (LookupError, UnicodeError, ValueError):
+            # Unknown/bogus charset: decode the raw bytes as utf-8 instead.
+            raw = part.get_payload(decode=True) or b""
+            body = raw.decode("utf-8", errors="replace")
+        if part.get_content_type() == "text/html":
+            body = _html_to_text(body)
     return {
         "id": (msg.get("Message-ID") or os.path.basename(path)).strip("<> "),
         "subject": str(msg.get("Subject", "")),
