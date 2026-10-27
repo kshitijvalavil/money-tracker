@@ -150,7 +150,9 @@ def layout(b):
     ctx, pg = open_page(b, "/bills")
     nav = ev(pg, "() => [...document.querySelectorAll('.nav a')].map(a => a.textContent.trim())")
     i_b = next((i for i, t in enumerate(nav) if t.endswith("Budgets")), -1)
-    check(i_b >= 0 and i_b + 1 < len(nav) and "Bills" in nav[i_b + 1], f"nav: Bills right after Budgets ({nav})")
+    # Sprint 3 inserted Goals between Budgets and Bills in the sidebar.
+    check(i_b >= 0 and i_b + 2 < len(nav) and "Goals" in nav[i_b + 1] and "Bills" in nav[i_b + 2],
+          f"nav: Goals then Bills after Budgets ({nav})")
     check(ev(pg, "() => document.querySelector('.nav a[href=\"/bills\"]').classList.contains('active')"),
           "Bills nav item marked active on /bills")
     ctx.close()
