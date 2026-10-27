@@ -474,6 +474,7 @@ grant execute on function public.reject_import(uuid) to authenticated;
 --   recurring_occurrence(p_start, p_freq, p_n)      -> date   (pure)
 --   mark_recurring_paid(p_id, p_paid_on)            -> transaction id
 --   skip_recurring(p_id)                            -> void
+--   reschedule_recurring(p_id, p_start, p_frequency) -> void (keeps history linked)
 --   post_due_recurring(p_as_of)                     -> number of transactions posted
 --   upcoming_recurring(p_days)                      -> due-soon and overdue bills
 --
@@ -703,6 +704,70 @@ begin
 end;
 $$;
 
+-- Change a bill's schedule (start date and/or frequency) without breaking
+-- its history. Already-posted transactions keep their link to the bill but are
+-- renumbered to negative seqs, so the new schedule can start again at seq 0
+-- without colliding with them. Normally that is seq - next_seq; if a row was
+-- ever posted at or past next_seq the shift is widened so every old row still
+-- ends up negative. Calling it again is safe: old rows just move further down.
+create or replace function public.reschedule_recurring(p_id uuid, p_start date, p_frequency text)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+    v_uid   uuid := auth.uid();
+    v_r     public.recurring%rowtype;
+    v_shift int;
+    v_tx    record;
+begin
+    if v_uid is null then
+        raise exception 'not signed in' using errcode = '42501';
+    end if;
+    if p_start is null then
+        raise exception 'start date is required' using errcode = '22023';
+    end if;
+    if p_frequency is null or p_frequency not in ('weekly', 'monthly', 'quarterly', 'yearly') then
+        raise exception 'unknown frequency %', p_frequency using errcode = '22023';
+    end if;
+
+    -- Lock the bill: no Mark paid / auto-post can run until we commit.
+    select * into v_r from public.recurring
+     where id = p_id and user_id = v_uid
+       for update;
+    if not found then
+        raise exception 'bill % not found', p_id using errcode = 'P0002';
+    end if;
+
+    select greatest(v_r.next_seq, coalesce(max(t.recurring_seq) + 1, 0)) into v_shift
+      from public.transactions t
+     where t.recurring_id = v_r.id;
+
+    -- Renumber lowest seq first: each row moves below every row still to move,
+    -- so the (non-deferrable) unique index never sees a transient duplicate.
+    if v_shift > 0 then
+        for v_tx in
+            select t.id from public.transactions t
+             where t.recurring_id = v_r.id
+             order by t.recurring_seq
+               for update
+        loop
+            update public.transactions
+               set recurring_seq = recurring_seq - v_shift
+             where id = v_tx.id;
+        end loop;
+    end if;
+
+    update public.recurring
+       set start_date = p_start,
+           frequency  = p_frequency,
+           next_seq   = 0,
+           next_due   = public.recurring_occurrence(p_start, p_frequency, 0)
+     where id = v_r.id;
+end;
+$$;
+
 -- Post every missed occurrence of the caller's active auto-post bills, up to
 -- p_as_of, at most 60 per bill per call (the next call continues). Rows are
 -- locked, so a concurrent call waits, then re-checks next_due and skips bills
@@ -799,11 +864,13 @@ revoke execute on function public.recurring_occurrence(date, text, int) from pub
 revoke execute on function public.recurring_before_write() from public, anon;
 revoke execute on function public.mark_recurring_paid(uuid, date) from public, anon;
 revoke execute on function public.skip_recurring(uuid) from public, anon;
+revoke execute on function public.reschedule_recurring(uuid, date, text) from public, anon;
 revoke execute on function public.post_due_recurring(date) from public, anon;
 revoke execute on function public.upcoming_recurring(int) from public, anon;
 grant execute on function public.recurring_occurrence(date, text, int) to authenticated;
 grant execute on function public.mark_recurring_paid(uuid, date) to authenticated;
 grant execute on function public.skip_recurring(uuid) to authenticated;
+grant execute on function public.reschedule_recurring(uuid, date, text) to authenticated;
 grant execute on function public.post_due_recurring(date) to authenticated;
 grant execute on function public.upcoming_recurring(int) to authenticated;
 
@@ -832,10 +899,14 @@ grant execute on function public.upcoming_recurring(int) to authenticated;
 --   3. Keep the rows with |amount - median| <= 0.10 x median, where median
 --      is the group's median amount.
 --   4. occurrences = number of distinct dates among the kept rows, and it
---      must be >= p_min_occurrences.
+--      must be >= p_min_occurrences. The kept rows must also be at least half
+--      of the group's rows (2 x kept >= group), so a chance cluster of
+--      similar amounts inside random spend at one merchant does not count
+--      (decision 13).
 --   5. Median gap between consecutive distinct dates, in inclusive bands:
 --      6-8 weekly, 26-35 monthly, 85-95 quarterly, 355-375 yearly. Any other
---      median gap: not recurring.
+--      median gap: not recurring. At least 2/3 of the gaps must lie inside
+--      that band (3 x in_band >= 2 x gaps; decision 13).
 --   6. name, account_id and category_id come from the latest kept row, by
 --      (occurred_on, id). amount is round(median of the kept amounts, 2).
 --      next_guess is the first anchored occurrence after last_seen, anchored
@@ -938,8 +1009,9 @@ begin
          where tx.id = any (g.ids)
            and abs(tx.amount - v_med) <= v_med * 0.10;
 
-        -- 4. enough distinct dates?
-        if coalesce(array_length(v_dates, 1), 0) < p_min_occurrences then
+        -- 4. enough distinct dates, and the kept rows are at least half the group?
+        if coalesce(array_length(v_dates, 1), 0) < p_min_occurrences
+           or 2 * coalesce(array_length(v_kept, 1), 0) < g.cnt then
             continue;
         end if;
 
@@ -964,6 +1036,9 @@ begin
         v_hi := case v_freq when 'weekly' then 8 when 'monthly' then 35
                             when 'quarterly' then 95 else 375 end;
         select count(*)::int into v_inband from unnest(v_gaps) x where x between v_lo and v_hi;
+        if 3 * v_inband < 2 * v_n then          -- need >= 2/3 of gaps in the band
+            continue;
+        end if;
 
         -- 6. latest kept row, next anchored occurrence after last_seen
         select tx.note, tx.account_id, tx.category_id into v_latest

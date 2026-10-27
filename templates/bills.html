@@ -66,10 +66,11 @@
             <option value="quarterly">Every 3 months</option>
             <option value="yearly">Yearly</option>
           </select></div>
-        <div class="field"><label for="fStart">First due date</label>
-          <input type="date" id="fStart" required aria-describedby="fStartHelp fStartErr">
-          <div class="field-help" id="fStartHelp">A past date sets the schedule; tracking starts
-            from the next due date on or after today.</div>
+        <div class="field"><label for="fStart" id="fStartLabel">First due date</label>
+          <input type="date" id="fStart" required aria-describedby="fStartHelp fPastWarn fStartErr">
+          <div class="field-help" id="fStartHelp">A past date shows as overdue until you mark it
+            paid or skip it.</div>
+          <div class="field-warn" id="fPastWarn" role="status"></div>
           <div class="field-error" id="fStartErr" hidden></div></div>
       </div>
       <div class="field check-field">
@@ -99,7 +100,7 @@
 {% block page_script %}
 <script type="module">
   import { db, money, esc, toast, today, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
-  import { occurrence, firstSeqOnOrAfter, perMonth, dueLabel, shortDate, FREQ_LABEL, normaliseName,
+  import { occurrence, firstSeqOnOrAfter, addDays, perMonth, dueLabel, shortDate, FREQ_LABEL, normaliseName,
     tidyName, MIN_SUGGEST_CONFIDENCE }
     from "{{ url_for('static', filename='js/recurring.js') }}";
   const $ = (id) => document.getElementById(id);
@@ -111,10 +112,10 @@
   // --- Plain-language errors (SQLSTATE codes from the database) ----------
   function friendly(err) {
     switch (err?.code) {
-      case "P0002": return "That bill no longer exists. Refresh the page and try again.";
-      case "22023": return "The category doesn't match the type. Bills need an expense category, income needs an income category.";
-      case "23514": return "Check the details: a name up to 80 characters and an amount above zero.";
-      case "23503": return "That account or category no longer exists. Pick another one.";
+      case "P0002": return "That bill, account or category no longer exists. Refresh the page and try again.";
+      case "22023": return "That doesn't fit: bills need an expense category, income needs an income category, and the date and frequency must be set.";
+      case "23514": return "That value isn't allowed. Use a name of up to 80 characters and an amount above zero.";
+      case "23503": return "This category is used by a bill, so it can't be removed. Change or delete the bill first.";
       case "42501": return "You've been signed out. Sign in again to continue.";
       default: return err?.message ? `Something went wrong: ${err.message}` : "Check your connection and try again.";
     }
@@ -169,7 +170,7 @@
       <td class="amt ${income ? "pos" : "neg"}">${income ? "+" : "−"}${money(b.amount)}</td>
       <td class="c-due"><span class="cell-label" aria-hidden="true">Next due</span>
         <span class="due ${state}">${dueText}</span>
-        ${b.active ? `<div class="bill-meta">${esc(when)}</div>` : ""}</td>
+        <div class="bill-meta">${b.active ? "" : "Next "}${esc(when)}</div></td>
       <td class="c-auto"><label class="switch">
           <input type="checkbox" role="switch" class="auto-toggle" ${b.auto_post ? "checked" : ""}
                  aria-label="Post ${name} automatically on its due date">
@@ -177,10 +178,10 @@
           <span class="switch-text" aria-hidden="true">${b.auto_post ? "On" : "Off"}</span>
         </label></td>
       <td class="row-actions">
-        ${b.active ? `<button class="btn sm mark-paid" type="button"
-            aria-label="Mark ${name} ${payWord}, ${esc(dueText.toLowerCase())}, ${esc(when)}">Mark ${payWord}</button>
-          <button class="btn ghost sm skip" type="button"
-            aria-label="Skip the ${esc(when)} ${name} payment">Skip</button>` : ""}
+        <button class="btn sm mark-paid" type="button"
+          aria-label="Mark ${name} ${payWord}, ${esc(b.active ? dueText.toLowerCase() : "paused")}, ${esc(when)}">Mark ${payWord}</button>
+        <button class="btn ghost sm skip" type="button"
+          aria-label="Skip the ${esc(when)} ${name} payment">Skip</button>
         <span class="more-actions">
           <button class="link-btn edit" type="button" aria-label="Edit ${name}">Edit</button>
           <button class="link-btn pause" type="button" aria-label="${b.active ? "Pause" : "Resume"} ${name}">${b.active ? "Pause" : "Resume"}</button>
@@ -315,16 +316,16 @@
   async function togglePause(tr, b) {
     let patch = { active: false };
     if (!b.active) {
-      // Resuming skips dates missed while paused instead of posting them.
-      const n = firstSeqOnOrAfter(b.start_date, b.frequency, today(), b.next_seq);
-      patch = { active: true, next_seq: n, next_due: occurrence(b.start_date, b.frequency, n) };
+      // Decision 14: resuming skips the dates missed while paused, so no
+      // backlog gets auto-posted. next_due is set by the database trigger.
+      patch = { active: true, next_seq: firstSeqOnOrAfter(b.start_date, b.frequency, today(), b.next_seq) };
     }
     const ok = await run(tr, b, null, () => db.from("recurring").update(patch).eq("id", b.id));
     if (!ok) return;
     await reloadKeepingFocus(b.id, ".pause");
     toast(b.active
       ? `Paused ${b.name}. It won't come due or post until you resume it.`
-      : `Resumed ${b.name}. Next due ${shortDate(patch.next_due, today())}.`, "ok");
+      : `Resumed ${b.name}. Next due ${shortDate(occurrence(b.start_date, b.frequency, patch.next_seq), today())}.`, "ok");
   }
 
   async function remove(tr, b) {
@@ -368,10 +369,12 @@
     $("fStart").value = today();
     fillCategories();
     clearErrors();
+    $("fStartLabel").textContent = "First due date";
     $("formTitle").textContent = "Add a bill";
     $("formIntro").textContent = "Rent, subscriptions, insurance, or income that repeats. We'll remind you when it's due.";
     $("saveBtn").textContent = "Add bill";
     $("cancelEdit").hidden = true;
+    updatePastWarning();
   }
 
   function focusForm() {
@@ -391,14 +394,16 @@
     $("fFreq").value = v.frequency || "monthly";
     $("fStart").value = v.start_date || today();
     $("fAuto").checked = !!v.auto_post;
+    updatePastWarning();
   }
 
   function startEdit(b) {
     resetForm();
     editingId = b.id;
-    fill(b);
+    fill({ ...b, start_date: b.next_due });
+    $("fStartLabel").textContent = "Next due date";
     $("formTitle").textContent = `Edit ${b.name}`;
-    $("formIntro").textContent = "Changing how often it repeats or the first due date moves the next due date to the next one on or after today.";
+    $("formIntro").textContent = "Changing how often it repeats or the next due date starts a new schedule from that date. Payments already recorded stay.";
     $("saveBtn").textContent = "Save changes";
     $("cancelEdit").hidden = false;
     focusForm();
@@ -428,10 +433,43 @@
     if (!v.account_id) errs.push(["fAccount", "fAccountErr", "Add an account first, on the Accounts page."]);
     if (!v.category_id) errs.push(["fCategory", "fCategoryErr", `You need an ${v.type} category for this.`]);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v.start_date)) errs.push(["fStart", "fStartErr", "Pick the first due date."]);
+    else if (editingId && v.auto_post && v.start_date < today()) {
+      const b = bills.find((x) => x.id === editingId);
+      if (b && (b.frequency !== v.frequency || b.next_due !== v.start_date)) {
+        errs.push(["fStart", "fStartErr", "For a bill that posts automatically, pick today or a later date."]);
+      }
+    }
     errs.forEach(([i, e, m]) => setFieldError($(i), $(e), m));
     if (errs.length) { $(errs[0][0]).focus(); return null; }
     return v;
   }
+
+  // How many occurrences would be auto-posted right away (dates up to today).
+  // For a new or rescheduled bill that counts from the picked date; for an
+  // unchanged schedule it counts from the bill's current next occurrence.
+  function plan(v) {
+    const existing = editingId && bills.find((b) => b.id === editingId);
+    const reschedule = !!existing && (v.frequency !== existing.frequency || v.start_date !== existing.next_due);
+    const fresh = !existing || reschedule;
+    const start = fresh ? v.start_date : existing.start_date;
+    const fromSeq = fresh ? 0 : existing.next_seq;
+    const active = existing ? existing.active : true;
+    let past = 0;
+    if (v.auto_post && active && !reschedule && /^\d{4}-\d{2}-\d{2}$/.test(start)) {
+      past = firstSeqOnOrAfter(start, v.frequency, addDays(today(), 1), fromSeq) - fromSeq;
+    }
+    return { existing, reschedule, past };
+  }
+
+  function updatePastWarning() {
+    const p = plan({ start_date: $("fStart").value, frequency: $("fFreq").value, auto_post: $("fAuto").checked });
+    const n = p.past;
+    $("fPastWarn").textContent = n > 0
+      ? `This will add ${n} past ${n === 1 ? "payment" : "payments"} now.${n > 60 ? " Up to 60 are added each time you open the app." : ""}`
+      : "";
+  }
+  ["fStart", "fFreq", "fAuto"].forEach((id) => $(id).addEventListener("input", updatePastWarning));
+  ["fFreq", "fAuto"].forEach((id) => $(id).addEventListener("change", updatePastWarning));
 
   let saving = false;
   $("billForm").addEventListener("submit", async (e) => {
@@ -444,29 +482,34 @@
     const label = $("saveBtn").textContent;
     $("saveBtn").textContent = "Saving…";
     try {
-      let row = { ...v };
-      const existing = editingId && bills.find((b) => b.id === editingId);
-      const scheduleChanged = !existing || existing.start_date !== v.start_date || existing.frequency !== v.frequency;
-      if (scheduleChanged) {
-        // Track from the next due date on or after today, and never reuse an
-        // occurrence number that already has a payment recorded.
-        let minSeq = 0;
-        if (existing) {
-          const { data, error } = await db.from("transactions").select("recurring_seq")
-            .eq("recurring_id", existing.id).order("recurring_seq", { ascending: false }).limit(1);
-          if (error) throw error;
-          if (data?.length) minSeq = Number(data[0].recurring_seq) + 1;
+      const p = plan(v);
+      const { existing } = p;
+      // Never send next_due (the trigger sets it) or next_seq here (decisions 7, 12);
+      // a schedule change goes through reschedule_recurring instead.
+      const fields = { name: v.name, type: v.type, amount: v.amount, account_id: v.account_id,
+                       category_id: v.category_id, auto_post: v.auto_post };
+      if (existing) {
+        // Decision 15: reschedule first, then the other fields.
+        if (p.reschedule) {
+          const rs = await db.rpc("reschedule_recurring",
+            { p_id: existing.id, p_start: v.start_date, p_frequency: v.frequency });
+          if (rs.error) throw rs.error;
         }
-        const n = firstSeqOnOrAfter(v.start_date, v.frequency, today(), minSeq);
-        row.next_seq = n;
-        row.next_due = occurrence(v.start_date, v.frequency, n);
+        const upd = await db.from("recurring").update(fields).eq("id", existing.id);
+        if (upd.error) throw upd.error;
+      } else {
+        const ins = await db.from("recurring").insert({ ...fields, frequency: v.frequency, start_date: v.start_date });
+        if (ins.error) throw ins.error;
       }
-      const { error } = existing
-        ? await db.from("recurring").update(row).eq("id", existing.id)
-        : await db.from("recurring").insert(row);
-      if (error) throw error;
+      // Decision 9: past payments of an auto-post bill are added now.
+      let posted = 0;
+      if (p.past > 0) {
+        const r = await db.rpc("post_due_recurring");
+        if (!r.error) posted = Number(r.data) || 0;
+      }
       const id = existing?.id;
-      toast(existing ? `Saved ${v.name}.` : `Added ${v.name}. Next due ${shortDate(row.next_due, today())}.`, "ok");
+      const postedNote = posted ? ` Added ${posted} past ${posted === 1 ? "payment" : "payments"}.` : "";
+      toast(existing ? `Saved ${v.name}.${postedNote}` : `Added ${v.name}.${postedNote}`, "ok");
       resetForm();
       await load(false);
       loadSuggestions();

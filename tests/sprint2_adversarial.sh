@@ -6,8 +6,8 @@
 #   BASE_URL=http://127.0.0.1:8099 bash tests/sprint2_adversarial.sh   # + UI
 #
 # Parts:
-#   1. tests/sprint2_adversarial_recurring.sql  dates, posting, RLS, detection (26 cases)
-#   2. double-posting races (5 scenarios, real concurrent sessions)
+#   1. tests/sprint2_adversarial_recurring.sql  dates, posting, RLS, detection
+#   2. double-posting races (6 scenarios, real concurrent sessions)
 #   3. tests/sprint2_adversarial_detection.py   Python reference bot/recurring.py
 #   4. date parity: recurring_occurrence() vs bot.recurring.occurrence() on a grid
 #   5. tests/sprint2_adversarial_ui.py          only when BASE_URL is set (demo mode)
@@ -32,9 +32,12 @@ echo "== 1. SQL gate (dates, posting, RLS, detection)"
 "$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres gate
 "${PSQL[@]}" -d gate -v date_cases="$(cat tests/fixtures/sprint2/date_cases.json)" \
     -v detection="$(cat tests/fixtures/sprint2/detection.json)" \
+    -v random_spend="$(cat tests/fixtures/sprint2/random_spend.json)" \
     -f tests/sprint2_adversarial_recurring.sql >"$TMP/sql.out" 2>&1
 grep -v "NOTICE\|^$" "$TMP/sql.out" | sed 's/^/   /'
-if ! grep -q "SPRINT2 SQL GATE: 26 passed, 0 failed, 26 recorded" "$TMP/sql.out"; then FAILED+=("sql gate"); fi
+CASES="$(grep -c "perform qa.pass(" tests/sprint2_adversarial_recurring.sql)"   # one per case
+echo "   (expecting $CASES cases)"
+if ! grep -q "SPRINT2 SQL GATE: $CASES passed, 0 failed, $CASES recorded" "$TMP/sql.out"; then FAILED+=("sql gate"); fi
 
 # ---- 2. Double-posting races -----------------------------------------------------
 echo "== 2. Double-posting races"
@@ -47,17 +50,19 @@ else
     AS_B="set role app_user; set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';"
     BILL() { echo "(select id from public.recurring where name = '$1')"; }
     q() { "${PSQL[@]}" -d race -v ON_ERROR_STOP=1 -At -c "$1"; }
-    # Invariant for a bill: rows posted == next_seq, seqs are exactly 0..n-1, and
+    # Invariant for a bill's current schedule (seq >= 0; decision 12 moves history
+    # to negative seqs): rows == next_seq, seqs exactly 0..n-1, and
     # next_due == recurring_occurrence(start, freq, next_seq).
-    check_bill() {   # name expected_rows label
+    check_bill() {   # name expected_rows label [expected_history_rows]
         local got
-        got="$(q "select count(*) || '/' || count(distinct t.recurring_seq) || '/' || r.next_seq || '/' ||
+        got="$(q "select count(t.id) || '/' || count(distinct t.recurring_seq) || '/' || r.next_seq || '/' ||
                   coalesce(max(t.recurring_seq), -1) || '/' ||
-                  (r.next_due = public.recurring_occurrence(r.start_date, r.frequency, r.next_seq))
-                  from public.recurring r left join public.transactions t on t.recurring_id = r.id
+                  (r.next_due = public.recurring_occurrence(r.start_date, r.frequency, r.next_seq)) || '/' ||
+                  (select count(*) from public.transactions h where h.recurring_id = r.id and h.recurring_seq < 0)
+                  from public.recurring r left join public.transactions t on t.recurring_id = r.id and t.recurring_seq >= 0
                   where r.name = '$1' group by r.id")"
-        local want="$2/$2/$2/$(($2 - 1))/true"
-        if [ "$got" = "$want" ]; then echo "   PASS $3 (rows/distinct/next_seq/max_seq/next_due_ok = $got)"
+        local want="$2/$2/$2/$(($2 - 1))/true/${4:-0}"
+        if [ "$got" = "$want" ]; then echo "   PASS $3 (rows/distinct/next_seq/max_seq/next_due_ok/history = $got)"
         else echo "   FAIL $3: want $want got $got"; FAILED+=("race: $3"); fi
     }
     hold() {  # run SQL in a transaction that stays open 2s, in the background
@@ -98,6 +103,16 @@ else
     wait "${PIDS[@]}"
     check_bill race-storm 57 "8 concurrent post_due calls: 57 weekly occurrences exactly once"
     check_bill race-b 6 "B's concurrent calls post only B's bill"
+
+    # f) reschedule (decision 12) holds the row while post_due arrives: 3 old
+    #    posts become history (-3..-1); post_due then posts the new weekly
+    #    schedule from 1 Jun: 1, 8, 15, 22, 29 Jun = seqs 0..4.
+    q "$AS_A update public.recurring set auto_post = (name = 'race-resched');" >/dev/null
+    q "$AS_A select public.post_due_recurring('2026-03-31');" >/dev/null
+    hold "$AS_A select public.reschedule_recurring($(BILL race-resched), '2026-06-01', 'weekly');"; P=$!
+    sleep 0.5; "${PSQL[@]}" -d race -c "$AS_A select public.post_due_recurring('2026-06-30');" >>"$TMP/race.out" 2>&1
+    wait $P
+    check_bill race-resched 5 "reschedule racing post_due: history kept, new schedule posted once" 3
     if grep -q "ERROR" "$TMP/race.out"; then
         echo "   FAIL a racing session errored instead of waiting/advancing:"; grep ERROR "$TMP/race.out" | sort | uniq -c | sed 's/^/     /'
         FAILED+=("race: session errors")
@@ -129,10 +144,10 @@ EOF
 )"
 if [ -z "$GRID" ]; then echo "   FAIL bot.recurring.occurrence unavailable"; FAILED+=("date parity")
 else
-    RES="$("${PSQL[@]}" -d race -At -v grid="$GRID" -c "
-      select count(*) || ' cases, ' || count(*) filter (where public.recurring_occurrence(s::date, f, n) is distinct from e::date) || ' mismatches'
-        from json_to_recordset((select json_agg(json_build_object('s', x->>0, 'f', x->>1, 'n', (x->>2)::int, 'e', x->>3))
-                                  from json_array_elements(:'grid'::json) x)) as t(s text, f text, n int, e text);" 2>&1)"
+    # Fed through stdin: the grid is too big for a command-line argument.
+    RES="$( { echo "select count(*) || ' cases, ' || count(*) filter (where public.recurring_occurrence((x->>0)::date, x->>1, (x->>2)::int) is distinct from (x->>3)::date) || ' mismatches' from json_array_elements(\$grid\$"
+              echo "$GRID"
+              echo "\$grid\$::json) x;"; } | "${PSQL[@]}" -d race -At 2>&1)"
     echo "   $RES"
     case "$RES" in *" 0 mismatches") ;; *) FAILED+=("date parity");; esac
 fi

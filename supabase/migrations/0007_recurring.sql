@@ -11,6 +11,7 @@
 --   recurring_occurrence(p_start, p_freq, p_n)      -> date   (pure)
 --   mark_recurring_paid(p_id, p_paid_on)            -> transaction id
 --   skip_recurring(p_id)                            -> void
+--   reschedule_recurring(p_id, p_start, p_frequency) -> void (keeps history linked)
 --   post_due_recurring(p_as_of)                     -> number of transactions posted
 --   upcoming_recurring(p_days)                      -> due-soon and overdue bills
 --
@@ -240,6 +241,70 @@ begin
 end;
 $$;
 
+-- Change a bill's schedule (start date and/or frequency) without breaking
+-- its history. Already-posted transactions keep their link to the bill but are
+-- renumbered to negative seqs, so the new schedule can start again at seq 0
+-- without colliding with them. Normally that is seq - next_seq; if a row was
+-- ever posted at or past next_seq the shift is widened so every old row still
+-- ends up negative. Calling it again is safe: old rows just move further down.
+create or replace function public.reschedule_recurring(p_id uuid, p_start date, p_frequency text)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+    v_uid   uuid := auth.uid();
+    v_r     public.recurring%rowtype;
+    v_shift int;
+    v_tx    record;
+begin
+    if v_uid is null then
+        raise exception 'not signed in' using errcode = '42501';
+    end if;
+    if p_start is null then
+        raise exception 'start date is required' using errcode = '22023';
+    end if;
+    if p_frequency is null or p_frequency not in ('weekly', 'monthly', 'quarterly', 'yearly') then
+        raise exception 'unknown frequency %', p_frequency using errcode = '22023';
+    end if;
+
+    -- Lock the bill: no Mark paid / auto-post can run until we commit.
+    select * into v_r from public.recurring
+     where id = p_id and user_id = v_uid
+       for update;
+    if not found then
+        raise exception 'bill % not found', p_id using errcode = 'P0002';
+    end if;
+
+    select greatest(v_r.next_seq, coalesce(max(t.recurring_seq) + 1, 0)) into v_shift
+      from public.transactions t
+     where t.recurring_id = v_r.id;
+
+    -- Renumber lowest seq first: each row moves below every row still to move,
+    -- so the (non-deferrable) unique index never sees a transient duplicate.
+    if v_shift > 0 then
+        for v_tx in
+            select t.id from public.transactions t
+             where t.recurring_id = v_r.id
+             order by t.recurring_seq
+               for update
+        loop
+            update public.transactions
+               set recurring_seq = recurring_seq - v_shift
+             where id = v_tx.id;
+        end loop;
+    end if;
+
+    update public.recurring
+       set start_date = p_start,
+           frequency  = p_frequency,
+           next_seq   = 0,
+           next_due   = public.recurring_occurrence(p_start, p_frequency, 0)
+     where id = v_r.id;
+end;
+$$;
+
 -- Post every missed occurrence of the caller's active auto-post bills, up to
 -- p_as_of, at most 60 per bill per call (the next call continues). Rows are
 -- locked, so a concurrent call waits, then re-checks next_due and skips bills
@@ -336,10 +401,12 @@ revoke execute on function public.recurring_occurrence(date, text, int) from pub
 revoke execute on function public.recurring_before_write() from public, anon;
 revoke execute on function public.mark_recurring_paid(uuid, date) from public, anon;
 revoke execute on function public.skip_recurring(uuid) from public, anon;
+revoke execute on function public.reschedule_recurring(uuid, date, text) from public, anon;
 revoke execute on function public.post_due_recurring(date) from public, anon;
 revoke execute on function public.upcoming_recurring(int) from public, anon;
 grant execute on function public.recurring_occurrence(date, text, int) to authenticated;
 grant execute on function public.mark_recurring_paid(uuid, date) to authenticated;
 grant execute on function public.skip_recurring(uuid) to authenticated;
+grant execute on function public.reschedule_recurring(uuid, date, text) to authenticated;
 grant execute on function public.post_due_recurring(date) to authenticated;
 grant execute on function public.upcoming_recurring(int) to authenticated;

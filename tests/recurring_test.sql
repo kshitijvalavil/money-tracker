@@ -9,6 +9,8 @@
 --   * mark_recurring_paid / skip_recurring: anchored advance, idempotency,
 --   * post_due_recurring: catch-up, the 60-per-call cap, idempotency, and no
 --     double posting after a manual Mark paid,
+--   * reschedule_recurring: history renumbered negative and still linked,
+--     Mark paid / post_due work afterwards, repeat calls are safe,
 --   * upcoming_recurring, and RLS between two users.
 --
 -- The app role here gets function access only through membership of
@@ -60,6 +62,7 @@ begin
         'public.recurring_occurrence(date,text,integer)',
         'public.mark_recurring_paid(uuid,date)',
         'public.skip_recurring(uuid)',
+        'public.reschedule_recurring(uuid,date,text)',
         'public.post_due_recurring(date)',
         'public.upcoming_recurring(integer)']
     loop
@@ -542,6 +545,116 @@ do $$ begin
 exception when sqlstate '22023' then null; end $$;
 
 -- ============================================================================
+-- reschedule_recurring (as C; C's other bills are manual-only, so post_due
+-- counts below only involve this bill)
+-- ============================================================================
+insert into public.recurring (name, type, amount, account_id, category_id, frequency, start_date)
+    select 'Wifi', 'expense', 799.00, (select id from accounts where name = 'Cash'),
+           (select id from categories where name = 'Bills'), 'monthly', '2025-01-10';
+
+do $$
+declare
+    v_id uuid; v_old uuid[]; v_tx uuid; r public.recurring%rowtype; v_seqs int[];
+begin
+    select id into v_id from public.recurring where name = 'Wifi';
+    perform public.mark_recurring_paid(v_id, '2025-01-10');            -- seq 0
+    perform public.mark_recurring_paid(v_id, '2025-02-10');            -- seq 1
+    -- A row posted ahead of next_seq (out of band): the shift must still make it negative.
+    insert into public.transactions (amount, type, account_id, category_id, note, recurring_id, recurring_seq, occurred_on)
+        select 799.00, 'expense', account_id, category_id, 'Wifi', id, 5, '2025-06-10'
+          from public.recurring where id = v_id;
+    select array_agg(id order by recurring_seq) into v_old from public.transactions where recurring_id = v_id;
+
+    -- Switch to weekly from Mon 2 Jun 2025.
+    perform public.reschedule_recurring(v_id, '2025-06-02', 'weekly');
+    select * into r from public.recurring where id = v_id;
+    assert r.start_date = '2025-06-02' and r.frequency = 'weekly', 'schedule not changed';
+    assert r.next_seq = 0 and r.next_due = '2025-06-02', format('after reschedule: seq %s due %s', r.next_seq, r.next_due);
+
+    -- History stays linked, unchanged apart from the seq, and all negative.
+    select array_agg(recurring_seq order by recurring_seq) into v_seqs from public.transactions where recurring_id = v_id;
+    assert v_seqs = array[-6, -5, -1], format('history seqs %s, expected {-6,-5,-1}', v_seqs);
+    assert (select array_agg(id order by recurring_seq) from public.transactions where recurring_id = v_id) = v_old,
+        'history rows lost their link or order';
+    assert (select sum(amount) from public.transactions where recurring_id = v_id) = 3 * 799.00, 'history amounts changed';
+    assert (select array_agg(occurred_on order by recurring_seq) from public.transactions where recurring_id = v_id)
+         = array['2025-01-10', '2025-02-10', '2025-06-10']::date[], 'history dates changed';
+
+    -- Mark paid now posts a NEW transaction for seq 0 (the old seq 0 no longer collides).
+    v_tx := public.mark_recurring_paid(v_id, '2025-06-02');
+    assert not (v_tx = any (v_old)), 'Mark paid after reschedule returned an old transaction';
+    assert (select recurring_seq from public.transactions where id = v_tx) = 0, 'new payment should be seq 0';
+    assert (select occurred_on from public.transactions where id = v_tx) = '2025-06-02', 'new payment date';
+    select * into r from public.recurring where id = v_id;
+    assert r.next_seq = 1 and r.next_due = '2025-06-09', format('after pay: seq %s due %s', r.next_seq, r.next_due);
+
+    -- Twice is safe: reschedule again (same start/frequency), then again immediately.
+    perform public.reschedule_recurring(v_id, '2025-06-09', 'weekly');
+    perform public.reschedule_recurring(v_id, '2025-06-09', 'weekly');
+    select array_agg(recurring_seq order by recurring_seq) into v_seqs from public.transactions where recurring_id = v_id;
+    assert v_seqs = array[-7, -6, -2, -1], format('after two more reschedules seqs %s', v_seqs);
+    assert (select count(*) from public.transactions where recurring_id = v_id) = 4, 'history rows lost';
+    select * into r from public.recurring where id = v_id;
+    assert r.next_seq = 0 and r.next_due = '2025-06-09', format('after repeat: seq %s due %s', r.next_seq, r.next_due);
+
+    -- post_due after reschedule: 9, 16, 23 Jun posted as seqs 0..2 on their due dates.
+    update public.recurring set auto_post = true where id = v_id;
+    assert public.post_due_recurring('2025-06-23') = 3, 'post_due after reschedule should post 3';
+    assert (select array_agg(occurred_on order by recurring_seq) from public.transactions
+             where recurring_id = v_id and recurring_seq >= 0)
+         = array['2025-06-09', '2025-06-16', '2025-06-23']::date[], 'post_due dates after reschedule';
+    assert (select count(*) from public.transactions where recurring_id = v_id) = 7, 'expected 4 history + 3 new';
+    assert public.post_due_recurring('2025-06-23') = 0, 'post_due after reschedule is not idempotent';
+    select * into r from public.recurring where id = v_id;
+    assert r.next_seq = 3 and r.next_due = '2025-06-30', format('after post_due: seq %s due %s', r.next_seq, r.next_due);
+
+    -- Monthly from the 31st after reschedule still clamps.
+    update public.recurring set auto_post = false where id = v_id;
+    perform public.reschedule_recurring(v_id, '2025-01-31', 'monthly');
+    perform public.skip_recurring(v_id);
+    assert (select next_due from public.recurring where id = v_id) = '2025-02-28', 'clamp after reschedule';
+    assert (select count(*) from public.transactions where recurring_id = v_id and recurring_seq >= 0) = 0,
+        'all history should be negative after reschedule';
+
+    -- Bad input
+    begin
+        perform public.reschedule_recurring(v_id, '2025-01-01', 'daily');
+        raise exception 'bad frequency should be rejected';
+    exception when sqlstate '22023' then null; end;
+    begin
+        perform public.reschedule_recurring(v_id, null, 'weekly');
+        raise exception 'null start should be rejected';
+    exception when sqlstate '22023' then null; end;
+    begin
+        perform public.reschedule_recurring(gen_random_uuid(), '2025-01-01', 'weekly');
+        raise exception 'unknown bill should be P0002';
+    exception when sqlstate 'P0002' then null; end;
+end $$;
+
+-- RLS: B cannot reschedule A's bill, and A's bill and history are untouched.
+reset role;
+do $$ begin
+    perform set_config('test.a_gym_seqs', (select string_agg(recurring_seq::text, ',' order by recurring_seq)
+                                             from public.transactions
+                                            where recurring_id = current_setting('test.a_gym')::uuid), false);
+end $$;
+set role app_user;
+set request.jwt.claim.sub = :'B';
+do $$ begin
+    perform public.reschedule_recurring(current_setting('test.a_gym')::uuid, '2030-01-01', 'yearly');
+    raise exception 'B rescheduled A''s bill';
+exception when sqlstate 'P0002' then null; end $$;
+reset role;
+do $$ begin
+    assert (select frequency || ' ' || start_date from public.recurring
+             where id = current_setting('test.a_gym')::uuid) = 'weekly 2025-01-01', 'B changed A''s schedule';
+    assert (select string_agg(recurring_seq::text, ',' order by recurring_seq) from public.transactions
+             where recurring_id = current_setting('test.a_gym')::uuid) = current_setting('test.a_gym_seqs'),
+        'B renumbered A''s history';
+end $$;
+set role app_user;
+
+-- ============================================================================
 -- Not signed in -> 42501
 -- ============================================================================
 set request.jwt.claim.sub = '';
@@ -560,6 +673,10 @@ exception when sqlstate '42501' then null; end $$;
 do $$ begin
     perform public.upcoming_recurring();
     raise exception 'anonymous upcoming_recurring should be refused';
+exception when sqlstate '42501' then null; end $$;
+do $$ begin
+    perform public.reschedule_recurring(gen_random_uuid(), '2025-01-01', 'weekly');
+    raise exception 'anonymous reschedule_recurring should be refused';
 exception when sqlstate '42501' then null; end $$;
 
 -- ============================================================================

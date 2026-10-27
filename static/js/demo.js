@@ -160,6 +160,9 @@ function suggestRecurring(s, minOcc = 3) {
     if (!frequency) continue;
     const [lo, hi] = BANDS[frequency];
     const inBand = gaps.filter((x) => x >= lo && x <= hi).length;
+    // Decision 16: skip groups that are mostly off-amount or off-rhythm.
+    if (2 * kept.length < rows.length) continue;
+    if (3 * inBand < 2 * gaps.length) continue;
     const latest = [...kept].sort((a, b) => (a.occurred_on + a.id < b.occurred_on + b.id ? -1 : 1)).pop();   // 6
     const last_seen = dates[dates.length - 1];
     let k = 1;
@@ -202,6 +205,21 @@ function recurringRpc(s, name, p = {}) {
   }
   if (name === "mark_recurring_paid") return post(find(p.p_id), p.p_paid_on || today).id;
   if (name === "skip_recurring") { advance(find(p.p_id)); return null; }
+  if (name === "reschedule_recurring") {
+    // Decisions 12 and 15: shift this bill's posted transactions below zero by
+    // greatest(next_seq, max posted seq + 1) so history stays linked and unique,
+    // then restart the schedule at the picked date (trigger recomputes next_due).
+    if (!p.p_start) fail("22023", "start date is required");
+    if (!FREQUENCIES.includes(p.p_frequency)) fail("22023", `unknown frequency ${p.p_frequency}`);
+    const r = find(p.p_id);
+    const mine = s.transactions.filter((t) => t.recurring_id === r.id);
+    const shift = Math.max(r.next_seq, mine.length ? Math.max(...mine.map((t) => t.recurring_seq)) + 1 : 0);
+    for (const t of mine) t.recurring_seq -= shift;
+    const next = { ...r, start_date: p.p_start, frequency: p.p_frequency, next_seq: 0 };
+    checkRecurring(s, next);
+    Object.assign(r, next);
+    return null;
+  }
   if (name === "post_due_recurring") {
     const asOf = p.p_as_of || today;
     let posted = 0;
@@ -228,7 +246,7 @@ function recurringRpc(s, name, p = {}) {
   }
   return undefined;
 }
-const RECURRING_RPCS = ["recurring_occurrence", "mark_recurring_paid", "skip_recurring",
+const RECURRING_RPCS = ["recurring_occurrence", "mark_recurring_paid", "skip_recurring", "reschedule_recurring",
   "post_due_recurring", "upcoming_recurring", "suggest_recurring"];
 
 // ---- helpers that mirror the SQL functions --------------------------------

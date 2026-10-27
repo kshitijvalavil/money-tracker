@@ -117,3 +117,7 @@ Tests go in `tests/recurring_test.sql`, wired into `tests/run.sh`, and also appe
     on top of the 0.5 confidence cut-off) so Sherlock's random-spend fixtures produce no suggestions.
 14. Resuming a paused bill skips the dates missed while paused (no backlog is auto-posted); the front end advances
     next_seq past them on resume.
+15. Accepted Tabledore's refinement of 12: the renumber shift is greatest(next_seq, max(posted seq) + 1), applied lowest seq first.
+    The front end calls reschedule_recurring before updating other fields, and passes the next real due date (never a past one for auto-post bills).
+16. Accepted Byte Vader's second detection rule: rows kept by the ±10% amount filter must be at least half the group
+    (2 × kept >= rows), alongside 3 × in_band >= 2 × gaps. demo.js mirrors both.

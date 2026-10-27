@@ -19,10 +19,14 @@
 --   3. Keep the rows with |amount - median| <= 0.10 x median, where median
 --      is the group's median amount.
 --   4. occurrences = number of distinct dates among the kept rows, and it
---      must be >= p_min_occurrences.
+--      must be >= p_min_occurrences. The kept rows must also be at least half
+--      of the group's rows (2 x kept >= group), so a chance cluster of
+--      similar amounts inside random spend at one merchant does not count
+--      (decision 13).
 --   5. Median gap between consecutive distinct dates, in inclusive bands:
 --      6-8 weekly, 26-35 monthly, 85-95 quarterly, 355-375 yearly. Any other
---      median gap: not recurring.
+--      median gap: not recurring. At least 2/3 of the gaps must lie inside
+--      that band (3 x in_band >= 2 x gaps; decision 13).
 --   6. name, account_id and category_id come from the latest kept row, by
 --      (occurred_on, id). amount is round(median of the kept amounts, 2).
 --      next_guess is the first anchored occurrence after last_seen, anchored
@@ -125,8 +129,9 @@ begin
          where tx.id = any (g.ids)
            and abs(tx.amount - v_med) <= v_med * 0.10;
 
-        -- 4. enough distinct dates?
-        if coalesce(array_length(v_dates, 1), 0) < p_min_occurrences then
+        -- 4. enough distinct dates, and the kept rows are at least half the group?
+        if coalesce(array_length(v_dates, 1), 0) < p_min_occurrences
+           or 2 * coalesce(array_length(v_kept, 1), 0) < g.cnt then
             continue;
         end if;
 
@@ -151,6 +156,9 @@ begin
         v_hi := case v_freq when 'weekly' then 8 when 'monthly' then 35
                             when 'quarterly' then 95 else 375 end;
         select count(*)::int into v_inband from unnest(v_gaps) x where x between v_lo and v_hi;
+        if 3 * v_inband < 2 * v_n then          -- need >= 2/3 of gaps in the band
+            continue;
+        end if;
 
         -- 6. latest kept row, next anchored occurrence after last_seen
         select tx.note, tx.account_id, tx.category_id into v_latest

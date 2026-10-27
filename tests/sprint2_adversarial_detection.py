@@ -5,7 +5,8 @@ math and the detection against the shared fixtures in tests/fixtures/sprint2/,
 which the SQL gate (tests/sprint2_adversarial_recurring.sql) uses too, so the
 Python reference and suggest_recurring() are held to the same answers.
 
-Written against docs/sprint-2-contract.md before the build landed. The
+Written against docs/sprint-2-contract.md (Manager decisions 1-14) before
+the build landed. The
 contract names occurrence(start, freq, n) but not the detection function, so
 this looks for detect / detect_recurring / suggest / suggest_recurring and
 feeds it transactions shaped like the table rows
@@ -144,8 +145,10 @@ if DETECT:
         if "amount" in e:
             check(abs(float(g.get("amount", 0)) - e["amount"]) < 0.005,
                   f"{e['name']}: amount {e['amount']} (got {g.get('amount')})")
+        # Decision 2: confidence = (gaps in band / gaps) x (kept rows / rows);
+        # every fixture true positive is clean, so exactly 1.
         conf = g.get("confidence")
-        check(conf is not None and 0 <= float(conf) <= 1, f"{e['name']}: confidence in 0..1 ({conf})")
+        check(conf is not None and abs(float(conf) - 1) < 0.005, f"{e['name']}: confidence 1 (got {conf})")
 
     for name in fx["must_not_suggest"]:
         hits = [g for g in got if norm(g.get("name")) == name]
@@ -157,10 +160,15 @@ if DETECT:
     got4 = {norm(g.get("name")) for g in run_detect(txs, 4)}
     check("lic premium" not in got4 and "netflix" in got4, f"min_occurrences=4 drops LIC (3), keeps Netflix (4): {got4}")
 
-    # Random spend must not produce suggestions.
+    # Decision 13: random spend must not produce suggestions (shared fixture,
+    # same sets the SQL gate uses, plus two more seeds).
+    for k, noise in enumerate(json.load(open(os.path.join(FIX, "random_spend.json")))["sets"]):
+        fp = run_detect(noise, 3)
+        check(not fp, f"random_spend.json set {k}: no suggestions; got "
+              f"{[(g.get('name'), g.get('frequency'), g.get('occurrences'), g.get('confidence')) for g in fp][:5]}")
     merchants = ["Swiggy", "Zomato", "Uber", "Ola", "BigBasket", "Myntra", "Apollo Pharmacy",
                  "Petrol", "Chai point", "Book store", "Decathlon", "DMart"]
-    for seed in range(5):
+    for seed in range(3, 5):
         rnd = random.Random(seed)
         noise = [{"occurred_on": (date(2025, 5, 1) + timedelta(days=rnd.randrange(365))).isoformat(),
                   "type": "expense", "amount": round(rnd.uniform(50, 5000), 2),

@@ -23,10 +23,15 @@ detect(transactions, min_occurrences=3, existing_names=())
       3. Keep the rows whose amount is within +-10% of the group's median
          amount: |amount - median| <= 0.10 x median.
       4. occurrences = number of distinct dates among the kept rows. It must
-         be >= min_occurrences.
+         be >= min_occurrences, and the kept rows must be at least half of
+         the group's rows (2 x kept >= group), so a chance cluster of similar
+         amounts inside random spend at one merchant does not count
+         (decision 13).
       5. gaps = days between consecutive distinct dates. The frequency comes
          from the median gap, with inclusive bands: 6-8 weekly, 26-35 monthly,
          85-95 quarterly, 355-375 yearly. Any other median gap: not recurring.
+         At least 2/3 of the gaps must lie inside that band
+         (3 x in_band >= 2 x gaps; decision 13).
       6. Output:
            name        the note of the latest kept row (trimmed, max 80 chars)
            amount      the median of the kept amounts, rounded half up to 2 dp
@@ -115,13 +120,15 @@ def detect(transactions, min_occurrences=3, existing_names=()):
         kept = [r for r in rows
                 if abs(Decimal(str(r["amount"])) - med) <= med * AMOUNT_TOLERANCE]
         dates = sorted({_as_date(r["occurred_on"]) for r in kept})
-        if len(dates) < min_occurrences:
+        if len(dates) < min_occurrences or 2 * len(kept) < len(rows):  # need >= half kept
             continue
         gaps = [(b - a).days for a, b in zip(dates, dates[1:])]
         freq, lo, hi = _frequency_for(_median([Decimal(g) for g in gaps]))
         if not freq:
             continue
         in_band = sum(1 for g in gaps if lo <= g <= hi)
+        if 3 * in_band < 2 * len(gaps):        # need >= 2/3 of gaps in the band
+            continue
         latest = max(kept, key=lambda r: (_as_date(r["occurred_on"]), str(r.get("id") or "")))
         last_seen = dates[-1]
         k = 1

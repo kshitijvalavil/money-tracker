@@ -1,12 +1,14 @@
 -- Sprint 2 release gate (Sherlock Bugs): recurring bills, adversarial.
 --
--- Written against docs/sprint-2-contract.md before the build landed. Run by
+-- Written against docs/sprint-2-contract.md (incl. Manager decisions 1-14)
+-- before the build landed. Run by
 -- tests/sprint2_adversarial.sh (never on its own: it needs the psql variables
--- date_cases and detection, the shared fixtures in tests/fixtures/sprint2/).
+-- date_cases, detection and random_spend, the shared fixtures in
+-- tests/fixtures/sprint2/).
 --
 -- Every case records PASS/FAIL in qa.results instead of stopping, so one run
--- reports every bug. The script ends with a summary and fails if any case
--- failed or did not run.
+-- reports every bug. The runner compares the recorded count with the number
+-- of qa.pass cases in this file, so a case that never ran is a failure too.
 --
 -- Unlike rls_and_logic_test.sql, the test role gets function rights only
 -- through membership of `authenticated`, so a missing GRANT in 0007/0008 is
@@ -112,7 +114,8 @@ begin
         'public.skip_recurring(uuid)',
         'public.post_due_recurring(date)',
         'public.upcoming_recurring(integer)',
-        'public.suggest_recurring(integer)']
+        'public.suggest_recurring(integer)',
+        'public.reschedule_recurring(uuid, date, text)']          -- decision 12
     loop
         if to_regprocedure(f) is null then missing := missing || f || ' '; continue; end if;
         if (select prosecdef from pg_proc where oid = to_regprocedure(f)) then
@@ -124,8 +127,8 @@ begin
         if has_function_privilege('anon', f, 'execute') then missing := missing || f || ' executable by anon; '; end if;
         if not has_function_privilege('authenticated', f, 'execute') then missing := missing || f || ' not granted to authenticated; '; end if;
     end loop;
-    if missing = '' then perform qa.pass('contract: 6 functions exist, invoker, search_path, grants');
-    else perform qa.fail('contract: 6 functions exist, invoker, search_path, grants', missing); end if;
+    if missing = '' then perform qa.pass('contract: 7 functions exist, invoker, search_path, grants');
+    else perform qa.fail('contract: 7 functions exist, invoker, search_path, grants', missing); end if;
 exception when others then perform qa.fail('contract: functions', sqlerrm);
 end $$;
 
@@ -239,7 +242,7 @@ begin
     assert dates = array['2026-01-31','2026-02-28','2026-03-31']::date[], format('dates %s', dates);
     select * into r from public.recurring where id = v;
     assert r.next_seq = 3 and r.next_due = '2026-04-30', format('next %s / %s', r.next_seq, r.next_due);
-    assert (select bool_and(amount = 18000 and type = 'expense' and note = 'Rent 31st'
+    assert (select bool_and(amount = 18000 and type = 'expense' and note = 'Rent 31st' and source = 'recurring'
                              and account_id = r.account_id and category_id = r.category_id)
               from public.transactions where recurring_id = v), 'posted rows have wrong fields';
     assert (select array_agg(recurring_seq order by recurring_seq) from public.transactions where recurring_id = v)
@@ -292,7 +295,8 @@ begin
     tx := public.mark_recurring_paid(v, '2026-02-02');
     select * into t from public.transactions where id = tx;
     assert t.occurred_on = '2026-02-02' and t.recurring_seq = 0 and t.recurring_id = v
-       and t.amount = 649 and t.note = 'Netflix' and t.type = 'expense', format('tx %s', row_to_json(t));
+       and t.amount = 649 and t.note = 'Netflix' and t.type = 'expense' and t.source = 'recurring',
+        format('tx %s', row_to_json(t));
     select * into r from public.recurring where id = v;
     assert r.next_seq = 1 and r.next_due = '2026-02-28', format('after pay: %s %s', r.next_seq, r.next_due);
     select balance into bal1 from public.account_balances() where name = 'HDFC';
@@ -358,6 +362,106 @@ begin
 exception when others then perform qa.fail('delete behaviour', sqlerrm);
 end $$;
 
+-- Decision 7: next_due is computed by the database, never trusted from the client.
+do $$
+declare v uuid; r record; bad text := '';
+begin
+    insert into public.recurring (name, type, amount, account_id, category_id, frequency, start_date)
+    values ('No next_due', 'expense', 10, qa.id('A','hdfc'), qa.id('A','bills'), 'monthly', '2026-01-31')
+    returning id into v;
+    select * into r from public.recurring where id = v;
+    if r.next_due is distinct from date '2026-01-31' or r.next_seq <> 0 then bad := bad || format('insert without next_due -> %s/%s; ', r.next_seq, r.next_due); end if;
+    -- hostile client value: refusing it or overwriting it are both fine; keeping it is not
+    if qa.raises(format($q$ update public.recurring set next_due = '1999-01-01' where id = %L $q$, v)) = 'no error' then
+        select * into r from public.recurring where id = v;
+        if r.next_due <> public.recurring_occurrence(r.start_date, r.frequency, r.next_seq) then bad := bad || format('client next_due kept: %s; ', r.next_due); end if;
+    end if;
+    update public.recurring set next_seq = 1 where id = v;
+    select * into r from public.recurring where id = v;
+    if r.next_due is distinct from date '2026-02-28' then bad := bad || format('next_seq=1 -> %s; ', r.next_due); end if;
+    insert into public.recurring (name, type, amount, account_id, category_id, frequency, start_date, next_due)
+    values ('Bad next_due', 'expense', 10, qa.id('A','hdfc'), qa.id('A','bills'), 'yearly', '2024-02-29', '2000-01-01')
+    returning id into v;
+    if (select next_due from public.recurring where id = v) <> '2024-02-29' then bad := bad || 'insert kept the client next_due; '; end if;
+    delete from public.recurring where name in ('No next_due', 'Bad next_due');
+    if bad = '' then perform qa.pass('decision 7: next_due always = occurrence(start, freq, next_seq), client values ignored');
+    else perform qa.fail('decision 7: next_due computed by the database', bad); end if;
+exception when others then perform qa.fail('decision 7: next_due computed by the database', sqlerrm);
+end $$;
+
+-- Decision 10: paused bills can be paid / skipped by hand.
+do $$
+declare v uuid; tx uuid;
+begin
+    v := qa.bill('Paused manual', 'monthly', '2026-02-10', true, 50);
+    update public.recurring set active = false where id = v;
+    tx := public.mark_recurring_paid(v, '2026-02-11');
+    perform public.skip_recurring(v);
+    assert tx is not null and (select next_seq from public.recurring where id = v) = 2, 'pay/skip on a paused bill did not advance';
+    assert (select count(*) from public.transactions where recurring_id = v) = 1, 'paused bill: wrong number of rows';
+    perform public.post_due_recurring('2026-12-31');
+    assert (select count(*) from public.transactions where recurring_id = v) = 1, 'paused auto-post bill was auto-posted';
+    perform qa.pass('decision 10: paused bill can be paid and skipped by hand, never auto-posted');
+exception when others then perform qa.fail('decision 10: paused bill pay/skip by hand', sqlerrm);
+end $$;
+
+-- Decision 14: resume skips the dates missed while paused (the app advances
+-- next_seq in the same update that sets active); nothing is back-posted.
+do $$
+declare v uuid; k int; r record;
+begin
+    v := qa.bill('Resume me', 'weekly', current_date - 70, true, 20);
+    update public.recurring set active = false where id = v;
+    -- what the front end does on Resume: first occurrence on/after today, same update
+    select min(n) into k from generate_series(0, 1000) n
+     where public.recurring_occurrence(current_date - 70, 'weekly', n) >= current_date;
+    update public.recurring set active = true, next_seq = k where id = v;
+    select * into r from public.recurring where id = v;
+    assert r.next_due >= current_date and r.next_due < current_date + 7, format('next_due after resume %s', r.next_due);
+    perform public.post_due_recurring(current_date - 1);
+    assert (select count(*) from public.transactions where recurring_id = v) = 0, 'backlog posted after resume';
+    perform public.post_due_recurring(r.next_due);
+    assert (select array_agg(recurring_seq) from public.transactions where recurring_id = v) = array[k],
+        'resume: first post should be seq k on its due date';
+    perform qa.pass('decision 14: resume skips missed dates, no backlog, next post is the first future occurrence');
+exception when others then perform qa.fail('decision 14: resume without backlog', sqlerrm);
+end $$;
+
+-- Decision 12: reschedule_recurring renumbers history negative and starts over.
+do $$
+declare v uuid; tx uuid; r record; seqs int[]; bal0 numeric; bal1 numeric; e text;
+begin
+    v := qa.bill('Resched', 'monthly', '2026-01-31', false, 300);
+    perform public.mark_recurring_paid(v, '2026-01-31');
+    perform public.mark_recurring_paid(v, '2026-02-28');
+    perform public.mark_recurring_paid(v, '2026-03-31');            -- seqs 0,1,2; next_seq 3
+    perform public.reschedule_recurring(v, '2026-06-01', 'weekly');
+    select * into r from public.recurring where id = v;
+    assert r.start_date = '2026-06-01' and r.frequency = 'weekly' and r.next_seq = 0 and r.next_due = '2026-06-01',
+        format('after reschedule: %s', row_to_json(r));
+    select array_agg(recurring_seq order by recurring_seq) into seqs from public.transactions where recurring_id = v;
+    assert seqs = array[-3,-2,-1], format('history seqs after reschedule: %s (want -3,-2,-1)', seqs);
+    -- the bug decision 12 fixes: paying the new seq 0 must post a NEW transaction
+    select balance into bal0 from public.account_balances() where name = 'HDFC';
+    tx := public.mark_recurring_paid(v, '2026-06-01');
+    select balance into bal1 from public.account_balances() where name = 'HDFC';
+    assert (select occurred_on from public.transactions where id = tx) = '2026-06-01', 'mark paid after reschedule returned an old transaction';
+    assert bal0 - bal1 = 300, format('mark paid after reschedule moved balance by %s', bal0 - bal1);
+    update public.recurring set auto_post = true where id = v;
+    perform public.post_due_recurring('2026-06-15');
+    select array_agg(recurring_seq order by recurring_seq) into seqs from public.transactions where recurring_id = v;
+    assert seqs = array[-3,-2,-1,0,1,2], format('after post_due: %s', seqs);
+    -- reschedule again: everything shifts by next_seq (3) and stays unique
+    perform public.reschedule_recurring(v, '2026-07-01', 'monthly');
+    select array_agg(recurring_seq order by recurring_seq) into seqs from public.transactions where recurring_id = v;
+    assert seqs = array[-6,-5,-4,-3,-2,-1], format('second reschedule: %s (want -6..-1)', seqs);
+    assert (select count(*) from public.transactions where recurring_id = v) = 6, 'history rows lost or added';
+    e := qa.raises(format($q$ select public.reschedule_recurring(%L, '2026-07-01', 'daily') $q$, v), array['22023']);
+    assert e is null, 'bad frequency: ' || coalesce(e, '');
+    perform qa.pass('decision 12: reschedule keeps history (negative seqs), new seq 0 posts a new transaction, twice in a row');
+exception when others then perform qa.fail('decision 12: reschedule_recurring', sqlerrm);
+end $$;
+
 -- Upcoming list (uses current_date).
 do $$
 declare v_over uuid; v_today uuid; v_3 uuid; v_8 uuid; v_paused uuid; r record; ids uuid[];
@@ -404,9 +508,11 @@ begin
     if e is not null then bad := bad || 'mark paid A''s bill: ' || e || '; '; end if;
     e := qa.raises(format('select public.skip_recurring(%L)', v), array['P0002']);
     if e is not null then bad := bad || 'skip A''s bill: ' || e || '; '; end if;
+    e := qa.raises(format($q$ select public.reschedule_recurring(%L, '2026-01-01', 'weekly') $q$, v), array['P0002']);
+    if e is not null then bad := bad || 'reschedule A''s bill: ' || e || '; '; end if;
     if exists (select 1 from public.upcoming_recurring(100000) where id = v) then bad := bad || 'upcoming shows A''s bill; '; end if;
     perform public.post_due_recurring('2030-01-01');
-    if bad = '' then perform qa.pass('RLS: B cannot see, edit, delete, pay, skip or list A''s bill');
+    if bad = '' then perform qa.pass('RLS: B cannot see, edit, delete, pay, skip, reschedule or list A''s bill');
     else perform qa.fail('RLS: B vs A''s bill', bad); end if;
 exception when others then perform qa.fail('RLS: B vs A''s bill', sqlerrm);
 end $$;
@@ -480,7 +586,9 @@ begin
     if e is not null then bad := bad || 'mark paid: ' || e || '; '; end if;
     e := qa.raises(format('select public.skip_recurring(%L)', (select id from qa.a_bill)), array['42501']);
     if e is not null then bad := bad || 'skip: ' || e || '; '; end if;
-    if bad = '' then perform qa.pass('anonymous: post/pay/skip raise 42501');
+    e := qa.raises(format($q$ select public.reschedule_recurring(%L, '2026-01-01', 'weekly') $q$, (select id from qa.a_bill)), array['42501']);
+    if e is not null then bad := bad || 'reschedule: ' || e || '; '; end if;
+    if bad = '' then perform qa.pass('anonymous: post/pay/skip/reschedule raise 42501');
     else perform qa.fail('anonymous calls', bad); end if;
 end $$;
 
@@ -508,6 +616,8 @@ select b.name, b.type, b.amount, (select id from public.accounts where name = 'H
 
 create function pg_temp.norm(s text) returns text language sql immutable as
 $$ select btrim(regexp_replace(regexp_replace(lower(coalesce(s, '')), '[^a-z ]', ' ', 'g'), '\s+', ' ', 'g')) $$;
+-- Decision 4: a paused bill still covers its group.
+update public.recurring set active = false where name = 'RENT!';
 create temp table got as select * from public.suggest_recurring(3);
 
 do $$
@@ -524,7 +634,8 @@ begin
         if e.next_guess is not null and g.next_guess is distinct from e.next_guess then
             bad := bad || format('[%s next_guess %s want %s] ', e.name, g.next_guess, e.next_guess); end if;
         if e.amount is not null and g.amount <> e.amount then bad := bad || format('[%s amount %s want %s] ', e.name, g.amount, e.amount); end if;
-        if g.confidence is null or g.confidence < 0 or g.confidence > 1 then bad := bad || format('[%s confidence %s] ', e.name, g.confidence); end if;
+        -- decision 2: (gaps in band / gaps) x (kept / rows); every fixture TP is clean -> 1
+        if g.confidence is null or abs(g.confidence - 1) > 0.005 then bad := bad || format('[%s confidence %s want 1] ', e.name, g.confidence); end if;
         if g.account_id is distinct from (select id from public.accounts where name = 'HDFC') then bad := bad || format('[%s account] ', e.name); end if;
         if g.category_id is null or not exists (select 1 from public.categories c where c.id = g.category_id and c.kind = g.type) then
             bad := bad || format('[%s category missing/wrong kind] ', e.name); end if;
@@ -539,7 +650,7 @@ begin
     select string_agg(format('%s/%s/%s', name, type, frequency), ', ') into bad
       from got where pg_temp.norm(name) in (select json_array_elements_text(j -> 'must_not_suggest') from qa.det)
          or pg_temp.norm(name) not in (select x.name from qa.det, json_to_recordset(j -> 'expected') as x(name text));
-    if bad is null then perform qa.pass('detection: no false positives (irregular, wild amounts, <3, blank/digit notes, split type, covered bill, transfers)');
+    if bad is null then perform qa.pass('detection: no false positives (irregular, wild amounts, <3, blank/digit notes, split type, paused covering bill, transfers)');
     else perform qa.fail('detection: false positives', bad); end if;
 end $$;
 
@@ -551,6 +662,31 @@ begin
     assert exists (select 1 from public.suggest_recurring(4) where pg_temp.norm(name) = 'netflix'), 'netflix lost at 4';
     perform qa.pass('detection: p_min_occurrences honoured');
 exception when others then perform qa.fail('detection: p_min_occurrences', sqlerrm);
+end $$;
+
+-- Decision 13: ordinary random spend produces no suggestions at all.
+reset role;
+insert into auth.users (id, email) values ('44444444-4444-4444-4444-444444444444', 'd@x.com');
+create table qa.rnd as select :'random_spend'::json as j;
+grant select on qa.rnd to public;
+set role app_user;
+set request.jwt.claim.sub = '44444444-4444-4444-4444-444444444444';
+do $$
+declare k int; bad text := ''; got text;
+begin
+    for k in 0 .. json_array_length((select j -> 'sets' from qa.rnd)) - 1 loop
+        delete from public.transactions;
+        insert into public.transactions (occurred_on, type, amount, note, account_id, category_id)
+        select t.occurred_on, 'expense', t.amount, t.note, (select id from public.accounts where name = 'Cash'),
+               (select id from public.categories where name = 'Other' and kind = 'expense')
+          from qa.rnd, json_to_recordset(j -> 'sets' -> k) as t(occurred_on date, amount numeric, note text);
+        select string_agg(format('%s %s x%s conf %s', name, frequency, occurrences, confidence), '; ') into got
+          from public.suggest_recurring(3);
+        if got is not null then bad := bad || format('[set %s: %s] ', k, got); end if;
+    end loop;
+    if bad = '' then perform qa.pass('decision 13: 3 sets of 300 random expenses give no suggestions');
+    else perform qa.fail('decision 13: random spend suggested', bad); end if;
+exception when others then perform qa.fail('decision 13: random spend', sqlerrm);
 end $$;
 
 -- Covered-by-bill exclusion is per user; and B never sees C's patterns.
@@ -569,4 +705,4 @@ select case when ok then 'PASS' else 'FAIL' end as result, name, coalesce(detail
   from qa.results order by n;
 select count(*) filter (where ok) as passed, count(*) filter (where not ok) as failed, count(*) as total
   from qa.results \gset
-\echo 'SPRINT2 SQL GATE:' :passed 'passed,' :failed 'failed,' :total 'recorded (expect 26)'
+\echo 'SPRINT2 SQL GATE:' :passed 'passed,' :failed 'failed,' :total 'recorded'

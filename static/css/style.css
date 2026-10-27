@@ -381,6 +381,8 @@ select:disabled { opacity: .6; cursor: not-allowed; }
 .field-help { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
 .field-error { font-size: 0.8rem; color: var(--neg); font-weight: 600; margin-top: 4px; }
 .field-error[hidden] { display: none; }
+.field-warn { font-size: 0.8rem; color: var(--warn); font-weight: 600; margin-top: 4px; }
+.field-warn:empty { display: none; }
 input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--neg); }
 .check-field { display: flex; gap: 10px; align-items: flex-start; }
 .check-field input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex: none;

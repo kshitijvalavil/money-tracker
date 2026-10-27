@@ -1,6 +1,6 @@
 -- Sprint 2 release gate: fixture for the double-posting race tests that
 -- tests/sprint2_adversarial.sh drives with several concurrent psql sessions.
--- User A has five bills: four monthly from 31 Jan 2026 (so as of
+-- User A has six bills: five monthly from 31 Jan 2026 (so as of
 -- 30 Jun 2026 six occurrences are due: 31 Jan, 28 Feb, 31 Mar, 30 Apr, 31 May,
 -- 30 Jun), plus a weekly one (57 occurrences due by 30 Jun, under the 60 cap).
 -- Only one bill has auto_post on at a time; the runner flips it per scenario.
@@ -39,7 +39,8 @@ select n, 'expense', 100, (select id from public.accounts where name = 'Cash'),
                ('race-pay-then-post', 'monthly', date '2026-01-31'),
                ('race-post-then-pay', 'monthly', date '2026-01-31'),
                ('race-pay-pay', 'monthly', date '2026-01-31'),
-               ('race-storm', 'weekly', date '2025-06-01')) v(n, f, d);
+               ('race-storm', 'weekly', date '2025-06-01'),
+               ('race-resched', 'monthly', date '2026-01-31')) v(n, f, d);
 -- B has a bill too; B's concurrent calls must never touch A's rows.
 set request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
 insert into public.recurring (name, type, amount, account_id, category_id, frequency, start_date, next_due, auto_post)

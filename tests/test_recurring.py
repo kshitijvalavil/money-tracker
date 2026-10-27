@@ -121,6 +121,8 @@ def test_negatives_not_suggested():
     assert "laptop croma" not in s, "one-off big purchase"
     assert "electricity bill" not in s, "amounts drifting > 10%"
     assert "swiggy" not in s, "frequent spend outside every band"
+    assert "apollo pharmacy" not in s, "chance cluster: under half the group kept"
+    assert "blue tokai cafe" not in s, "median gap monthly but under 2/3 of gaps in band"
     assert "to savings" not in s, "transfers ignored"
     assert len(s) == 7
 
@@ -167,6 +169,36 @@ def test_median_gap_between_bands_is_rejected():
     # gaps 40,40,40 -> median 40: between monthly (<=35) and quarterly (>=85)
     rows = [tx(d, 100) for d in ["2026-01-01", "2026-02-10", "2026-03-22", "2026-05-01"]]
     assert detect(rows) == []
+
+
+def test_two_thirds_of_gaps_must_be_in_band():
+    # gaps 30,2,2,30,30: median 30 (monthly) but only 3/5 in band -> rejected
+    days = ["2026-01-10", "2026-02-09", "2026-02-11", "2026-02-13", "2026-03-15", "2026-04-14"]
+    assert detect([tx(d, 180) for d in days]) == []
+    # gaps 30,2,30,30: 3/4 in band -> accepted
+    days = ["2026-01-10", "2026-02-09", "2026-02-11", "2026-03-13", "2026-04-12"]
+    (s,) = detect([tx(d, 180) for d in days])
+    assert s["frequency"] == "monthly" and s["confidence"] == Decimal("0.75")
+    # exactly 2/3 is enough: gaps 30,30,2
+    days = ["2026-01-10", "2026-02-09", "2026-03-11", "2026-03-13"]
+    assert len(detect([tx(d, 180) for d in days])) == 1
+
+
+def test_kept_rows_must_be_at_least_half_the_group():
+    # 3 monthly rows at 2000 hidden among 4 random amounts -> 3/7 kept: rejected
+    rows = [tx(d, 2000) for d in ["2026-01-05", "2026-02-05", "2026-03-05"]]
+    rows += [tx(d, a) for d, a in [("2026-01-12", 90), ("2026-01-20", 4000),
+                                   ("2026-02-14", 700), ("2026-02-25", 3500)]]
+    assert detect(rows) == []
+    rows.pop()                                   # 3/6 kept: exactly half is enough
+    assert len(detect(rows)) == 1
+
+
+def test_random_spend_gives_no_suggestions():
+    import json
+    sets = json.load(open(os.path.join(FIXTURES, "sprint2", "random_spend.json")))["sets"]
+    for i, rows in enumerate(sets):
+        assert detect(rows) == [], f"random spend set {i}"
 
 
 def test_confidence_reflects_irregularity():
