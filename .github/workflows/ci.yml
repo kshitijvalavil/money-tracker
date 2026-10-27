@@ -30,6 +30,8 @@ jobs:
         run: python3 -m bot.scanner --from-dir tests/fixtures
       - name: Database tests (schema, RLS, money math)
         run: bash tests/run.sh
+      - name: Sprint 2 release gate (dates, races, RLS, detection)
+        run: bash tests/sprint2_adversarial.sh
 
   smoke:
     name: Browser smoke test (demo mode)
@@ -67,6 +69,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/bills_ui_test.py
+      - name: Sprint 2 adversarial UI tests
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint2_adversarial_ui.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true
