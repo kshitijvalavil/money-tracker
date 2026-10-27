@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Money Tracker{% endblock %}</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
+  <!-- Progressive Web App: installable, with an offline app shell -->
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <meta name="theme-color" content="#2f5fe0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="MoneyTracker">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
   <!-- Apply the saved/OS theme before first paint to avoid a flash. -->
   <script>
     (function () {
@@ -26,6 +33,14 @@
       key: {{ SUPABASE_ANON_KEY | tojson }},
       demo: {{ DEMO_MODE | tojson }}
     };
+  </script>
+  <!-- Register the service worker for offline support and installability. -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(function () {});
+      });
+    }
   </script>
   {% block head %}{% endblock %}
 </head>

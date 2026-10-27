@@ -97,6 +97,22 @@ def imports():
     return render_template("imports.html", page="imports")
 
 
+@app.route("/offline")
+def offline():
+    # Precached by the service worker and shown when a navigation fails offline.
+    return render_template("offline.html")
+
+
+@app.route("/sw.js")
+def service_worker():
+    # Served from the root so the worker can control the whole app ("/"),
+    # which a file under /static/ could not.
+    resp = app.send_static_file("sw.js")
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 @app.route("/healthz")
 def healthz():
     return {"ok": True}

@@ -77,6 +77,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint3_ui_test.py
+      - name: Sprint 4 PWA + mobile tests
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint4_pwa_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

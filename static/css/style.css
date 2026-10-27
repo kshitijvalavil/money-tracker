@@ -194,16 +194,46 @@ td.amt { text-align: right; font-weight: 600; white-space: nowrap; font-variant-
 .notice { background: #fff8e1; border: 1px solid #ffe08a; color: #7a5b00;
           padding: 14px 18px; border-radius: 12px; margin-bottom: 20px; font-size: 0.9rem; }
 
+/* Mobile chrome (drawer + bottom tab bar) is hidden on desktop. */
+.topbar, .tabbar, .scrim { display: none; }
+
 @media (max-width: 760px) {
   .app { flex-direction: column; }
-  .sidebar { width: auto; height: auto; position: static; flex-direction: row; flex-wrap: wrap;
-             align-items: center; padding: 12px; }
-  .brand { padding: 4px 12px; }
-  .nav { display: flex; flex-wrap: wrap; gap: 4px; }
-  .nav a { margin: 0; }
-  .sidebar .bottom { margin-left: auto; }
-  .user-email { display: none; }
-  .content { padding: 20px 16px; }
+
+  /* Top app bar with the menu button */
+  .topbar { display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 30;
+            background: var(--surface); border-bottom: 1px solid var(--line); padding: 8px 12px; }
+  .topbar .brand { padding: 0; font-size: 1.1rem; }
+  .hamburger { font-size: 1.4rem; line-height: 1; background: none; border: none; color: var(--ink);
+               cursor: pointer; width: 44px; height: 44px; border-radius: 10px; }
+  .hamburger:hover { background: var(--bg); }
+
+  /* Sidebar becomes an off-canvas drawer */
+  .sidebar { position: fixed; top: 0; left: 0; height: 100vh; width: 264px; z-index: 50;
+             transform: translateX(-100%); transition: transform .25s ease; }
+  .sidebar.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
+  .scrim { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 40; }
+  .scrim[hidden] { display: none; }
+
+  .content { padding: 16px; padding-bottom: 86px; }   /* room for the tab bar */
+
+  /* Bottom tab bar */
+  .tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+            background: var(--surface); border-top: 1px solid var(--line);
+            justify-content: space-around; align-items: center;
+            padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)); }
+  .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center;
+              gap: 2px; color: var(--muted); font-size: 0.68rem; font-weight: 600;
+              min-width: 56px; min-height: 48px; border-radius: 10px; }
+  .tabbar a.active { color: var(--brand); }
+  .tabbar a .ico { font-size: 1.15rem; line-height: 1; }
+  .tabbar a.fab { background: var(--brand); color: #fff; width: 52px; height: 52px; min-width: 52px;
+                  border-radius: 50%; margin-top: -20px; box-shadow: 0 4px 12px rgba(47, 95, 224, .45); }
+  .tabbar a.fab .ico { font-size: 1.6rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar { transition: none; }
 }
 
 /* Demo banner + night-mode tweaks -------------------------------------------*/
