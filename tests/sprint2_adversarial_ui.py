@@ -27,7 +27,7 @@ SHOTS = os.environ.get("SHOT_DIR", "")
 SEL = {
     "rows": "#billRows tr[data-id]",
     "mark_paid": ".mark-paid", "skip": ".skip", "edit": ".edit", "pause": ".pause",
-    "delete": ".delete", "auto": "input[type=checkbox]",
+    "delete": ".delete", "auto": ".auto-toggle", "auto_visual": ".switch-ui",
     "total": "#monthlyTotal",
     "form": "#billForm", "name": "#fName", "type": "#fType", "amount": "#fAmount",
     "account": "#fAccount", "category": "#fCategory", "freq": "#fFreq", "start": "#fStart",
@@ -113,6 +113,11 @@ def row(pg, name):
 def shot(pg, name):
     if SHOTS:
         pg.screenshot(path=os.path.join(SHOTS, name), full_page=True)
+
+
+def toast_text(pg):
+    """Current toast text, or '' when no toast was ever shown (no 30s wait)."""
+    return ev(pg, "() => (document.querySelector('#toast') || {}).textContent || ''")
 
 
 def money_in(text):
@@ -205,8 +210,8 @@ def row_actions(b):
           "paid transaction: source 'recurring', dated today (decision 6)")
     due1 = ev(pg, "(id) => window.__qa.all('recurring').find(r => r.id === id).next_due", bid)
     check(due1 > due0, f"next due advances after Mark paid ({due0} -> {due1})")
-    check("₹299" in (pg.text_content(SEL["toast"]) or "").replace(",", "") or "Phone" in (pg.text_content(SEL["toast"]) or ""),
-          f"toast confirms the payment ({pg.text_content(SEL['toast'])!r})")
+    check("₹299" in (toast_text(pg) or "").replace(",", "") or "Phone" in (toast_text(pg) or ""),
+          f"toast confirms the payment ({toast_text(pg)!r})")
 
     r, bid = row(pg, "Phone")
     r.locator(SEL["skip"]).click()
@@ -217,7 +222,7 @@ def row_actions(b):
 
     # Auto-post toggle.
     r, bid = row(pg, "Phone")
-    r.locator(SEL["auto"]).first.click()
+    r.locator(SEL["auto_visual"]).first.click()      # what a mouse user clicks (input is visually hidden)
     pg.wait_for_timeout(700)
     check(ev(pg, "(id) => window.__qa.all('recurring').find(r => r.id === id).auto_post", bid) is True,
           "auto-post toggle saves")
@@ -386,13 +391,13 @@ def shell_post_due(b):
         calls = ev(pg, "() => window.__rpcCalls.post_due_recurring || 0")
         check(calls == 1, f"{path}: post_due_recurring called exactly once on load ({calls})")
         if path == "/":
-            t = pg.text_content(SEL["toast"]) or ""
+            t = toast_text(pg) or ""
             check("Posted 3 bills" in t, f"toast 'Posted 3 bills' (14 and 7 days ago, today): {t!r}")
             bid = ev(pg, "() => window.__qa.billByName('Auto weekly').id")
             check(len(ev(pg, "(id) => window.__qa.txFor(id)", bid)) == 3, "3 occurrences posted, each once")
         ctx.close()
     ctx, pg = open_page(b, "/", "S.clear('recurring');")
-    check("Posted" not in (pg.text_content(SEL["toast"]) or ""), "no 'Posted' toast when nothing was due")
+    check("Posted" not in (toast_text(pg) or ""), "no 'Posted' toast when nothing was due")
     ctx.close()
 
 
