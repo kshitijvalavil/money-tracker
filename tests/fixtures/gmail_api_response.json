@@ -1,0 +1,88 @@
+{
+  "list": {
+    "messages": [
+      {
+        "id": "18f0000000000001",
+        "threadId": "18f0000000000001"
+      },
+      {
+        "id": "18f0000000000002",
+        "threadId": "18f0000000000002"
+      }
+    ],
+    "resultSizeEstimate": 2
+  },
+  "messages": [
+    {
+      "id": "18f0000000000001",
+      "threadId": "18f0000000000001",
+      "labelIds": [
+        "INBOX"
+      ],
+      "snippet": "Greetings from SBI ! Your A/C XXXXX000001 Debited INR 99.00",
+      "internalDate": "1790834400000",
+      "payload": {
+        "mimeType": "multipart/alternative",
+        "headers": [
+          {
+            "name": "From",
+            "value": "cbsalerts.sbi@alerts.sbi.bank.in"
+          },
+          {
+            "name": "Subject",
+            "value": "CBSSBI ALERT"
+          },
+          {
+            "name": "Date",
+            "value": "Thu, 01 Oct 2026 10:00:00 +0530"
+          }
+        ],
+        "body": {
+          "size": 0
+        },
+        "parts": [
+          {
+            "partId": "0",
+            "mimeType": "text/plain",
+            "headers": [],
+            "body": {
+              "size": 108,
+              "data": "R3JlZXRpbmdzIGZyb20gU0JJICEgWW91ciBBL0MgWFhYWFgwMDAwMDEgRGViaXRlZCBJTlIgOTkuMDAgb24gMDEvMTAvMjYgLVVQSSBwYXltZW50LiBBdmwgQmFsIElOUiA5MDAuMDAtU0JJ"
+            }
+          },
+          {
+            "partId": "1",
+            "mimeType": "text/html",
+            "headers": [],
+            "body": {
+              "size": 147,
+              "data": "PGh0bWw-PGJvZHk-PHA-R3JlZXRpbmdzIGZyb20gU0JJICE8L3A-PHA-WW91ciBBL0MgWFhYWFgwMDAwMDEgRGViaXRlZCBJTlIgOTkuMDAgb24gMDEvMTAvMjYgLVVQSSBwYXltZW50LiBBdmwgQmFsIElOUiA5MDAuMDAtU0JJPC9wPjwvYm9keT48L2h0bWw-"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "18f0000000000002",
+      "threadId": "18f0000000000002",
+      "internalDate": "1790920800000",
+      "payload": {
+        "mimeType": "text/html",
+        "headers": [
+          {
+            "name": "from",
+            "value": "Zomato <noreply@zomato.com>"
+          },
+          {
+            "name": "subject",
+            "value": "Your order"
+          }
+        ],
+        "body": {
+          "size": 10,
+          "data": "PGRpdj5PcmRlciBUb3RhbDxicj5Scy4xMjMuMDA8L2Rpdj48c3R5bGU-Lnh7Y29sb3I6cmVkfTwvc3R5bGU-"
+        }
+      }
+    }
+  ]
+}

@@ -15,6 +15,10 @@ export const db = DEMO
     ? window.supabase.createClient(CONFIG.url, CONFIG.key)
     : null;
 
+// Demo only: expose the in-memory client so it can be poked at from devtools
+// and browser tests. Never set for a real Supabase client.
+if (DEMO) window.__demoDb = db;
+
 // Format money the Indian way: ₹1,23,456.00
 const inr = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -80,10 +84,37 @@ export function toast(message, kind = "error") {
   if (!el) {
     el = document.createElement("div");
     el.id = "toast";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    el.setAttribute("aria-atomic", "true");
     document.body.appendChild(el);
   }
   el.textContent = message;
   el.className = "toast show " + kind;
   clearTimeout(el._t);
   el._t = setTimeout(() => (el.className = "toast"), 3500);
+}
+
+// --- Pending email imports badge (sidebar) ---------------------------------
+// The shell renders <a data-nav="imports"> with an empty #importsBadge. These
+// keep the count in sync; the Imports page calls refreshImportsBadge() after
+// every approve/reject.
+export function setImportsBadge(n) {
+  const badge = document.getElementById("importsBadge");
+  const link = document.querySelector('[data-nav="imports"]');
+  if (!badge || !link) return;
+  const count = Math.max(0, Number(n) || 0);
+  badge.textContent = count > 99 ? "99+" : String(count);
+  badge.hidden = count === 0;
+  if (count) link.setAttribute("aria-label", `Email imports, ${count} waiting for review`);
+  else link.removeAttribute("aria-label");
+}
+
+export async function refreshImportsBadge() {
+  if (!db) return;
+  const { count, error } = await db.from("pending_imports")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending");
+  if (error) return; // The badge is only a hint; never shout about it.
+  setImportsBadge(count);
 }

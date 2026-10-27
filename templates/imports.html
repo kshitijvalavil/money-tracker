@@ -3,112 +3,357 @@
 {% block content %}
 <div class="page-head">
   <h1>Email imports</h1>
-  <button class="btn" id="approveAll" style="display:none">Approve all</button>
+  <div class="head-actions">
+    <span class="bulk-status" id="bulkStatus" role="status" aria-live="polite"></span>
+    <button class="btn" id="approveAll" hidden>Approve all</button>
+  </div>
 </div>
 
 <div class="card">
-  <p style="color:var(--muted);font-size:0.9rem;margin-bottom:16px">
-    Transactions the bot found in your email. Pick an account (and category) for
-    each, then approve to add them to your tracker. Nothing is added until you approve.
+  <p class="card-intro">
+    Transactions the bot found in your email. Check the account and category for
+    each, then approve to add it to your tracker. Nothing is added until you approve.
   </p>
-  <table>
-    <thead><tr>
-      <th>Date</th><th>Source</th><th>Note</th><th>Account</th><th>Category</th>
-      <th style="text-align:right">Amount</th><th></th>
-    </tr></thead>
-    <tbody id="rows"></tbody>
-  </table>
+  <div class="notice" id="noAccounts" hidden>
+    You need an account before you can approve imports.
+    <a href="/accounts"><strong>Add an account</strong></a>, then come back here.
+  </div>
+  <div class="table-wrap">
+    <table id="importsTable">
+      <caption class="sr-only">Transactions from your email waiting for review</caption>
+      <thead><tr>
+        <th scope="col">Date</th><th scope="col">Source</th><th scope="col">Note</th>
+        <th scope="col">Account</th><th scope="col">Category</th>
+        <th scope="col" style="text-align:right">Amount</th>
+        <th scope="col"><span class="sr-only">Actions</span></th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}
 
 {% block page_script %}
 <script type="module">
-  import { db, money, esc, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  import { db, money, esc, toast, refreshImportsBadge } from "{{ url_for('static', filename='js/app.js') }}";
   const $ = (id) => document.getElementById(id);
 
   let accounts = [], categories = [], pending = [];
+  const inFlight = new Set();   // import ids with a request running (no double approve)
+  let bulkRunning = false;
 
-  async function loadLists() {
-    const [a, c] = await Promise.all([
-      db.from("accounts").select("id, name").order("name"),
-      db.from("categories").select("id, name, kind").order("name"),
-    ]);
-    if (a.error) return toast(a.error.message);
-    if (c.error) return toast(c.error.message);
-    accounts = a.data; categories = c.data;
+  // "hdfc_alert" -> "HDFC alert", "receipt" -> "receipt" (the pill capitalizes).
+  const sourceLabel = (s) => String(s || "email")
+    .replace(/^([a-z]{2,5})_alert$/i, (_, bank) => `${bank.toUpperCase()} alert`)
+    .replace(/_/g, " ");
+  const describe = (p) =>
+    `${p.direction === "income" ? "income" : "expense"} of ${money(p.amount)} on ${p.occurred_on}${p.note ? `, ${p.note}` : ""}`;
+
+  // Turn RPC errors (SQLSTATE codes from approve_import / reject_import) into
+  // plain language. 55000 = someone already handled it: not a real failure.
+  const ALREADY = "55000";
+  function friendly(err, verb) {
+    switch (err?.code) {
+      case ALREADY: return "This one was already handled, so we've cleared it from the list.";
+      case "P0002": return "That import, account or category no longer exists. Refresh and try again.";
+      case "22023": return verb === "approve"
+        ? "That category doesn't fit this transaction. Pick an income category for money in, or an expense category for money out."
+        : "Something didn't match. Refresh and try again.";
+      case "42501": return "You've been signed out. Sign in again to continue.";
+      default: return err?.message ? `Something went wrong: ${err.message}` : "Check your connection and try again.";
+    }
   }
 
-  function accountOptions() {
-    return accounts.map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join("");
+  // --- Account guess from the email --------------------------------------
+  // account_hint is usually a masked tail ("0001") or a word ("card"). Match it
+  // against account names; otherwise try the bank named in the source
+  // ("hdfc_alert" -> an account called "HDFC Savings").
+  function guessAccountId(p) {
+    const lower = (s) => String(s || "").toLowerCase().trim();
+    const hint = lower(p.account_hint);
+    if (hint) {
+      const digits = hint.replace(/\D/g, "");
+      const hit =
+        accounts.find((a) => lower(a.name) === hint) ||
+        (digits.length >= 3 && accounts.find((a) => lower(a.name).replace(/\D/g, "").endsWith(digits))) ||
+        (hint.length >= 3 && accounts.find((a) => lower(a.name).includes(hint) || hint.includes(lower(a.name))));
+      if (hit) return hit.id;
+    }
+    const bank = lower(p.source).split(/[^a-z0-9]+/)[0];
+    if (bank.length >= 3 && !["statement", "receipt", "email", "alert"].includes(bank)) {
+      const hit = accounts.find((a) => lower(a.name).split(/[^a-z0-9]+/).includes(bank));
+      if (hit) return hit.id;
+    }
+    return null;
   }
+
+  function accountOptions(selectedId) {
+    return accounts.map((a) =>
+      `<option value="${a.id}"${a.id === selectedId ? " selected" : ""}>${esc(a.name)}</option>`).join("");
+  }
+  // The real approve_import needs a category of the import's kind (income or
+  // expense). Without one the row can't be approved, so say so up front.
+  const hasCategory = (kind) => categories.some((c) => c.kind === kind);
+  const approvable = () => pending.filter((p) => hasCategory(p.direction));
+  const noCategoryHint = (kind) =>
+    `Add an ${kind === "income" ? "income" : "expense"} category first. You don't have one yet, so this can't be approved.`;
+
   function categoryOptions(kind) {
-    return categories.filter((c) => c.kind === kind)
-      .map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    const list = categories.filter((c) => c.kind === kind);
+    return list.length
+      ? list.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("")
+      : `<option value="">No category</option>`;
   }
 
-  async function load() {
-    const { data, error } = await db.from("pending_imports")
-      .select("*").eq("status", "pending").order("occurred_on", { ascending: false });
-    if (error) return toast(error.message);
-    pending = data;
+  // --- Page states -------------------------------------------------------
+  function showLoading() {
+    $("importsTable").setAttribute("aria-busy", "true");
+    $("approveAll").hidden = true;
+    const widths = ["w-60", "w-50", "w-80", "w-70", "w-70", "w-50", "w-40"];
+    $("rows").innerHTML = Array.from({ length: 3 }, () => `<tr class="skeleton-row" aria-hidden="true">
+      ${widths.map((w) => `<td><span class="skel ${w}"></span></td>`).join("")}
+    </tr>`).join("") + `<tr><td colspan="7" class="sr-only">Loading imports…</td></tr>`;
+  }
 
-    $("approveAll").style.display = data.length ? "" : "none";
-    $("rows").innerHTML = data.length ? data.map((p) => {
+  function showError(message) {
+    $("importsTable").removeAttribute("aria-busy");
+    $("approveAll").hidden = true;
+    $("rows").innerHTML = `<tr><td colspan="7" class="empty state">
+      <div class="state-title">Couldn't load your imports</div>
+      <div class="state-body">${esc(message)}</div>
+      <button class="btn ghost sm" id="retry">Try again</button>
+    </td></tr>`;
+    $("retry").onclick = load;
+  }
+
+  function showEmpty(moveFocus) {
+    $("approveAll").hidden = true;
+    $("noAccounts").hidden = true;
+    $("rows").innerHTML = `<tr><td colspan="7" class="empty state">
+      <div class="state-icon" aria-hidden="true">📭</div>
+      <div class="state-title" id="emptyTitle" tabindex="-1">You're all caught up</div>
+      <div class="state-body">When the bot spots a bank alert, statement or receipt in your
+        email, it lists the transaction here for you to review. Nothing reaches your
+        tracker until you approve it.</div>
+    </td></tr>`;
+    if (moveFocus) $("emptyTitle").focus();
+  }
+
+  function updateBulkButton() {
+    const n = approvable().length;
+    const btn = $("approveAll");
+    btn.hidden = n === 0 || accounts.length === 0;
+    if (!bulkRunning) btn.textContent = n > 1 ? `Approve all ${n}` : "Approve all";
+  }
+
+  function render() {
+    $("importsTable").removeAttribute("aria-busy");
+    if (!pending.length) return showEmpty(false);
+    $("noAccounts").hidden = accounts.length > 0;
+    const noAcc = accounts.length === 0 ? " disabled" : "";
+    $("rows").innerHTML = pending.map((p) => {
       const kind = p.direction;        // 'income' | 'expense'
       const cls = kind === "income" ? "pos" : "neg";
       const sign = kind === "income" ? "+" : "−";
-      return `<tr data-id="${p.id}">
-        <td>${p.occurred_on}</td>
-        <td><span class="pill">${esc(p.source)}</span></td>
-        <td>${esc(p.note || "—")}${p.account_hint ? ` <span class="pill">…${esc(p.account_hint)}</span>` : ""}</td>
-        <td><select class="sel-account">${accountOptions()}</select></td>
-        <td><select class="sel-category">${categoryOptions(kind)}</select></td>
+      const guess = guessAccountId(p);
+      const what = esc(describe(p));
+      const blocked = !hasCategory(kind);
+      const hintId = `nocat-${esc(p.id)}`;
+      return `<tr data-id="${esc(p.id)}"${blocked ? ' data-blocked="1"' : ""}>
+        <td class="c-date nowrap">${esc(p.occurred_on)}</td>
+        <td class="c-source"><span class="pill">${esc(sourceLabel(p.source))}</span></td>
+        <td class="c-note">${esc(p.note || "—")}${p.account_hint
+          ? ` <span class="pill" title="Account hint from the email">…${esc(p.account_hint)}</span>` : ""}
+          <div class="row-msg" role="alert" hidden></div></td>
+        <td class="c-account"><span class="cell-label" aria-hidden="true">Account</span>
+          <select class="sel-account cell-select" aria-label="Account for ${what}"${noAcc}>${accountOptions(guess)}</select>
+          ${guess ? `<div class="match-note">Matched from email</div>` : ""}</td>
+        <td class="c-category"><span class="cell-label" aria-hidden="true">Category</span>
+          <select class="sel-category cell-select" aria-label="Category for ${what}"${blocked ? " disabled" : ""}>${categoryOptions(kind)}</select>
+          ${blocked ? `<div class="cell-hint" id="${hintId}">Add an ${kind === "income" ? "income" : "expense"} category first.</div>` : ""}</td>
         <td class="amt ${cls}">${sign}${money(p.amount)}</td>
-        <td style="white-space:nowrap">
-          <button class="btn sm approve">Approve</button>
-          <button class="icon-btn reject" title="Reject">✕</button>
+        <td class="row-actions">
+          <button class="btn sm approve" aria-label="Approve ${what}"${noAcc}${blocked
+            ? ` data-needs-category="1" aria-describedby="${hintId}"` : ""}>Approve</button>
+          <button class="icon-btn reject" aria-label="Reject ${what}" title="Reject — don't add this">✕</button>
         </td>
       </tr>`;
-    }).join("") : `<tr><td colspan="7" class="empty">No email imports waiting. The bot will add detected transactions here.</td></tr>`;
+    }).join("");
 
     $("rows").querySelectorAll("tr[data-id]").forEach((tr) => {
-      tr.querySelector(".approve").onclick = () => approve(tr);
-      tr.querySelector(".reject").onclick = () => reject(tr.dataset.id);
+      tr.querySelector(".approve").onclick = () => approveRow(tr);
+      tr.querySelector(".reject").onclick = () => rejectRow(tr);
+    });
+    updateBulkButton();
+  }
+
+  async function load() {
+    showLoading();
+    let a, c, p;
+    try {
+      [a, c, p] = await Promise.all([
+        db.from("accounts").select("id, name").order("name"),
+        db.from("categories").select("id, name, kind").order("name"),
+        db.from("pending_imports").select("*").eq("status", "pending")
+          .order("occurred_on", { ascending: false }),
+      ]);
+    } catch (e) {
+      return showError("Check your connection and try again.");
+    }
+    const err = a.error || c.error || p.error;
+    if (err) return showError(err.message || "Check your connection and try again.");
+    accounts = a.data; categories = c.data; pending = p.data;
+    render();
+    refreshImportsBadge();
+  }
+
+  // --- Row helpers -------------------------------------------------------
+  function lockRow(tr, locked) {
+    tr.querySelectorAll("button, select").forEach((el) => {
+      const needsAccount = el.classList.contains("approve") || el.classList.contains("sel-account");
+      const noCat = el.classList.contains("sel-category") && tr.dataset.blocked;
+      el.disabled = locked || noCat || (needsAccount && accounts.length === 0);
     });
   }
 
-  async function approve(tr) {
+  function setRowBusy(tr, busy, label) {
+    tr.classList.toggle("busy", busy);
+    if (busy) tr.setAttribute("aria-busy", "true"); else tr.removeAttribute("aria-busy");
+    lockRow(tr, busy);
+    tr.querySelector(".approve").textContent = busy && label ? label : "Approve";
+  }
+
+  function setRowError(tr, message) {
+    const box = tr.querySelector(".row-msg");
+    tr.classList.toggle("failed", !!message);
+    box.hidden = !message;
+    box.textContent = message || "";
+  }
+
+  function removeRow(tr) {
+    pending = pending.filter((x) => x.id !== tr.dataset.id);
+    // Keep keyboard focus somewhere sensible when the focused row disappears.
+    const hadFocus = tr.contains(document.activeElement);
+    const next = tr.nextElementSibling || tr.previousElementSibling;
+    tr.classList.add("leaving");
+    setTimeout(() => {
+      tr.remove();
+      if (!pending.length) showEmpty(hadFocus);
+      else if (hadFocus && next?.isConnected) next.querySelector(".approve:not(:disabled)")?.focus();
+      updateBulkButton();
+    }, 200);
+    refreshImportsBadge();
+  }
+
+  // Sends one approve request for a row. Returns { ok, message } or { skipped }.
+  async function approveRequest(tr) {
+    const id = tr.dataset.id;
+    if (inFlight.has(id)) return { skipped: true };
+    inFlight.add(id);
+    setRowError(tr, "");
+    setRowBusy(tr, true, "Approving…");
+    try {
+      const { error } = await db.rpc("approve_import", {
+        p_import_id: id,
+        p_account_id: tr.querySelector(".sel-account").value,
+        p_category_id: tr.querySelector(".sel-category").value || null,
+      });
+      if (error) throw error;
+      return { ok: true };
+    } catch (e) {
+      if (e?.code === ALREADY) return { ok: false, already: true, message: friendly(e) };
+      const message = friendly(e, "approve");
+      setRowBusy(tr, false);
+      setRowError(tr, message);
+      return { ok: false, message };
+    } finally {
+      inFlight.delete(id);
+    }
+  }
+
+  async function approveRow(tr) {
+    if (bulkRunning) return;
     const p = pending.find((x) => x.id === tr.dataset.id);
-    const tx = {
-      occurred_on: p.occurred_on,
-      amount: p.amount,
-      type: p.direction,
-      account_id: tr.querySelector(".sel-account").value,
-      category_id: tr.querySelector(".sel-category").value,
-      note: p.note || "",
-      source: p.source,
-      source_message_id: p.source_message_id,
-    };
-    const { error } = await db.from("transactions").insert(tx);
-    // A duplicate source email is fine — it just means it's already imported.
-    if (error && !/duplicate|unique/i.test(error.message)) return toast(error.message);
-    const upd = await db.from("pending_imports").update({ status: "approved" }).eq("id", p.id);
-    if (upd.error) return toast(upd.error.message);
-    toast("Added.", "ok");
-    load();
+    if (tr.dataset.blocked) return toast(noCategoryHint(p.direction));
+    const res = await approveRequest(tr);
+    if (res.skipped) return;
+    if (res.already) { toast(res.message, "ok"); return removeRow(tr); }
+    if (!res.ok) return toast(`Couldn't approve. ${res.message}`);
+    // approve_import may hand back an existing transaction for the same email,
+    // so don't claim which account it went to.
+    toast(`Added ${money(p.amount)}${p.note ? ` (${p.note})` : ""} to your tracker.`, "ok");
+    removeRow(tr);
   }
 
-  async function reject(id) {
-    const { error } = await db.from("pending_imports").update({ status: "rejected" }).eq("id", id);
-    if (error) return toast(error.message);
-    load();
+  async function rejectRow(tr) {
+    const id = tr.dataset.id;
+    if (bulkRunning || inFlight.has(id)) return;
+    inFlight.add(id);
+    setRowError(tr, "");
+    setRowBusy(tr, true);
+    try {
+      const { error } = await db.rpc("reject_import", { p_import_id: id });
+      if (error) throw error;
+      toast("Rejected. It won't be added to your tracker.", "ok");
+      removeRow(tr);
+    } catch (e) {
+      if (e?.code === ALREADY) { toast(friendly(e), "ok"); return removeRow(tr); }
+      const message = friendly(e, "reject");
+      setRowBusy(tr, false);
+      setRowError(tr, message);
+      toast(`Couldn't reject. ${message}`);
+    } finally {
+      inFlight.delete(id);
+    }
   }
 
+  // --- Approve all: one at a time, with progress -------------------------
   $("approveAll").onclick = async () => {
-    if (!confirm(`Approve all ${pending.length} transactions with the selected accounts/categories?`)) return;
-    for (const tr of $("rows").querySelectorAll("tr[data-id]")) await approve(tr);
+    if (bulkRunning) return;
+    const rows = [...$("rows").querySelectorAll("tr[data-id]")]
+      .filter((tr) => !inFlight.has(tr.dataset.id) && !tr.classList.contains("leaving") && !tr.dataset.blocked);
+    if (!rows.length) return;
+    const n = rows.length;
+    if (!confirm(`Add all ${n} transactions to your tracker, using the account and category shown on each row?`)) return;
+
+    bulkRunning = true;
+    const btn = $("approveAll");
+    btn.disabled = true;
+    $("bulkStatus").textContent = "";
+    rows.forEach((tr) => lockRow(tr, true));   // no edits mid-run
+
+    let done = 0, failed = 0, already = 0;
+    for (const [i, tr] of rows.entries()) {
+      const progress = `Approving ${i + 1} of ${n}…`;
+      btn.textContent = progress;
+      $("bulkStatus").textContent = progress;
+      const res = await approveRequest(tr);
+      if (res.ok) { done++; removeRow(tr); }
+      else if (res.already) { already++; removeRow(tr); }
+      else {
+        if (!res.skipped) failed++;
+        lockRow(tr, true);                     // stays locked until the run ends
+      }
+    }
+
+    bulkRunning = false;
+    btn.disabled = false;
+    rows.filter((tr) => tr.isConnected && !tr.classList.contains("leaving"))
+      .forEach((tr) => lockRow(tr, false));
+    updateBulkButton();
+
+    const blockedLeft = pending.length - approvable().length;
+    const skippedNote = (already ? ` ${already} ${already === 1 ? "was" : "were"} already handled.` : "")
+      + (blockedLeft ? ` ${blockedLeft} still ${blockedLeft === 1 ? "needs" : "need"} a category.` : "");
+    const summary = failed
+      ? `Approved ${done} of ${n}. ${failed} couldn't be added — see the highlighted ${failed === 1 ? "row" : "rows"}.${skippedNote}`
+      : (already || blockedLeft)
+        ? `Approved ${done}.${skippedNote}`
+        : n === 1 ? "Approved. It's in your tracker now." : `Approved all ${n}. They're in your tracker now.`;
+    $("bulkStatus").textContent = failed ? summary : "";
+    toast(summary, failed ? "error" : "ok");
   };
 
-  if (db) { await loadLists(); load(); }
+  if (db) load();
 </script>
 {% endblock %}

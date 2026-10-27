@@ -16,6 +16,10 @@
   --neg-bg: #fbe9e7;
   --radius: 14px;
   --shadow: 0 1px 3px rgba(20, 27, 45, 0.06), 0 8px 24px rgba(20, 27, 45, 0.05);
+  --badge-bg: #2f5fe0;
+  --badge-ink: #ffffff;
+  --skel: #eceef2;
+  --skel-hi: #f6f7f9;
 }
 
 /* Night theme. Applied via data-theme="dark" on <html> (set early in base.html
@@ -36,6 +40,11 @@
   --neg: #f2695c;
   --neg-bg: #381f1d;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.4);
+  /* Dark ink on the lighter dark-mode blue keeps the count above 4.5:1. */
+  --badge-bg: #6f92f3;
+  --badge-ink: #0e1320;
+  --skel: #222b3d;
+  --skel-hi: #2b3549;
 }
 
 html { color-scheme: light; }
@@ -85,7 +94,9 @@ a { color: inherit; text-decoration: none; }
 .signout:hover { background: var(--bg); color: var(--neg); }
 .user-email { font-size: 0.8rem; color: var(--muted); padding: 0 12px 8px; word-break: break-all; }
 
-.content { flex: 1; padding: 32px; max-width: 1100px; }
+/* min-width: 0 lets wide tables scroll inside .table-wrap instead of
+   stretching the flex item (and the whole page) sideways. */
+.content { flex: 1; min-width: 0; padding: 32px; max-width: 1100px; }
 .page-head { display: flex; justify-content: space-between; align-items: center;
              flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
 .page-head h1 { font-size: 1.5rem; }
@@ -201,3 +212,116 @@ td.amt { text-align: right; font-weight: 600; white-space: nowrap; font-variant-
   display: flex; align-items: center; gap: 10px;
 }
 .theme-toggle:hover { background: var(--bg); color: var(--ink); }
+
+/* Shared a11y + control states ------------------------------------------- */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.btn:focus-visible, .icon-btn:focus-visible, .nav a:focus-visible,
+.theme-toggle:focus-visible, .signout:focus-visible {
+  outline: 2px solid var(--brand); outline-offset: 2px;
+}
+.btn:disabled, .btn:disabled:hover { opacity: .55; cursor: not-allowed; background: var(--brand); }
+.btn.ghost:disabled, .btn.ghost:disabled:hover { background: var(--bg); }
+/* Soft-disabled: still focusable/clickable so it can explain why (e.g. an
+   import with no category of its kind); the click handler sends nothing. */
+.btn[data-needs-category], .btn[data-needs-category]:hover {
+  opacity: .55; cursor: not-allowed; background: var(--brand);
+}
+.icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+.icon-btn:disabled:hover { color: var(--muted); }
+select:disabled { opacity: .6; cursor: not-allowed; }
+
+/* Sidebar count pill (pending email imports) */
+.nav-badge {
+  margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: var(--badge-bg); color: var(--badge-ink);
+  font-size: 0.72rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.nav-badge[hidden] { display: none; }
+
+/* Email imports page ------------------------------------------------------ */
+.head-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.bulk-status { color: var(--muted); font-size: 0.88rem; }
+.bulk-status:empty { display: none; }
+.card-intro { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; max-width: 68ch; }
+.table-wrap { overflow-x: auto; position: relative; } /* contains sr-only text too */
+.nowrap { white-space: nowrap; }
+.cell-select { padding: 6px 8px; font-size: 0.88rem; min-width: 132px; }
+.match-note { font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+.row-actions { white-space: nowrap; text-align: right; }
+.row-actions .icon-btn { min-width: 32px; min-height: 32px; border-radius: 8px; margin-left: 4px; }
+.row-actions .icon-btn:hover:not(:disabled) { background: var(--neg-bg); }
+.row-msg { color: var(--neg); font-size: 0.8rem; font-weight: 600; margin-top: 6px; }
+.row-msg[hidden] { display: none; }
+#rows tr td { transition: opacity .2s, background-color .2s; }
+#rows tr.busy td { opacity: .6; }
+#rows tr.leaving td { opacity: 0; }
+#rows tr.failed td { background: var(--neg-bg); }
+
+.state { padding: 40px 24px; }
+.state-icon { font-size: 1.8rem; margin-bottom: 8px; }
+.state-title { color: var(--ink); font-weight: 600; font-size: 1rem; margin-bottom: 6px; }
+.state-title:focus { outline: none; }
+.state-body { max-width: 46ch; margin: 0 auto 14px; font-size: 0.9rem; }
+.state-body:last-child { margin-bottom: 0; }
+
+/* Loading skeleton */
+.skel {
+  display: block; height: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--skel) 25%, var(--skel-hi) 50%, var(--skel) 75%);
+  background-size: 200% 100%; animation: skel-shimmer 1.2s ease-in-out infinite;
+}
+.skel.w-40 { width: 40%; } .skel.w-50 { width: 50%; } .skel.w-60 { width: 60%; }
+.skel.w-70 { width: 70%; } .skel.w-80 { width: 80%; }
+@keyframes skel-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .skel { animation: none; }
+  #rows tr td, .toast { transition: none; }
+}
+
+/* Imports: labels only shown in the stacked (phone) layout */
+.cell-label { display: none; }
+.cell-hint { font-size: 0.75rem; color: var(--neg); margin-top: 4px; max-width: 26ch; }
+
+/* Imports: below 640px each row becomes a stacked card so date, note,
+   account and category stay visible while approving. */
+@media (max-width: 640px) {
+  #importsTable, #importsTable tbody { display: block; }
+  #importsTable thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);
+  }
+  #rows tr[data-id] {
+    display: grid; grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "note note amt"
+      "date source source"
+      "acc acc acc"
+      "cat cat cat"
+      "act act act";
+    gap: 8px 10px; padding: 14px 4px; border-bottom: 1px solid var(--line);
+  }
+  #rows tr[data-id]:last-child { border-bottom: none; }
+  #rows tr[data-id] td { display: block; padding: 0; border: none; }
+  #rows tr.failed { background: var(--neg-bg); border-radius: 10px; padding: 14px 10px; }
+  #rows tr.failed td { background: none; }
+  #rows .c-note { grid-area: note; font-weight: 600; }
+  #rows .c-date { grid-area: date; color: var(--muted); font-size: 0.85rem; align-self: center; }
+  #rows .c-source { grid-area: source; align-self: center; }
+  #rows .c-account { grid-area: acc; }
+  #rows .c-category { grid-area: cat; }
+  #rows .amt { grid-area: amt; }
+  #rows .cell-label {
+    display: block; font-size: 0.72rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .02em; margin-bottom: 4px;
+  }
+  #rows .cell-select { width: 100%; padding: 9px 10px; font-size: 0.95rem; }
+  #rows .cell-hint { max-width: none; }
+  #rows tr[data-id] td.row-actions { grid-area: act; display: flex; gap: 8px; text-align: left; }
+  #rows .row-actions .approve { flex: 1; padding: 10px 12px; font-size: 0.95rem; }
+  #rows .row-actions .icon-btn { min-width: 44px; min-height: 44px; margin: 0;
+                                 border: 1px solid var(--line); }
+  #rows .skeleton-row td:nth-child(n+4) { display: none; }
+}
