@@ -443,3 +443,56 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--ne
 @media (prefers-reduced-motion: reduce) {
   .switch-ui, .switch-ui::after, #billRows tr td { transition: none; }
 }
+
+/* ===== Sprint 3: goals, labels, insights ================================== */
+
+/* Savings-goal rows with a progress ring */
+.goal-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.goal-row:last-child { border-bottom: none; }
+.goal-main { flex: 1; min-width: 0; }
+.goal-top { display: flex; align-items: baseline; gap: 8px; }
+.goal-name { font-weight: 600; color: var(--ink); }
+.goal-sub { font-size: 0.86rem; color: var(--ink); margin-top: 2px; }
+.goal-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.muted { color: var(--muted); }
+
+.ring { flex-shrink: 0; }
+.ring-track { fill: none; stroke: var(--bg); stroke-width: 6; }
+.ring-fill { fill: none; stroke: var(--brand); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset .4s; }
+.ring-fill.done { stroke: var(--pos); }
+.ring-label { fill: var(--ink); font-size: 0.78rem; font-weight: 700; }
+
+.pill.ok { background: var(--pos-bg); color: var(--pos); }
+
+/* Labels (chips) on transactions */
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.chip { display: inline-flex; align-items: center; font-size: 0.72rem; font-weight: 600;
+        padding: 2px 9px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); }
+.chip.add { background: var(--bg); color: var(--muted); border: 1px dashed var(--line);
+            cursor: pointer; font: inherit; font-size: 0.72rem; font-weight: 600; padding: 2px 9px; }
+.chip.add:hover { color: var(--brand); border-color: var(--brand); }
+
+/* Left-to-spend card */
+.lts-value { font-size: 2rem; font-weight: 700; margin: 4px 0 2px; }
+.lts-sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 12px; }
+
+/* Insights: month-over-month stats */
+.mom { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.mom .stat { padding: 2px 0; }
+.stat-label { color: var(--muted); font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .02em; }
+.stat-value { font-size: 1.5rem; font-weight: 700; margin: 4px 0; color: var(--ink); }
+.stat-delta { font-size: 0.85rem; }
+.stat-delta .pos { color: var(--pos); font-weight: 600; }
+.stat-delta .neg { color: var(--neg); font-weight: 600; }
+
+/* Insights: ranked merchant list */
+ol.rank { list-style: none; counter-reset: rank; margin: 0; padding: 0; }
+ol.rank li { counter-increment: rank; display: flex; justify-content: space-between; align-items: baseline;
+             gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+ol.rank li:last-child { border-bottom: none; }
+ol.rank li::before { content: counter(rank); color: var(--muted); font-weight: 700; font-size: 0.8rem;
+                     width: 20px; flex-shrink: 0; }
+.rank-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-meta { font-weight: 600; white-space: nowrap; }
+
+@media (max-width: 640px) { .mom { grid-template-columns: 1fr; gap: 10px; } }

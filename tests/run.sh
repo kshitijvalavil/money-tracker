@@ -98,3 +98,9 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d sugg \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/suggest_recurring_test.sql"
+
+# ---- Goals, labels and insights (0009): progress, labels, insights, RLS -----
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres gl
+"${PSQL[@]}" -d gl \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/goals_labels_test.sql"

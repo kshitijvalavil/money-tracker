@@ -1,0 +1,95 @@
+{% extends "_shell.html" %}
+{% block title %}Insights — Money Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Insights</h1>
+  <input type="month" id="month" style="width:auto">
+</div>
+
+<div class="card">
+  <h2>This month vs. last</h2>
+  <div class="mom" id="mom"><div class="empty">Loading…</div></div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h2>Top merchants</h2>
+    <div id="merchants"><div class="empty">Loading…</div></div>
+  </div>
+  <div class="card">
+    <h2>Spending by label</h2>
+    <div id="labels"><div class="empty">Loading…</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, money, esc, thisMonth, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  const $ = (id) => document.getElementById(id);
+  $("month").value = thisMonth();
+
+  // Change line: arrow + percent vs last month, coloured by whether the move
+  // is good. For income/net more is good; for expense less is good.
+  function delta(metric, cur, prev) {
+    cur = Number(cur); prev = Number(prev);
+    if (prev === 0 && cur === 0) return `<span class="muted">no change</span>`;
+    const diff = cur - prev;
+    const pct = prev === 0 ? null : Math.round((diff / Math.abs(prev)) * 100);
+    const up = diff > 0;
+    const good = metric === "expense" ? !up : up;
+    if (diff === 0) return `<span class="muted">no change</span>`;
+    const arrow = up ? "▲" : "▼";
+    const txt = pct === null ? money(Math.abs(diff)) : `${Math.abs(pct)}%`;
+    return `<span class="${good ? "pos" : "neg"}">${arrow} ${txt}</span>
+            <span class="muted">vs ${money(prev)}</span>`;
+  }
+
+  async function loadMom() {
+    const month = $("month").value || thisMonth();
+    const { data, error } = await db.rpc("month_over_month", { p_month: month });
+    if (error) return toast(error.message);
+    const label = { income: "Income", expense: "Expenses", net: "Net saved" };
+    $("mom").innerHTML = data.map((r) => `
+      <div class="stat">
+        <div class="stat-label">${label[r.metric] || r.metric}</div>
+        <div class="stat-value">${money(r.current)}</div>
+        <div class="stat-delta">${delta(r.metric, r.current, r.previous)}</div>
+      </div>`).join("");
+  }
+
+  async function loadMerchants() {
+    const month = $("month").value || thisMonth();
+    const { data, error } = await db.rpc("top_merchants", { p_month: month, p_limit: 8 });
+    if (error) return toast(error.message);
+    if (!data.length) { $("merchants").innerHTML = `<div class="empty">No expenses this month.</div>`; return; }
+    $("merchants").innerHTML = `<ol class="rank">` + data.map((m) => `
+      <li><span class="rank-name">${esc(m.merchant)}</span>
+          <span class="rank-meta">${money(m.total)}
+            <span class="muted">· ${m.txns} ${m.txns == 1 ? "txn" : "txns"}</span></span></li>`).join("") + `</ol>`;
+  }
+
+  async function loadLabels() {
+    const month = $("month").value || thisMonth();
+    const { data, error } = await db.rpc("spending_by_label", { p_month: month });
+    if (error) return toast(error.message);
+    if (!data.length) {
+      $("labels").innerHTML = `<div class="empty">No labelled spending this month.
+        Add labels to transactions to see them here.</div>`;
+      return;
+    }
+    const max = Math.max(...data.map((d) => Number(d.total)));
+    $("labels").innerHTML = data.map((d) => {
+      const pct = max ? (Number(d.total) / max) * 100 : 0;
+      return `<div class="bar-row">
+        <div class="top"><span>${esc(d.label)}</span><span>${money(d.total)}</span></div>
+        <div class="bar"><div style="width:${pct}%"></div></div>
+      </div>`;
+    }).join("");
+  }
+
+  function loadAll() { loadMom(); loadMerchants(); loadLabels(); }
+  $("month").addEventListener("change", loadAll);
+  if (db) loadAll();
+</script>
+{% endblock %}

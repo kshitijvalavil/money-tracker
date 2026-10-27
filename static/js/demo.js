@@ -105,7 +105,38 @@ function seed() {
   [3, 33, 50, 110].forEach((d, k) => transactions.push(tx(addDays(today, -d), k % 2 ? 180 : 175,
     "expense", "Cash", { category_id: C["Food"], note: "Chai Point" })));
 
-  return { accounts, categories, transactions, budgets, pending_imports, recurring };
+  // Savings goals (Sprint 3), with a few contributions so the rings differ.
+  const goals = [
+    { id: uid(), name: "Japan trip", target_amount: 200000,
+      target_date: day(localDate(new Date(now.getFullYear(), now.getMonth() + 6, 1)).slice(0, 7), 1),
+      created_at: new Date().toISOString() },
+    { id: uid(), name: "Emergency fund", target_amount: 100000, target_date: null,
+      created_at: new Date().toISOString() },
+    { id: uid(), name: "New laptop", target_amount: 90000, target_date: null,
+      created_at: new Date().toISOString() },
+  ];
+  const goal_contributions = [
+    { id: uid(), goal_id: goals[0].id, amount: 30000, occurred_on: day(lastMonth, 5), note: "" },
+    { id: uid(), goal_id: goals[0].id, amount: 20000, occurred_on: day(thisMonth, 2), note: "Bonus" },
+    { id: uid(), goal_id: goals[1].id, amount: 60000, occurred_on: day(lastMonth, 20), note: "" },
+  ].map((c) => ({ ...c, created_at: new Date().toISOString() }));
+
+  // Free-form labels, reused across transactions (Sprint 3).
+  const labels = ["Subscriptions", "Essentials", "Treats"].map((name) => ({
+    id: uid(), name, created_at: new Date().toISOString(),
+  }));
+  const L = Object.fromEntries(labels.map((l) => [l.name, l.id]));
+  const byNote = (note) => transactions.filter((t) => t.note === note);
+  const tag = (txRow, labelId) =>
+    transaction_labels.push({ transaction_id: txRow.id, label_id: labelId });
+  const transaction_labels = [];
+  byNote("Streaming + movie").forEach((t) => { tag(t, L["Subscriptions"]); tag(t, L["Treats"]); });
+  byNote("Spotify Premium").forEach((t) => tag(t, L["Subscriptions"]));
+  byNote("Flat rent").forEach((t) => tag(t, L["Essentials"]));
+  byNote("Groceries").forEach((t) => tag(t, L["Essentials"]));
+
+  return { accounts, categories, transactions, budgets, pending_imports, recurring,
+           goals, goal_contributions, labels, transaction_labels };
 }
 
 // Same SQLSTATE-style errors as the real functions.
@@ -346,6 +377,93 @@ function rpc(s, name, params) {
     }
     return out;
   }
+
+  // ---- Sprint 3: goals, labels, insights (mirror migration 0009) ----------
+  if (name === "goal_progress") {
+    return s.goals.map((g) => {
+      const saved = sum(s.goal_contributions.filter((c) => c.goal_id === g.id));
+      const target = Number(g.target_amount);
+      return {
+        id: g.id, name: g.name, target_amount: target, target_date: g.target_date || null,
+        saved, remaining: Math.max(target - saved, 0),
+        pct: Math.min(Math.round((saved / target) * 1000) / 10, 100),
+      };
+    }).sort((a, b) => {
+      const ga = s.goals.find((g) => g.id === a.id).created_at;
+      const gb = s.goals.find((g) => g.id === b.id).created_at;
+      return ga < gb ? -1 : ga > gb ? 1 : 0;
+    });
+  }
+  if (name === "set_transaction_labels") {
+    if (!s.transactions.some((t) => t.id === params.p_transaction_id)) {
+      fail("P0002", "transaction not found");
+    }
+    const ids = [];
+    for (const raw of params.p_labels || []) {
+      const clean = String(raw ?? "").trim();
+      if (!clean) continue;
+      if (clean.length > 40) fail("22023", `label too long: ${clean}`);
+      let lbl = s.labels.find((l) => l.name.trim().toLowerCase() === clean.toLowerCase());
+      if (!lbl) { lbl = { id: uid(), name: clean, created_at: new Date().toISOString() }; s.labels.push(lbl); }
+      if (!ids.includes(lbl.id)) ids.push(lbl.id);
+    }
+    s.transaction_labels = s.transaction_labels.filter(
+      (tl) => tl.transaction_id !== params.p_transaction_id || ids.includes(tl.label_id));
+    for (const id of ids) {
+      if (!s.transaction_labels.some((tl) => tl.transaction_id === params.p_transaction_id && tl.label_id === id)) {
+        s.transaction_labels.push({ transaction_id: params.p_transaction_id, label_id: id });
+      }
+    }
+    return null;
+  }
+  if (name === "spending_by_label") {
+    const byLabel = {};
+    for (const tl of s.transaction_labels) {
+      const t = s.transactions.find((x) => x.id === tl.transaction_id);
+      const l = s.labels.find((x) => x.id === tl.label_id);
+      if (!t || !l || t.type !== "expense" || !inMonth(t, m)) continue;
+      byLabel[l.name] = (byLabel[l.name] || 0) + Number(t.amount);
+    }
+    return Object.entries(byLabel).map(([label, total]) => ({ label, total }))
+      .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
+  }
+  if (name === "top_merchants") {
+    const limit = Math.max(params?.p_limit ?? 5, 1);
+    const groups = new Map();
+    for (const t of s.transactions.filter((t) => t.type === "expense" && inMonth(t, m))) {
+      const key = normaliseName(t.note);
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, { total: 0, txns: 0, latest: null });
+      const g = groups.get(key);
+      g.total += Number(t.amount); g.txns += 1;
+      if (!g.latest || t.occurred_on > g.latest.occurred_on
+          || (t.occurred_on === g.latest.occurred_on && t.id > g.latest.id)) g.latest = t;
+    }
+    return [...groups.values()].map((g) => ({ merchant: g.latest.note, total: g.total, txns: g.txns }))
+      .sort((a, b) => b.total - a.total || a.merchant.localeCompare(b.merchant))
+      .slice(0, limit);
+  }
+  if (name === "month_over_month") {
+    if (!/^\d{4}-\d{2}$/.test(m || "")) fail("22023", `month must be YYYY-MM, got ${m}`);
+    const [y, mm] = m.split("-").map(Number);
+    const prev = localDate(new Date(y, mm - 2, 1)).slice(0, 7);
+    const tot = (mon, type) => sum(s.transactions.filter((t) => t.type === type && inMonth(t, mon)));
+    const inc = tot(m, "income"), exp = tot(m, "expense");
+    const pinc = tot(prev, "income"), pexp = tot(prev, "expense");
+    return [
+      { metric: "income", current: inc, previous: pinc },
+      { metric: "expense", current: exp, previous: pexp },
+      { metric: "net", current: inc - exp, previous: pinc - pexp },
+    ];
+  }
+  if (name === "left_to_spend") {
+    if (!/^\d{4}-\d{2}$/.test(m || "")) fail("22023", `month must be YYYY-MM, got ${m}`);
+    const budgetCats = new Set(s.budgets.map((b) => b.category_id));
+    const budgeted = s.budgets.reduce((n, b) => n + Number(b.monthly_limit), 0);
+    const spent = sum(s.transactions.filter(
+      (t) => t.type === "expense" && inMonth(t, m) && budgetCats.has(t.category_id)));
+    return [{ budgeted, spent, remaining: budgeted - spent }];
+  }
   return [];
 }
 
@@ -428,9 +546,18 @@ function makeBuilder(store, table) {
           return { data: null, error: null };
         }
         if (this._op === "delete") {
+          const gone = new Set(rows.filter((r) => this._match(r)).map((r) => r.id));
           if (table === "recurring") {        // transactions.recurring_id: on delete set null
-            const gone = new Set(rows.filter((r) => this._match(r)).map((r) => r.id));
             s.transactions.forEach((t) => { if (gone.has(t.recurring_id)) t.recurring_id = null; });
+          }
+          if (table === "goals") {            // goal_contributions: on delete cascade
+            s.goal_contributions = s.goal_contributions.filter((c) => !gone.has(c.goal_id));
+          }
+          if (table === "transactions") {     // transaction_labels: on delete cascade
+            s.transaction_labels = s.transaction_labels.filter((tl) => !gone.has(tl.transaction_id));
+          }
+          if (table === "labels") {           // transaction_labels: on delete cascade
+            s.transaction_labels = s.transaction_labels.filter((tl) => !gone.has(tl.label_id));
           }
           store.data[table] = rows.filter((r) => !this._match(r));
           return { data: null, error: null };
@@ -464,7 +591,8 @@ export function createDemoClient() {
     from(table) { return makeBuilder(store, table); },
     async rpc(name, params) {
       // Write RPCs get a short fake network delay so loading states are visible.
-      if (["approve_import", "reject_import", "mark_recurring_paid", "skip_recurring"].includes(name)) {
+      if (["approve_import", "reject_import", "mark_recurring_paid", "skip_recurring",
+           "set_transaction_labels"].includes(name)) {
         await new Promise((r) => setTimeout(r, 350));
       }
       try {

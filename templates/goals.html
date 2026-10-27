@@ -1,0 +1,115 @@
+{% extends "_shell.html" %}
+{% block title %}Goals — Money Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Savings goals</h1>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h2>New goal</h2>
+    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">
+      Set a target to save toward. Add money to it whenever you put some aside.</p>
+    <form id="form">
+      <div class="field"><label for="name">Goal</label>
+        <input type="text" id="name" maxlength="80" placeholder="e.g. Japan trip" required></div>
+      <div class="row">
+        <div class="field"><label for="target">Target (₹)</label>
+          <input type="number" id="target" step="0.01" min="0.01" required></div>
+        <div class="field"><label for="date">Target date (optional)</label>
+          <input type="date" id="date"></div>
+      </div>
+      <button class="btn" type="submit">Create goal</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Your goals</h2>
+    <div id="goals"><div class="empty">Loading…</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, money, esc, toast, today } from "{{ url_for('static', filename='js/app.js') }}";
+  const $ = (id) => document.getElementById(id);
+
+  // A small SVG progress ring. r=26, circumference ≈ 163.4.
+  function ring(pct) {
+    const r = 26, c = 2 * Math.PI * r, off = c * (1 - Math.min(pct, 100) / 100);
+    const done = pct >= 100;
+    return `<svg class="ring" width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="${r}" class="ring-track"></circle>
+      <circle cx="32" cy="32" r="${r}" class="ring-fill ${done ? "done" : ""}"
+        stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
+        transform="rotate(-90 32 32)"></circle>
+      <text x="32" y="36" text-anchor="middle" class="ring-label">${Math.round(pct)}%</text>
+    </svg>`;
+  }
+
+  async function load() {
+    const { data, error } = await db.rpc("goal_progress");
+    if (error) return toast(error.message);
+    if (!data.length) {
+      $("goals").innerHTML = `<div class="empty">No goals yet. Create one to start saving.</div>`;
+      return;
+    }
+    $("goals").innerHTML = data.map((g) => {
+      const date = g.target_date
+        ? `<span class="muted">by ${esc(g.target_date)}</span>` : "";
+      const done = g.pct >= 100;
+      return `<div class="goal-row">
+        ${ring(g.pct)}
+        <div class="goal-main">
+          <div class="goal-top"><span class="goal-name">${esc(g.name)}</span> ${date}</div>
+          <div class="goal-sub">${money(g.saved)} of ${money(g.target_amount)}
+            ${done ? `<span class="pill ok">Reached 🎉</span>`
+                   : `<span class="muted">· ${money(g.remaining)} to go</span>`}</div>
+        </div>
+        <div class="goal-actions">
+          <button class="btn ghost sm" data-add="${g.id}" data-name="${esc(g.name)}">+ Add money</button>
+          <button class="icon-btn" title="Delete goal" data-del="${g.id}">✕</button>
+        </div>
+      </div>`;
+    }).join("");
+
+    $("goals").querySelectorAll("[data-add]").forEach((btn) => {
+      btn.onclick = async () => {
+        const amt = prompt(`Add how much to “${btn.dataset.name}”? (₹)`);
+        if (amt === null) return;
+        const n = parseFloat(amt);
+        if (!(n > 0)) return toast("Enter an amount greater than zero.");
+        const { error } = await db.from("goal_contributions")
+          .insert({ goal_id: btn.dataset.add, amount: n, occurred_on: today() });
+        if (error) return toast(error.message);
+        toast("Added.", "ok");
+        load();
+      };
+    });
+    $("goals").querySelectorAll("[data-del]").forEach((btn) => {
+      btn.onclick = async () => {
+        if (!confirm("Delete this goal and its saved history?")) return;
+        const { error } = await db.from("goals").delete().eq("id", btn.dataset.del);
+        if (error) return toast(error.message);
+        load();
+      };
+    });
+  }
+
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const target = parseFloat($("target").value);
+    if (!(target > 0)) return toast("Target must be greater than zero.");
+    const row = { name: $("name").value.trim(), target_amount: target };
+    if ($("date").value) row.target_date = $("date").value;
+    const { error } = await db.from("goals").insert(row);
+    if (error) return toast(error.message);
+    $("name").value = ""; $("target").value = ""; $("date").value = "";
+    toast("Goal created.", "ok");
+    load();
+  });
+
+  if (db) load();
+</script>
+{% endblock %}

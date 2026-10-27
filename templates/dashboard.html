@@ -12,6 +12,16 @@
   <div class="card stat"><div class="label">Spent this month</div><div class="value neg" id="expense">—</div></div>
 </div>
 
+<div class="card lts-card" id="ltsCard" style="margin-bottom:16px" hidden>
+  <div class="card-head">
+    <h2 id="ltsHeading">Left to spend this month</h2>
+    <a href="/budgets" class="card-link">Budgets <span aria-hidden="true">→</span></a>
+  </div>
+  <div class="lts-value" id="ltsValue">—</div>
+  <div class="lts-sub" id="ltsSub"></div>
+  <div class="bar"><div id="ltsBar"></div></div>
+</div>
+
 <div class="card upcoming-card" style="margin-bottom:16px">
   <div class="card-head">
     <h2 id="upcomingHeading" tabindex="-1">Upcoming bills</h2>
@@ -58,7 +68,7 @@
   async function load() {
     const month = monthInput.value || thisMonth();
 
-    const [summary, accounts, budgets, recent] = await Promise.all([
+    const [summary, accounts, budgets, recent, lts] = await Promise.all([
       db.rpc("dashboard_summary", { p_month: month }),
       db.rpc("account_balances"),
       db.rpc("budget_status", { p_month: month }),
@@ -67,10 +77,29 @@
         .order("occurred_on", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(8),
+      db.rpc("left_to_spend", { p_month: month }),
     ]);
 
     for (const r of [summary, accounts, budgets, recent]) {
       if (r.error) { toast(r.error.message); return; }
+    }
+
+    // Left to spend: only shown once at least one budget is set.
+    const l = (!lts.error && lts.data && lts.data[0]) || null;
+    if (l && Number(l.budgeted) > 0) {
+      const left = Number(l.remaining);
+      $("ltsValue").textContent = money(left);
+      $("ltsValue").className = "lts-value " + (left < 0 ? "neg" : "pos");
+      $("ltsSub").textContent = left < 0
+        ? `${money(-left)} over your ${money(l.budgeted)} of budgets`
+        : `${money(l.spent)} spent of ${money(l.budgeted)} budgeted`;
+      const pct = Math.min(100, (Number(l.spent) / Number(l.budgeted)) * 100);
+      const bar = $("ltsBar");
+      bar.style.width = pct + "%";
+      bar.className = left < 0 ? "over" : "";
+      $("ltsCard").hidden = false;
+    } else {
+      $("ltsCard").hidden = true;
     }
 
     const s = summary.data[0] || { total_balance: 0, month_income: 0, month_expense: 0 };
