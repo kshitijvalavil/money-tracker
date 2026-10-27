@@ -1,8 +1,14 @@
 {% extends "base.html" %}
-{# Signed-in shell: sidebar nav + content area. Pages extend this. #}
+{# Signed-in shell: sidebar nav (desktop) + off-canvas drawer and bottom tab bar (mobile). #}
 {% block body %}
 <div class="app">
-  <aside class="sidebar">
+  <header class="topbar">
+    <button class="hamburger" id="menuBtn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">☰</button>
+    <div class="brand">💰 Money<span>Tracker</span></div>
+  </header>
+  <div class="scrim" id="scrim" hidden></div>
+
+  <aside class="sidebar" id="sidebar">
     <div class="brand">💰 Money<span>Tracker</span></div>
     <nav class="nav">
       <a href="/"             class="{{ 'active' if page=='dashboard' }}"><span class="ico">🏠</span> Dashboard</a>
@@ -22,13 +28,39 @@
       <button class="signout" id="signout">Sign out</button>
     </div>
   </aside>
+
   <main class="content">
     {% block content %}{% endblock %}
   </main>
+
+  <nav class="tabbar" aria-label="Primary">
+    <a href="/"             class="{{ 'active' if page=='dashboard' }}"><span class="ico">🏠</span><span class="lbl">Home</span></a>
+    <a href="/transactions" class="{{ 'active' if page=='transactions' }}"><span class="ico">↕️</span><span class="lbl">Txns</span></a>
+    <a href="/transactions" class="fab" aria-label="Add a transaction"><span class="ico">＋</span></a>
+    <a href="/bills"        class="{{ 'active' if page=='bills' }}"><span class="ico">🧾</span><span class="lbl">Bills</span></a>
+    <a href="/insights"     class="{{ 'active' if page=='insights' }}"><span class="ico">💡</span><span class="lbl">Insights</span></a>
+  </nav>
 </div>
 <script type="module">
   import { requireAuth, signOut, initThemeToggle, refreshImportsBadge, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
   document.querySelector(".nav a.active")?.setAttribute("aria-current", "page");
+  document.querySelector(".tabbar a.active")?.setAttribute("aria-current", "page");
+
+  // Mobile drawer: the hamburger opens the sidebar off-canvas; the scrim,
+  // Escape, or tapping a link closes it.
+  const sidebar = document.getElementById("sidebar");
+  const scrim = document.getElementById("scrim");
+  const menuBtn = document.getElementById("menuBtn");
+  const setDrawer = (open) => {
+    sidebar.classList.toggle("open", open);
+    scrim.hidden = !open;
+    menuBtn.setAttribute("aria-expanded", String(open));
+  };
+  menuBtn?.addEventListener("click", () => setDrawer(!sidebar.classList.contains("open")));
+  scrim?.addEventListener("click", () => setDrawer(false));
+  sidebar?.querySelectorAll(".nav a").forEach((a) => a.addEventListener("click", () => setDrawer(false)));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") setDrawer(false); });
+
   initThemeToggle(document.getElementById("themeToggle"),
                   document.getElementById("themeIcon"),
                   document.getElementById("themeLabel"));

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline — Money Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
+  <style>
+    :root { color-scheme: light dark; --bg: #f6f7f9; --ink: #141b2d; --muted: #6b7686; --brand: #2f5fe0; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0e1320; --ink: #e7ecf3; --muted: #9aa6b8; --brand: #5b82f0; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+           background: var(--bg); color: var(--ink); padding: 24px;
+           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    .card { max-width: 360px; text-align: center; }
+    .emoji { font-size: 3rem; }
+    h1 { font-size: 1.4rem; margin: 12px 0 8px; }
+    p { color: var(--muted); line-height: 1.5; margin: 0 0 20px; }
+    button { font: inherit; font-weight: 600; color: #fff; background: var(--brand); border: none;
+             border-radius: 10px; padding: 12px 20px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="emoji">📡</div>
+    <h1>You're offline</h1>
+    <p>Money Tracker needs a connection to load your latest numbers. Check your
+       network and try again — your data is safe.</p>
+    <button type="button" onclick="location.reload()">Try again</button>
+  </div>
+</body>
+</html>
