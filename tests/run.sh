@@ -61,3 +61,40 @@ if [ "$RACE1" -ne 0 ] || [ "$RACE2" -eq 0 ] || ! grep -q "already approved" "$TM
     exit 1
 fi
 echo "  double-approve race: second session refused (55000), 1 transaction"
+
+# ---- Recurring bills (0007): date math, posting, RLS ------------------------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres rec
+"${PSQL[@]}" -d rec \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/recurring_test.sql"
+
+# ---- post_due_recurring race: two sessions catch up the same bill at once ----
+# User R's bill has 5 missed occurrences. Session 1 posts them and holds its
+# transaction open; session 2 must wait on the row lock, then post 0 — never a
+# duplicate occurrence.
+POST_DUE="set role app_user; set request.jwt.claim.sub = '44444444-4444-4444-4444-444444444444';
+  select public.post_due_recurring('2025-01-29');"
+"${PSQL[@]}" -d rec -At -c "begin; $POST_DUE select pg_sleep(2); commit;" >"$TMP/rrace1.out" 2>&1 &
+RACE1=$!
+sleep 0.7
+set +e
+"${PSQL[@]}" -d rec -At -c "$POST_DUE" >"$TMP/rrace2.out" 2>&1
+RACE2=$?
+wait "$RACE1"; RACE1=$?
+set -e
+N="$("${PSQL[@]}" -d rec -At -c "select count(*) || '/' || count(distinct recurring_seq)
+    from public.transactions t join public.recurring r on r.id = t.recurring_id where r.name = 'Race gym'")"
+P1="$(grep -E '^[0-9]+$' "$TMP/rrace1.out" || true)"
+P2="$(grep -E '^[0-9]+$' "$TMP/rrace2.out" || true)"
+if [ "$RACE1" -ne 0 ] || [ "$RACE2" -ne 0 ] || [ "$P1" != 5 ] || [ "$P2" != 0 ] || [ "$N" != "5/5" ]; then
+    echo "POST_DUE RACE FAILED: session1=$RACE1 posted=$P1 session2=$RACE2 posted=$P2 rows/distinct=$N" >&2
+    cat "$TMP/rrace1.out" "$TMP/rrace2.out" >&2
+    exit 1
+fi
+echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 distinct occurrences"
+
+# ---- Subscription detection (0008): SQL agrees with bot/recurring.py --------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres sugg
+"${PSQL[@]}" -d sugg \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/suggest_recurring_test.sql"

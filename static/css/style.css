@@ -16,6 +16,10 @@
   --neg-bg: #fbe9e7;
   --radius: 14px;
   --shadow: 0 1px 3px rgba(20, 27, 45, 0.06), 0 8px 24px rgba(20, 27, 45, 0.05);
+  --btn: #2f5fe0;            /* white text 5.5:1 */
+  --btn-hover: #2449b8;
+  --toast-ok: #137a4b;
+  --toast-err: #c0392b;
   --badge-bg: #2f5fe0;
   --badge-ink: #ffffff;
   --skel: #eceef2;
@@ -40,6 +44,12 @@
   --neg: #f2695c;
   --neg-bg: #381f1d;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.4);
+  /* Buttons and toasts carry white text, so they stay dark enough for 4.5:1
+     (#3d64d8 is 5.2:1) while still standing out from the card (3.2:1). */
+  --btn: #3d64d8;
+  --btn-hover: #3559c9;
+  --toast-ok: #1f7a52;
+  --toast-err: #b8382c;
   /* Dark ink on the lighter dark-mode blue keeps the count above 4.5:1. */
   --badge-bg: #6f92f3;
   --badge-ink: #0e1320;
@@ -131,11 +141,11 @@ input:focus, select:focus { outline: 2px solid var(--brand-ring); border-color: 
 .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 
 .btn {
-  background: var(--brand); color: #fff; border: none; padding: 10px 20px;
+  background: var(--btn); color: #fff; border: none; padding: 10px 20px;
   border-radius: 10px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
   transition: background .15s;
 }
-.btn:hover { background: var(--brand-dark); }
+.btn:hover { background: var(--btn-hover); }
 .btn.ghost { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
 .btn.ghost:hover { background: var(--ghost-hover); }
 .btn.sm { padding: 6px 12px; font-size: 0.85rem; }
@@ -179,8 +189,8 @@ td.amt { text-align: right; font-weight: 600; white-space: nowrap; font-variant-
   font-size: 0.9rem; opacity: 0; pointer-events: none; transition: all .25s; z-index: 50;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast.error { background: var(--neg); }
-.toast.ok { background: var(--pos); }
+.toast.error { background: var(--toast-err); }
+.toast.ok { background: var(--toast-ok); }
 .notice { background: #fff8e1; border: 1px solid #ffe08a; color: #7a5b00;
           padding: 14px 18px; border-radius: 12px; margin-bottom: 20px; font-size: 0.9rem; }
 
@@ -222,12 +232,12 @@ td.amt { text-align: right; font-weight: 600; white-space: nowrap; font-variant-
 .theme-toggle:focus-visible, .signout:focus-visible {
   outline: 2px solid var(--brand); outline-offset: 2px;
 }
-.btn:disabled, .btn:disabled:hover { opacity: .55; cursor: not-allowed; background: var(--brand); }
+.btn:disabled, .btn:disabled:hover { opacity: .55; cursor: not-allowed; background: var(--btn); }
 .btn.ghost:disabled, .btn.ghost:disabled:hover { background: var(--bg); }
 /* Soft-disabled: still focusable/clickable so it can explain why (e.g. an
    import with no category of its kind); the click handler sends nothing. */
 .btn[data-needs-category], .btn[data-needs-category]:hover {
-  opacity: .55; cursor: not-allowed; background: var(--brand);
+  opacity: .55; cursor: not-allowed; background: var(--btn);
 }
 .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
 .icon-btn:disabled:hover { color: var(--muted); }
@@ -324,4 +334,112 @@ select:disabled { opacity: .6; cursor: not-allowed; }
   #rows .row-actions .icon-btn { min-width: 44px; min-height: 44px; margin: 0;
                                  border: 1px solid var(--line); }
   #rows .skeleton-row td:nth-child(n+4) { display: none; }
+}
+
+/* Bills (recurring) ------------------------------------------------------- */
+:root { --warn: #9a5b00; }
+:root[data-theme="dark"] { --warn: #f0b45a; }
+.page-sub { color: var(--muted); font-size: 0.92rem; margin-top: 2px; }
+.page-sub:empty { display: none; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline;
+             gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.card-head h2 { margin: 0; }
+.card-head h2:focus, #formTitle:focus { outline: none; }
+.card-link { color: var(--brand); font-weight: 600; font-size: 0.88rem; }
+.card-link:hover { text-decoration: underline; }
+.bills-lower { margin-top: 16px; align-items: start; }
+
+/* Long unbroken names (up to 80 chars) must wrap, not widen the page (SB-10). */
+.bill-name { font-weight: 600; overflow-wrap: anywhere; }
+.bill-meta { overflow-wrap: anywhere; }
+.bill-meta { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+.due { font-weight: 600; font-size: 0.9rem; }
+.due.overdue { color: var(--neg); }
+.due.soon { color: var(--warn); }
+.due.later { color: var(--ink); }
+.due.paused { color: var(--muted); }
+#billRows tr.paused td:not(.row-actions) { opacity: .6; }
+#billRows tr td { transition: opacity .2s; }
+#billRows tr.busy td { opacity: .6; }
+
+/* Text-style buttons for secondary row actions */
+.link-btn {
+  background: none; border: none; cursor: pointer; font: inherit; font-size: 0.85rem;
+  font-weight: 600; color: var(--brand); padding: 6px 6px; min-height: 32px; border-radius: 8px;
+}
+.link-btn:hover:not(:disabled) { background: var(--brand-soft); }
+.link-btn.danger { color: var(--neg); }
+.link-btn.danger:hover:not(:disabled) { background: var(--neg-bg); }
+.link-btn:disabled { opacity: .5; cursor: not-allowed; }
+.link-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.more-actions { display: inline-flex; gap: 2px; margin-left: 4px; }
+#billRows .row-actions .btn { margin-left: 4px; }
+
+/* Switch (a checkbox with role="switch") */
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; margin: 0;
+          font-size: 0.85rem; color: var(--muted); font-weight: 600; position: relative; }
+.switch input { position: absolute; opacity: 0; width: 40px; height: 24px; margin: 0; cursor: pointer; }
+.switch-ui { width: 40px; height: 24px; border-radius: 999px; background: var(--line);
+             border: 1px solid var(--muted); position: relative; transition: background .15s; flex: none; }
+.switch-ui::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+                    border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.25);
+                    transition: transform .15s; }
+.switch input:checked + .switch-ui { background: var(--brand); border-color: var(--brand); }
+.switch input:checked + .switch-ui::after { transform: translateX(16px); }
+.switch input:focus-visible + .switch-ui { outline: 2px solid var(--brand); outline-offset: 2px; }
+.switch input:disabled + .switch-ui { opacity: .5; }
+
+/* Form bits */
+.field-help { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+.field-error { font-size: 0.8rem; color: var(--neg); font-weight: 600; margin-top: 4px; }
+.field-error[hidden] { display: none; }
+.field-warn { font-size: 0.8rem; color: var(--warn); font-weight: 600; margin-top: 4px; }
+.field-warn:empty { display: none; }
+input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--neg); }
+.check-field { display: flex; gap: 10px; align-items: flex-start; }
+.check-field input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; flex: none;
+                                      accent-color: var(--brand); }
+.check-label { color: var(--ink); font-size: 0.92rem; margin: 0; cursor: pointer; }
+.form-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Suggestions + dashboard upcoming list */
+.suggest-list, .bill-list { list-style: none; }
+.suggest, .bill-item { display: flex; align-items: center; gap: 12px; padding: 12px 0;
+                       border-bottom: 1px solid var(--line); }
+.suggest:last-child, .bill-item:last-child { border-bottom: none; }
+.suggest-text, .bill-main { flex: 1; min-width: 0; }
+.suggest-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.suggest-empty, .empty-item { color: var(--muted); font-size: 0.9rem; padding: 12px 0; display: block; }
+.bill-item .amt { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bill-item .skel { flex: 1; }
+
+/* Phone: each bill becomes a stacked card (like imports) */
+@media (max-width: 640px) {
+  #billsTable, #billsTable tbody { display: block; }
+  #billsTable thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  #billRows tr[data-id] {
+    display: grid; grid-template-columns: 1fr auto;
+    grid-template-areas: "bill amt" "due auto" "act act";
+    gap: 10px 12px; padding: 14px 4px; border-bottom: 1px solid var(--line);
+  }
+  #billRows tr[data-id]:last-child { border-bottom: none; }
+  #billRows tr[data-id] td { display: block; padding: 0; border: none; }
+  #billRows .c-bill { grid-area: bill; min-width: 0; }
+  #billRows .amt { grid-area: amt; }
+  #billRows .c-due { grid-area: due; }
+  #billRows .c-auto { grid-area: auto; align-self: end; }
+  #billRows .cell-label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--muted);
+                          text-transform: uppercase; letter-spacing: .02em; margin-bottom: 2px; }
+  #billRows tr[data-id] td.row-actions { grid-area: act; display: flex; flex-wrap: wrap; gap: 8px;
+                                         text-align: left; white-space: normal; }
+  #billRows .row-actions .btn { margin: 0; flex: 1; padding: 10px 12px; font-size: 0.95rem; min-height: 44px; }
+  #billRows .more-actions { flex-basis: 100%; margin: 0; justify-content: space-between; }
+  #billRows .more-actions .link-btn { flex: 1; min-height: 44px; border: 1px solid var(--line); }
+  #billRows .skeleton-row td:nth-child(n+3) { display: none; }
+  .suggest, .bill-item { flex-wrap: wrap; }
+  .bill-item .mark-paid { flex-basis: 100%; min-height: 44px; }
+  .suggest-actions { flex-basis: 100%; justify-content: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .switch-ui, .switch-ui::after, #billRows tr td { transition: none; }
 }
