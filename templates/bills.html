@@ -9,6 +9,25 @@
   <button class="btn" id="addBillBtn" type="button">Add bill</button>
 </div>
 
+<div class="card capture-card" id="captureCard">
+  <h2>Snap a bill</h2>
+  <p class="card-intro">Drop or choose a photo of a bill and we'll read the details into the form below.
+    On your phone you can take a photo right now. Check everything, then add it.</p>
+  <div class="dropzone" id="dropzone" tabindex="0" role="button"
+       aria-label="Add a bill photo" aria-describedby="captureHelp">
+    <div class="dz-icon" aria-hidden="true">📸</div>
+    <div class="dz-text"><strong>Drop a bill photo here</strong><span>or use the buttons below</span></div>
+    <div class="dz-actions">
+      <button class="btn ghost sm" type="button" id="pickBtn">Choose file</button>
+      <button class="btn ghost sm" type="button" id="cameraBtn">Take photo</button>
+    </div>
+    <input type="file" id="fileInput" accept="image/jpeg,image/png" hidden>
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+  </div>
+  <div id="captureHelp" class="field-help">JPEG or PNG. The photo is read once and never stored.</div>
+  <div class="capture-status" id="captureStatus" role="status" aria-live="polite" hidden></div>
+</div>
+
 <div class="card">
   <div class="card-head">
     <h2 id="billsHeading" tabindex="-1">Your bills</h2>
@@ -99,7 +118,7 @@
 
 {% block page_script %}
 <script type="module">
-  import { db, money, esc, toast, today, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
+  import { db, money, esc, toast, today, postDueBills, DEMO } from "{{ url_for('static', filename='js/app.js') }}";
   import { occurrence, firstSeqOnOrAfter, addDays, perMonth, dueLabel, shortDate, FREQ_LABEL, normaliseName,
     tidyName, MIN_SUGGEST_CONFIDENCE }
     from "{{ url_for('static', filename='js/recurring.js') }}";
@@ -605,6 +624,123 @@
       };
     });
   }
+
+  // --- Snap a bill (read a photo into the form) ----------------------------
+  const MAX_DIM = 1600;        // longest edge we upload; keeps data and tokens down
+
+  // Shrink a photo in the browser before upload, as a JPEG data URL.
+  function downscale(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const scale = Math.min(1, MAX_DIM / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        resolve({ b64: dataUrl.split(",")[1] || "", mime: "image/jpeg" });
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("unreadable image")); };
+      img.src = url;
+    });
+  }
+
+  function setCaptureStatus(msg, kind) {
+    const el = $("captureStatus");
+    el.hidden = !msg;
+    el.textContent = msg || "";
+    el.className = "capture-status" + (kind ? " " + kind : "");
+  }
+
+  // Map a read result onto the Add-a-bill form for the person to check.
+  function applyRead(out) {
+    resetForm();
+    const type = out.type === "income" ? "income" : "expense";
+    let categoryId = "";
+    if (out.category_guess) {
+      const want = String(out.category_guess).trim().toLowerCase();
+      const hit = categories.find((c) => c.kind === type && c.name.toLowerCase() === want)
+               || categories.find((c) => c.kind === type && c.name.toLowerCase().includes(want));
+      if (hit) categoryId = hit.id;
+    }
+    fill({
+      name: out.name || "",
+      type,
+      amount: out.amount != null ? out.amount : "",
+      category_id: categoryId,
+      frequency: out.frequency_guess || "monthly",
+      start_date: out.date || today(),
+      auto_post: false,
+    });
+    $("formIntro").textContent = "Read from your photo. Check the details — especially the amount and date — then add it.";
+    focusForm();
+    const miss = [];
+    if (out.amount == null) miss.push("amount");
+    if (!out.date) miss.push("due date");
+    const lowConf = typeof out.confidence === "number" && out.confidence < 0.5;
+    setCaptureStatus(
+      (miss.length ? `Filled what I could — please add the ${miss.join(" and ")}.`
+                   : "Filled in from your photo — check it over.")
+      + (lowConf ? " (I wasn't fully sure, so double-check it.)" : ""),
+      miss.length || lowConf ? "warn" : "ok");
+  }
+
+  async function readBillImage(file) {
+    if (!file) return;
+    if (!/^image\//.test(file.type || "")) {
+      setCaptureStatus("That's not an image. Use a JPEG or PNG photo.", "err");
+      return;
+    }
+    if (!categories.length) { try { await loadLists(); } catch (e) {} }
+    setCaptureStatus("Reading the bill…");
+    $("dropzone").classList.add("busy");
+    try {
+      const { b64, mime } = await downscale(file);
+      const headers = { "content-type": "application/json" };
+      if (!DEMO) {
+        try {
+          const { data } = await db.auth.getSession();
+          if (data?.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+        } catch (e) {}
+      }
+      const resp = await fetch("/api/read-bill", { method: "POST", headers, body: JSON.stringify({ image: b64, mime }) });
+      const out = await resp.json().catch(() => ({}));
+      if (!resp.ok) { setCaptureStatus(out.error || "Couldn't read that bill. Try a clearer photo.", "err"); return; }
+      applyRead(out);
+    } catch (e) {
+      setCaptureStatus("Couldn't read that image. Try another photo.", "err");
+    } finally {
+      $("dropzone").classList.remove("busy");
+    }
+  }
+
+  (function wireCapture() {
+    const dz = $("dropzone"), fileInput = $("fileInput"), cameraInput = $("cameraInput");
+    if (!dz) return;
+    $("pickBtn").onclick = () => fileInput.click();
+    $("cameraBtn").onclick = () => cameraInput.click();
+    fileInput.onchange = () => { readBillImage(fileInput.files[0]); fileInput.value = ""; };
+    cameraInput.onchange = () => { readBillImage(cameraInput.files[0]); cameraInput.value = ""; };
+    // Click the zone itself (not its buttons) to choose a file.
+    dz.addEventListener("click", (e) => {
+      if (e.target.closest("button")) return;
+      fileInput.click();
+    });
+    dz.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
+    });
+    ["dragenter", "dragover"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("dragover"); }));
+    ["dragleave", "drop"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); if (ev !== "drop") dz.classList.remove("dragover"); }));
+    dz.addEventListener("drop", (e) => {
+      dz.classList.remove("dragover");
+      const f = e.dataTransfer?.files?.[0];
+      if (f) readBillImage(f);
+    });
+  })();
 
   if (db) {
     resetForm();

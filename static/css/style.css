@@ -526,3 +526,24 @@ ol.rank li::before { content: counter(rank); color: var(--muted); font-weight: 7
 .rank-meta { font-weight: 600; white-space: nowrap; }
 
 @media (max-width: 640px) { .mom { grid-template-columns: 1fr; gap: 10px; } }
+
+/* --- Snap a bill: photo capture on the Bills page ----------------------- */
+.dropzone {
+  margin-top: 12px; padding: 20px 16px; border: 2px dashed var(--line); border-radius: var(--radius);
+  background: var(--panel-2, var(--bg)); cursor: pointer; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  transition: border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone:focus-visible { border-color: var(--brand); background: var(--brand-soft); }
+.dropzone:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.dropzone.dragover { border-color: var(--brand); background: var(--brand-soft); }
+.dropzone.busy { opacity: .7; pointer-events: none; }
+.dz-icon { font-size: 30px; line-height: 1; }
+.dz-text { display: flex; flex-direction: column; gap: 2px; }
+.dz-text strong { font-size: 15px; }
+.dz-text span { color: var(--muted); font-size: 13px; }
+.dz-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.capture-status { margin-top: 10px; font-size: 13px; border-radius: 10px; padding: 8px 10px; }
+.capture-status.ok { color: var(--pos); background: var(--pos-bg); }
+.capture-status.warn { color: var(--brand-dark); background: var(--brand-soft); }
+.capture-status.err { color: var(--neg); background: var(--neg-bg); }
