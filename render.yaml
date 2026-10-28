@@ -17,3 +17,10 @@ services:
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
+      # For "Snap a bill": the server reads a bill photo with Claude's vision
+      # model. Set this in the Render UI; until then the feature returns a
+      # friendly "not switched on yet" message. BILL_MODEL is optional.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: BILL_MODEL
+        sync: false

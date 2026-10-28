@@ -6,7 +6,9 @@ server never holds your database password or sees your data.
 """
 import os
 
-from flask import Flask, render_template
+from flask import Flask, jsonify, render_template, request
+
+from billreader import BillReadError, read_bill
 
 
 def _load_dotenv(path=".env"):
@@ -25,6 +27,10 @@ def _load_dotenv(path=".env"):
 _load_dotenv()
 
 app = Flask(__name__)
+
+# A read-bill upload is a downscaled photo; cap the request so a huge body
+# can't tie up the server. The browser shrinks photos well below this.
+app.config["MAX_CONTENT_LENGTH"] = 12 * 1024 * 1024
 
 # Public Supabase settings, injected into every page. The anon key is designed
 # to be shipped to browsers; it is safe to expose. Never put the service_role
@@ -111,6 +117,28 @@ def service_worker():
     resp.headers["Service-Worker-Allowed"] = "/"
     resp.headers["Cache-Control"] = "no-cache"
     return resp
+
+
+@app.route("/api/read-bill", methods=["POST"])
+def api_read_bill():
+    # Reads a bill photo into form fields. The image is used for this one call
+    # and never stored. Demo mode returns a fixed sample and needs no key.
+    data = request.get_json(silent=True) or {}
+    # Guard the paid vision call behind a signed-in session (the browser sends
+    # its Supabase access token); demo mode is open so the demo works with no login.
+    if not DEMO_MODE and not request.headers.get("Authorization"):
+        return jsonify({"error": "Please sign in and try again."}), 401
+    try:
+        fields = read_bill(
+            data.get("image") or "",
+            data.get("mime") or "",
+            demo=DEMO_MODE,
+            api_key=os.environ.get("ANTHROPIC_API_KEY"),
+            model=os.environ.get("BILL_MODEL"),
+        )
+    except BillReadError as e:
+        return jsonify({"error": e.message}), e.status
+    return jsonify(fields)
 
 
 @app.route("/healthz")
