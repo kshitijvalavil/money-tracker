@@ -1,60 +1,63 @@
-/* Money Tracker — calm, uncluttered styling. */
+/* Money Tracker — calm, classy styling (Sprint 6 redesign).
+   Two palettes approved by Boss: a warm "daylight" light theme, and a rich
+   near-black dark theme with a dark-teal accent. The whole app is themed
+   through these tokens, so pages inherit the look without markup changes. */
 :root {
-  --bg: #f6f7f9;
+  --bg: #f3f4f2;            /* warm off-white, not a blinding white */
   --surface: #ffffff;
-  --ink: #141b2d;
-  --muted: #6b7686;
-  --line: #e9ecf1;
-  --brand: #2f5fe0;
-  --brand-dark: #2449b8;
-  --brand-soft: #eef2fd;
-  --brand-ring: #c9d6fb;
-  --ghost-hover: #eceef2;
-  --pos: #137a4b;
-  --pos-bg: #e5f4ec;
-  --neg: #c0392b;
-  --neg-bg: #fbe9e7;
-  --radius: 14px;
-  --shadow: 0 1px 3px rgba(20, 27, 45, 0.06), 0 8px 24px rgba(20, 27, 45, 0.05);
-  --btn: #2f5fe0;            /* white text 5.5:1 */
-  --btn-hover: #2449b8;
-  --toast-ok: #137a4b;
-  --toast-err: #c0392b;
-  --badge-bg: #2f5fe0;
+  --ink: #14181f;
+  --muted: #5f6672;
+  --line: #e7e8e3;
+  --brand: #2f6bff;         /* accent for links, active nav, icons */
+  --brand-dark: #2457d6;
+  --brand-soft: #eaf0ff;    /* tint behind the active nav item */
+  --brand-ring: #c4d6ff;
+  --ghost-hover: #eceef0;
+  --pos: #0e9f6e;
+  --pos-bg: #e4f6ee;
+  --neg: #d64540;
+  --neg-bg: #fbe9e8;
+  --radius: 16px;
+  --shadow: 0 1px 2px rgba(20, 24, 31, 0.05), 0 10px 30px rgba(20, 24, 31, 0.06);
+  --btn: #2457d6;           /* darker than the accent so white text clears AA */
+  --btn-hover: #1e49b8;
+  --toast-ok: #0e9f6e;
+  --toast-err: #d64540;
+  --badge-bg: #2457d6;
   --badge-ink: #ffffff;
-  --skel: #eceef2;
+  --skel: #eceef0;
   --skel-hi: #f6f7f9;
 }
 
-/* Night theme. Applied via data-theme="dark" on <html> (set early in base.html
-   to avoid a flash), either from the user's saved choice or their OS setting. */
+/* Night theme — Boss's palette: rich black base, off-white text, dark-teal
+   accent. The accent token is a brighter teal (#5cc0d6) so links, the active
+   nav and icons stay legible on black; the deep teal #004d61 is the button
+   fill, where it carries off-white text at strong contrast. Applied via
+   data-theme="dark" on <html> (set early in base.html to avoid a flash). */
 :root[data-theme="dark"] {
-  --bg: #0e1320;
-  --surface: #161d2d;
-  --ink: #e7ecf3;
-  --muted: #9aa6b8;
-  --line: #273041;
-  --brand: #5b82f0;
-  --brand-dark: #6f92f3;
-  --brand-soft: #1b2640;
-  --brand-ring: #33498c;
-  --ghost-hover: #1f283a;
-  --pos: #3ecf8e;
-  --pos-bg: #13301f;
-  --neg: #f2695c;
-  --neg-bg: #381f1d;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.4);
-  /* Buttons and toasts carry white text, so they stay dark enough for 4.5:1
-     (#3d64d8 is 5.2:1) while still standing out from the card (3.2:1). */
-  --btn: #3d64d8;
-  --btn-hover: #3559c9;
+  --bg: #1a1a1a;
+  --surface: #232323;
+  --ink: #f0f0f0;
+  --muted: #a2a2a2;
+  --line: #383838;
+  --brand: #5cc0d6;
+  --brand-dark: #7ad0e2;
+  --brand-soft: #10272e;
+  --brand-ring: #0e4a57;
+  --ghost-hover: #2c2c2c;
+  --pos: #58c98d;
+  --pos-bg: #15301f;
+  --neg: #f0766a;
+  --neg-bg: #37201e;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
+  --btn: #004d61;           /* Boss's dark teal; off-white text ~8:1 */
+  --btn-hover: #0a5e74;
   --toast-ok: #1f7a52;
   --toast-err: #b8382c;
-  /* Dark ink on the lighter dark-mode blue keeps the count above 4.5:1. */
-  --badge-bg: #6f92f3;
-  --badge-ink: #0e1320;
-  --skel: #222b3d;
-  --skel-hi: #2b3549;
+  --badge-bg: #004d61;
+  --badge-ink: #f0f0f0;
+  --skel: #2a2a2a;
+  --skel-hi: #333333;
 }
 
 html { color-scheme: light; }
@@ -95,7 +98,11 @@ a { color: inherit; text-decoration: none; }
 }
 .nav a:hover { background: var(--bg); color: var(--ink); }
 .nav a.active { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
-.nav .ico { width: 18px; text-align: center; }
+.nav .ico { width: 20px; display: inline-flex; align-items: center; justify-content: center; }
+.nav .ico svg { width: 19px; height: 19px; }
+.theme-toggle .ico { display: inline-flex; }
+.theme-toggle .ico svg { width: 18px; height: 18px; }
+.hamburger svg { display: block; }
 .sidebar .bottom { margin-top: auto; }
 .signout {
   width: 100%; text-align: left; background: none; border: none; cursor: pointer;
@@ -224,12 +231,14 @@ td.amt { text-align: right; font-weight: 600; white-space: nowrap; font-variant-
             padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)); }
   .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center;
               gap: 2px; color: var(--muted); font-size: 0.68rem; font-weight: 600;
-              min-width: 56px; min-height: 48px; border-radius: 10px; }
+              flex: 1 1 0; min-width: 0; min-height: 48px; border-radius: 10px; padding: 0 2px; }
   .tabbar a.active { color: var(--brand); }
-  .tabbar a .ico { font-size: 1.15rem; line-height: 1; }
-  .tabbar a.fab { background: var(--brand); color: #fff; width: 52px; height: 52px; min-width: 52px;
-                  border-radius: 50%; margin-top: -20px; box-shadow: 0 4px 12px rgba(47, 95, 224, .45); }
-  .tabbar a.fab .ico { font-size: 1.6rem; }
+  .tabbar a .ico { line-height: 1; display: inline-flex; }
+  .tabbar a .ico svg { width: 22px; height: 22px; }
+  .tabbar a .lbl { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabbar a.fab { flex: 0 0 auto; background: var(--btn); color: #fff; width: 52px; height: 52px; min-width: 52px;
+                  border-radius: 50%; margin-top: -20px; box-shadow: 0 4px 12px rgba(0, 0, 0, .28); }
+  .tabbar a.fab .ico svg { width: 26px; height: 26px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
