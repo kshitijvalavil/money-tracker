@@ -11,7 +11,7 @@ from collections import defaultdict, deque
 
 from flask import Flask, jsonify, render_template, request
 
-from billreader import BillReadError, read_bill
+from billreader import BillReadError, parse_bill_text, read_bill
 
 
 def _load_dotenv(path=".env"):
@@ -213,6 +213,23 @@ def api_read_bill():
     except BillReadError as e:
         return jsonify({"error": e.message}), e.status
     return jsonify(fields)
+
+
+@app.route("/api/parse-bill-text", methods=["POST"])
+def api_parse_bill_text():
+    # The FREE path: the browser does open-source OCR on the photo and sends the
+    # text here; we extract the fields with no API call and no cost. Light rate
+    # limit to stop abuse; no key needed because nothing paid happens here.
+    if _rate_limited("parse:" + _client_ip()):
+        resp = jsonify({"error": "Too many reads just now. Please wait a moment and try again."})
+        resp.headers["Retry-After"] = str(_RL_WINDOW)
+        return resp, 429
+    data = request.get_json(silent=True) or {}
+    text = data.get("text") or ""
+    if not isinstance(text, str) or not text.strip():
+        return jsonify({"error": "No text was read from the photo. Try a clearer, straight-on shot."}), 400
+    # The form only needs a little text; ignore anything huge.
+    return jsonify(parse_bill_text(text[:20000]))
 
 
 @app.route("/healthz")

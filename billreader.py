@@ -117,6 +117,155 @@ def _call_model(body, api_key, timeout):
         raise BillReadError(504, "Reading the bill timed out. Check your connection and try again.")
 
 
+# ---------------------------------------------------------------------------
+# Free, on-device path: the browser reads the photo's text with open-source OCR
+# (Tesseract.js) and sends us the plain text. We extract the fields here with
+# deterministic rules — no API, no key, no per-use cost. Lower accuracy than the
+# vision model, so the form is only pre-filled and the person confirms it.
+# ---------------------------------------------------------------------------
+_MONTHS = {m: i for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun",
+     "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+
+# Total-style labels, most specific first so "grand total" beats a bare "total".
+_TOTAL_LABELS = (
+    r"(?:grand\s*total|amount\s*due|total\s*due|amount\s*payable|balance\s*due|"
+    r"total\s*amount|amount\s*paid|total\s*paid|net\s*payable|total)")
+_CURRENCY = r"(?:₹|rs\.?|inr|\$)"
+
+_CATEGORY_HINTS = [
+    (r"electric|power|energy|utilit", "Utilities"),
+    (r"water|sewage", "Utilities"),
+    (r"\bgas\b|lpg|cylinder", "Utilities"),
+    (r"internet|broadband|wi-?fi|fibre|fiber", "Internet"),
+    (r"mobile|postpaid|prepaid|recharge|airtime|telecom", "Phone"),
+    (r"\brent\b|lease", "Rent"),
+    (r"insurance|premium|policy", "Insurance"),
+    (r"netflix|prime|spotify|hotstar|youtube|subscription", "Subscriptions"),
+    (r"gym|fitness|clinic|hospital|pharmac", "Health"),
+    (r"loan|\bemi\b|credit\s*card", "Loan"),
+]
+_FREQ_HINTS = [
+    (r"per\s*week|weekly", "weekly"),
+    (r"per\s*month|monthly|/mo\b", "monthly"),
+    (r"quarter", "quarterly"),
+    (r"per\s*year|yearly|annual", "yearly"),
+]
+
+
+def _iso(y, mo, d):
+    from datetime import date
+    try:
+        return date(y, mo, d).isoformat()
+    except ValueError:
+        return None
+
+
+def _bill_amount(text):
+    # Prefer a number sitting next to a total-style label.
+    near = re.finditer(_TOTAL_LABELS + r"[^\d₹$]{0,15}" + _CURRENCY + r"?\s*([\d,]+(?:\.\d{1,2})?)",
+                       text, re.I)
+    for m in near:
+        try:
+            v = float(m.group(1).replace(",", ""))
+        except ValueError:
+            continue
+        if 0 < v <= MAX_AMOUNT:
+            return v
+    # Else the largest currency-tagged amount (a bill's total is usually biggest).
+    tagged = []
+    for m in re.finditer(_CURRENCY + r"\s*([\d,]+(?:\.\d{1,2})?)", text, re.I):
+        try:
+            tagged.append(float(m.group(1).replace(",", "")))
+        except ValueError:
+            pass
+    tagged = [v for v in tagged if 0 < v <= MAX_AMOUNT]
+    if tagged:
+        return max(tagged)
+    # Else the largest bare 2-decimal number.
+    bare = []
+    for m in re.finditer(r"\b(\d[\d,]*\.\d{2})\b", text):
+        try:
+            bare.append(float(m.group(1).replace(",", "")))
+        except ValueError:
+            pass
+    bare = [v for v in bare if 0 < v <= MAX_AMOUNT]
+    return max(bare) if bare else None
+
+
+def _bill_name(lines):
+    skip = re.compile(
+        r"(invoice|receipt|^bill\b|tax|gst|total|amount|date|due|order\s*no|"
+        r"customer|qty|description|subtotal|www\.|@|http)", re.I)
+    for ln in lines:
+        s = ln.strip(" .:-|")
+        if len(s) < 3 or s[0].isdigit():
+            continue
+        if len(re.sub(r"[^A-Za-z]", "", s)) < 3:
+            continue
+        if skip.search(s):
+            continue
+        return s[:80]
+    return (lines[0].strip()[:80] if lines else "")
+
+
+def _bill_date(text):
+    m = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
+    if m:
+        return _iso(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    m = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b", text)
+    if m:
+        d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if y < 100:
+            y += 2000
+        if mo > 12 and d <= 12:  # clearly month-first; swap to day-first
+            d, mo = mo, d
+        return _iso(y, mo, d)
+    m = re.search(r"\b(\d{1,2})\s+([A-Za-z]{3,9})\.?\s+(\d{4})\b", text)
+    if m:
+        mo = _MONTHS.get(m.group(2)[:3].lower())
+        if mo:
+            return _iso(int(m.group(3)), mo, int(m.group(1)))
+    m = re.search(r"\b([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{4})\b", text)
+    if m:
+        mo = _MONTHS.get(m.group(1)[:3].lower())
+        if mo:
+            return _iso(int(m.group(3)), mo, int(m.group(2)))
+    return None
+
+
+def _first_hint(text, hints):
+    for pat, value in hints:
+        if re.search(pat, text, re.I):
+            return value
+    return None
+
+
+def parse_bill_text(text):
+    """Extract form-ready bill fields from OCR text. Free and deterministic;
+    never raises — unreadable text just yields mostly-empty fields the person
+    can fill in. Returns the same shape as read_bill, with "ocr": True."""
+    text = (text or "").replace("\r", "\n")
+    lines = [ln for ln in text.split("\n") if ln.strip()]
+
+    low = text.lower()
+    typ = "income" if re.search(r"payslip|salary|credited|payment received", low) else "expense"
+
+    result = _clean({
+        "name": _bill_name(lines),
+        "amount": _bill_amount(text),
+        "type": typ,
+        "date": _bill_date(text),
+        "category_guess": _first_hint(low, _CATEGORY_HINTS),
+        "frequency_guess": _first_hint(low, _FREQ_HINTS),
+    })
+    conf = 0.25 + (0.35 if result["amount"] is not None else 0) + \
+        (0.2 if result["name"] else 0) + (0.1 if result["date"] else 0)
+    result["confidence"] = round(min(conf, 0.95), 2)
+    result["ocr"] = True
+    return result
+
+
 def read_bill(image_b64, mime, *, demo=False, api_key=None, model=None, timeout=30):
     """Return form-ready fields read from a base64 image, or raise BillReadError."""
     if demo:
