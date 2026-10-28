@@ -642,7 +642,7 @@
         canvas.width = w; canvas.height = h;
         canvas.getContext("2d").drawImage(img, 0, 0, w, h);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-        resolve({ b64: dataUrl.split(",")[1] || "", mime: "image/jpeg" });
+        resolve({ b64: dataUrl.split(",")[1] || "", mime: "image/jpeg", dataUrl });
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("unreadable image")); };
       img.src = url;
@@ -689,6 +689,40 @@
       miss.length || lowConf ? "warn" : "ok");
   }
 
+  // Load Tesseract.js (open-source OCR) lazily — only when a photo is first read.
+  let _ocrLib = null;
+  function loadOcr() {
+    if (_ocrLib) return _ocrLib;
+    _ocrLib = new Promise((resolve, reject) => {
+      if (window.Tesseract) return resolve(window.Tesseract);
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+      s.async = true;
+      s.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error("ocr unavailable"));
+      s.onerror = () => reject(new Error("ocr unavailable"));
+      document.head.appendChild(s);
+    });
+    return _ocrLib;
+  }
+
+  // Read the bill's text on the device — free, and the photo never leaves it.
+  async function ocrText(image) {
+    const T = await loadOcr();
+    const worker = await T.createWorker("eng", 1, {
+      logger: (m) => {
+        if (m.status === "recognizing text") {
+          setCaptureStatus(`Reading the bill… ${Math.round((m.progress || 0) * 100)}%`);
+        }
+      },
+    });
+    try {
+      const { data } = await worker.recognize(image);
+      return (data && data.text) || "";
+    } finally {
+      try { await worker.terminate(); } catch (e) {}
+    }
+  }
+
   async function readBillImage(file) {
     if (!file) return;
     if (!/^image\//.test(file.type || "")) {
@@ -699,20 +733,35 @@
     setCaptureStatus("Reading the bill…");
     $("dropzone").classList.add("busy");
     try {
-      const { b64, mime } = await downscale(file);
-      const headers = { "content-type": "application/json" };
-      if (!DEMO) {
-        try {
-          const { data } = await db.auth.getSession();
-          if (data?.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
-        } catch (e) {}
+      if (DEMO) {
+        // Demo mode returns a fixed sample so the flow works without a real photo.
+        const resp = await fetch("/api/read-bill", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ image: "demo", mime: "image/jpeg" }),
+        });
+        const out = await resp.json().catch(() => ({}));
+        if (!resp.ok) { setCaptureStatus(out.error || "Couldn't read that bill.", "err"); return; }
+        applyRead(out);
+        return;
       }
-      const resp = await fetch("/api/read-bill", { method: "POST", headers, body: JSON.stringify({ image: b64, mime }) });
+      // Live path: free on-device OCR → our parser. No API key, no cost.
+      const { dataUrl } = await downscale(file);
+      let text;
+      try {
+        text = await ocrText(dataUrl);
+      } catch (e) {
+        setCaptureStatus("Couldn't start the photo reader (check your connection). Please fill the form in below.", "warn");
+        return;
+      }
+      const resp = await fetch("/api/parse-bill-text", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
       const out = await resp.json().catch(() => ({}));
-      if (!resp.ok) { setCaptureStatus(out.error || "Couldn't read that bill. Try a clearer photo.", "err"); return; }
+      if (!resp.ok) { setCaptureStatus(out.error || "Couldn't read enough off that photo. Please fill it in below.", "warn"); return; }
       applyRead(out);
     } catch (e) {
-      setCaptureStatus("Couldn't read that image. Try another photo.", "err");
+      setCaptureStatus("Couldn't read that image. Try another photo, or fill it in below.", "err");
     } finally {
       $("dropzone").classList.remove("busy");
     }

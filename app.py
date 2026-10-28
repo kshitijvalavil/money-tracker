@@ -50,16 +50,19 @@ DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
 # for the pre-paint theme and config bootstrap, so they are allowed; everything
 # external is blocked. frame-ancestors 'none' also stops click-jacking.
 _SUPABASE_HOST = (SUPABASE_URL or "").rstrip("/")
-_CONNECT = " ".join(x for x in ["'self'", _SUPABASE_HOST,
-                                "https://*.supabase.co", "wss://*.supabase.co"] if x)
+# Open-source OCR (Tesseract.js) for the free Snap-a-bill path loads its script,
+# worker and language data from these CDNs in the browser.
+_OCR_CDNS = "https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com"
+_CONNECT = " ".join(x for x in ["'self'", _SUPABASE_HOST, "https://*.supabase.co",
+                                "wss://*.supabase.co", _OCR_CDNS] if x)
 _CSP = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "
+    f"script-src 'self' 'unsafe-inline' blob: {_OCR_CDNS}; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data: blob:; "
     "font-src 'self'; "
     f"connect-src {_CONNECT}; "
-    "worker-src 'self'; "
+    "worker-src 'self' blob:; "
     "manifest-src 'self'; "
     "object-src 'none'; "
     "base-uri 'self'; "
