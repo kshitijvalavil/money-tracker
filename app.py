@@ -5,6 +5,9 @@ browser (auth + data), protected by Row Level Security in the database, so this
 server never holds your database password or sees your data.
 """
 import os
+import threading
+import time
+from collections import defaultdict, deque
 
 from flask import Flask, jsonify, render_template, request
 
@@ -41,6 +44,73 @@ SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 # Demo mode: try the UI with fake in-memory data and no login. Turn it on with
 # DEMO_MODE=1. Never enable it for real use — it stores nothing.
 DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
+
+# Content-Security-Policy. The app loads only its own files; the one cross-origin
+# talker is Supabase (REST + realtime websocket). Inline <script>/<style> are used
+# for the pre-paint theme and config bootstrap, so they are allowed; everything
+# external is blocked. frame-ancestors 'none' also stops click-jacking.
+_SUPABASE_HOST = (SUPABASE_URL or "").rstrip("/")
+_CONNECT = " ".join(x for x in ["'self'", _SUPABASE_HOST,
+                                "https://*.supabase.co", "wss://*.supabase.co"] if x)
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "font-src 'self'; "
+    f"connect-src {_CONNECT}; "
+    "worker-src 'self'; "
+    "manifest-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+_SECURITY_HEADERS = {
+    "Content-Security-Policy": _CSP,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    # Tell browsers to stick to HTTPS for a year (Render serves the app over TLS).
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+}
+
+
+@app.after_request
+def set_security_headers(resp):
+    for name, value in _SECURITY_HEADERS.items():
+        resp.headers.setdefault(name, value)
+    return resp
+
+
+# Lightweight in-memory rate limit for the paid vision endpoint, so a single
+# client cannot run up the bill (or hammer the server). Per-process, which is
+# enough as a first guard; keyed by the caller's IP.
+_RL_LOCK = threading.Lock()
+_RL_HITS = defaultdict(deque)
+_RL_MAX = int(os.environ.get("READ_BILL_RATE_MAX", "20"))   # requests...
+_RL_WINDOW = int(os.environ.get("READ_BILL_RATE_WINDOW", "60"))  # ...per this many seconds
+
+
+def _client_ip():
+    # Render puts the real client first in X-Forwarded-For; fall back to the peer.
+    fwd = request.headers.get("X-Forwarded-For", "")
+    return fwd.split(",")[0].strip() if fwd else (request.remote_addr or "unknown")
+
+
+def _rate_limited(key):
+    now = time.monotonic()
+    with _RL_LOCK:
+        hits = _RL_HITS[key]
+        while hits and hits[0] <= now - _RL_WINDOW:
+            hits.popleft()
+        if len(hits) >= _RL_MAX:
+            return True
+        hits.append(now)
+        return False
 
 
 @app.context_processor
@@ -128,6 +198,10 @@ def api_read_bill():
     # its Supabase access token); demo mode is open so the demo works with no login.
     if not DEMO_MODE and not request.headers.get("Authorization"):
         return jsonify({"error": "Please sign in and try again."}), 401
+    if _rate_limited(_client_ip()):
+        resp = jsonify({"error": "Too many bill reads just now. Please wait a moment and try again."})
+        resp.headers["Retry-After"] = str(_RL_WINDOW)
+        return resp, 429
     try:
         fields = read_bill(
             data.get("image") or "",
@@ -147,4 +221,7 @@ def healthz():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=int(os.environ.get("PORT", 5000)))
+    # Debug is OFF by default; turn it on for local work with FLASK_DEBUG=1.
+    # Production runs under gunicorn (see Procfile / render.yaml), not this block.
+    debug = os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes")
+    app.run(debug=debug, port=int(os.environ.get("PORT", 5000)))
