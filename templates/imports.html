@@ -130,7 +130,7 @@
     $("approveAll").hidden = true;
     $("noAccounts").hidden = true;
     $("rows").innerHTML = `<tr><td colspan="7" class="empty state">
-      <div class="state-icon" aria-hidden="true">📭</div>
+      <div class="state-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l2.5-7h11L20 13"/><path d="M4 13v5a1 1 0 001 1h14a1 1 0 001-1v-5"/><path d="M4 13h4l1.5 2.5h5L16 13h4"/></svg></div>
       <div class="state-title" id="emptyTitle" tabindex="-1">You're all caught up</div>
       <div class="state-body">When the bot spots a bank alert, statement or receipt in your
         email, it lists the transaction here for you to review. Nothing reaches your
@@ -175,7 +175,7 @@
         <td class="row-actions">
           <button class="btn sm approve" aria-label="Approve ${what}"${noAcc}${blocked
             ? ` data-needs-category="1" aria-describedby="${hintId}"` : ""}>Approve</button>
-          <button class="icon-btn reject" aria-label="Reject ${what}" title="Reject — don't add this">✕</button>
+          <button class="icon-btn reject" aria-label="Reject ${what}" title="Reject — don't add this"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </td>
       </tr>`;
     }).join("");

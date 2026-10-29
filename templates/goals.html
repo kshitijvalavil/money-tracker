@@ -64,12 +64,12 @@
         <div class="goal-main">
           <div class="goal-top"><span class="goal-name">${esc(g.name)}</span> ${date}</div>
           <div class="goal-sub">${money(g.saved)} of ${money(g.target_amount)}
-            ${done ? `<span class="pill ok">Reached 🎉</span>`
+            ${done ? `<span class="pill ok">Reached</span>`
                    : `<span class="muted">· ${money(g.remaining)} to go</span>`}</div>
         </div>
         <div class="goal-actions">
           <button class="btn ghost sm" data-add="${g.id}" data-name="${esc(g.name)}">+ Add money</button>
-          <button class="icon-btn" title="Delete goal" data-del="${g.id}">✕</button>
+          <button class="icon-btn" title="Delete goal" aria-label="Delete goal" data-del="${g.id}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div>
       </div>`;
     }).join("");

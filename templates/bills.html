@@ -15,7 +15,7 @@
     On your phone you can take a photo right now. Check everything, then add it.</p>
   <div class="dropzone" id="dropzone" tabindex="0" role="button"
        aria-label="Add a bill photo" aria-describedby="captureHelp">
-    <div class="dz-icon" aria-hidden="true">📸</div>
+    <div class="dz-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
     <div class="dz-text"><strong>Drop a bill photo here</strong><span>or use the buttons below</span></div>
     <div class="dz-actions">
       <button class="btn ghost sm" type="button" id="pickBtn">Choose file</button>
@@ -217,7 +217,7 @@
     renderTotal();
     if (!bills.length) {
       $("billRows").innerHTML = `<tr><td colspan="5" class="empty state">
-        <div class="state-icon" aria-hidden="true">🧾</div>
+        <div class="state-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3L6 21z"/><path d="M9 8h6M9 12h6"/></svg></div>
         <div class="state-title">No bills yet</div>
         <div class="state-body">Add rent, subscriptions or insurance and we'll show what's due and
           when, so nothing slips. Repeating payments we spot appear under "Looks like a bill".</div>

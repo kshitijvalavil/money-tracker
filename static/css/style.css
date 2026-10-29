@@ -311,7 +311,7 @@ select:disabled { opacity: .6; cursor: not-allowed; }
 #rows tr.failed td { background: var(--neg-bg); }
 
 .state { padding: 40px 24px; }
-.state-icon { font-size: 1.8rem; margin-bottom: 8px; }
+.state-icon { font-size: 1.8rem; margin-bottom: 8px; color: var(--muted); display: flex; justify-content: center; }
 .state-title { color: var(--ink); font-weight: 600; font-size: 1rem; margin-bottom: 6px; }
 .state-title:focus { outline: none; }
 .state-body { max-width: 46ch; margin: 0 auto 14px; font-size: 0.9rem; }
@@ -547,7 +547,7 @@ ol.rank li::before { content: counter(rank); color: var(--muted); font-weight: 7
 .dropzone:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .dropzone.dragover { border-color: var(--brand); background: var(--brand-soft); }
 .dropzone.busy { opacity: .7; pointer-events: none; }
-.dz-icon { font-size: 30px; line-height: 1; }
+.dz-icon { font-size: 30px; line-height: 1; color: var(--brand); display: flex; justify-content: center; }
 .dz-text { display: flex; flex-direction: column; gap: 2px; }
 .dz-text strong { font-size: 15px; }
 .dz-text span { color: var(--muted); font-size: 13px; }
