@@ -176,6 +176,11 @@ def imports():
     return render_template("imports.html", page="imports")
 
 
+@app.route("/profile")
+def profile():
+    return render_template("profile.html", page="profile")
+
+
 @app.route("/offline")
 def offline():
     # Precached by the service worker and shown when a navigation fails offline.

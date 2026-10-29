@@ -1,0 +1,84 @@
+{% extends "_shell.html" %}
+{% block title %}Profile — Money Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Profile &amp; settings</h1>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h2>Account</h2>
+    <div class="field">
+      <label>Signed in as</label>
+      <div id="acctEmail" style="font-weight:600;padding:4px 0">Loading…</div>
+    </div>
+    <button class="btn ghost" id="signoutBtn">Sign out</button>
+  </div>
+
+  <div class="card">
+    <h2>Appearance</h2>
+    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">
+      Choose how Money Tracker looks. Your choice is remembered on this device.</p>
+    <div class="toggle" role="group" aria-label="Theme">
+      <button type="button" id="themeDay" aria-pressed="false">Day</button>
+      <button type="button" id="themeNight" aria-pressed="false">Night</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Change password</h2>
+    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">
+      Use at least 6 characters. You stay signed in after changing it.</p>
+    <form id="pwForm" autocomplete="off">
+      <div class="field"><label for="pw1">New password</label>
+        <input type="password" id="pw1" autocomplete="new-password" minlength="6" required></div>
+      <div class="field"><label for="pw2">Confirm new password</label>
+        <input type="password" id="pw2" autocomplete="new-password" minlength="6" required></div>
+      <button class="btn" type="submit" id="pwSubmit">Update password</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, DEMO, toast, signOut, currentTheme, setTheme } from "{{ url_for('static', filename='js/app.js') }}";
+  const $ = (id) => document.getElementById(id);
+
+  // --- Account -------------------------------------------------------------
+  if (db) {
+    const { data } = await db.auth.getUser();
+    $("acctEmail").textContent = data.user?.email || (DEMO ? "demo@moneytracker.app" : "—");
+  }
+  $("signoutBtn").onclick = signOut;
+
+  // --- Appearance ----------------------------------------------------------
+  const paintTheme = () => {
+    const dark = currentTheme() === "dark";
+    $("themeNight").setAttribute("aria-pressed", String(dark));
+    $("themeDay").setAttribute("aria-pressed", String(!dark));
+    $("themeNight").classList.toggle("active", dark);
+    $("themeDay").classList.toggle("active", !dark);
+  };
+  $("themeDay").onclick = () => { setTheme("light"); paintTheme(); };
+  $("themeNight").onclick = () => { setTheme("dark"); paintTheme(); };
+  paintTheme();
+
+  // --- Change password -----------------------------------------------------
+  $("pwForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (DEMO) { toast("Password changes are disabled in demo mode.", "ok"); return; }
+    if (!db) { toast("Supabase isn't configured yet."); return; }
+    const pw1 = $("pw1").value, pw2 = $("pw2").value;
+    if (pw1.length < 6) { toast("Password must be at least 6 characters."); return; }
+    if (pw1 !== pw2) { toast("The two passwords don't match."); return; }
+    const btn = $("pwSubmit");
+    btn.disabled = true; btn.textContent = "Updating…";
+    const { error } = await db.auth.updateUser({ password: pw1 });
+    btn.disabled = false; btn.textContent = "Update password";
+    if (error) { toast(error.message); return; }
+    $("pw1").value = ""; $("pw2").value = "";
+    toast("Password updated.", "ok");
+  });
+</script>
+{% endblock %}
