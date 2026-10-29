@@ -3,7 +3,11 @@
 {% block content %}
 <div class="page-head">
   <h1>Dashboard</h1>
-  <input type="month" id="month" style="width:auto">
+  <div class="month-nav">
+    <button class="icon-btn month-step" type="button" id="monthPrev" aria-label="Previous month"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <input type="month" id="month" aria-label="Month shown">
+    <button class="icon-btn month-step" type="button" id="monthNext" aria-label="Next month"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+  </div>
 </div>
 
 <div class="grid cols-3" style="margin-bottom:16px">
@@ -64,8 +68,29 @@
   const $ = (id) => document.getElementById(id);
   const monthInput = $("month");
   monthInput.value = thisMonth();
+  monthInput.max = thisMonth();          // no empty future months
+
+  // Shift a "YYYY-MM" string by n whole months.
+  const shiftMonth = (ym, n) => {
+    const [y, m] = ym.split("-").map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+  const syncMonthNav = () => {
+    $("monthNext").disabled = (monthInput.value || thisMonth()) >= thisMonth();
+  };
+  const stepMonth = (n) => {
+    const next = shiftMonth(monthInput.value || thisMonth(), n);
+    if (next > thisMonth()) return;      // never past the current month
+    monthInput.value = next;
+    syncMonthNav();
+    load();
+  };
+  $("monthPrev").onclick = () => stepMonth(-1);
+  $("monthNext").onclick = () => stepMonth(1);
 
   async function load() {
+    syncMonthNav();
     const month = monthInput.value || thisMonth();
 
     const [summary, accounts, budgets, recent, lts] = await Promise.all([
