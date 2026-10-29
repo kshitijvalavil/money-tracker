@@ -120,7 +120,16 @@ def main():
         rows = pg.locator("#rows")
         check(pg.locator("#rows tr[data-id]").count() == 2, "hostile imports render as rows")
         check(pg.evaluate("() => window.__pwned === undefined"), "no injected script ran on /imports")
-        check(rows.locator("img, script, svg, b").count() == 0, "no injected elements in the imports table")
+        # Any img/script/b, or any svg that is NOT one of our own icon-button
+        # glyphs, means hostile markup rendered. (The reject button carries a
+        # legitimate inline <svg> inside .icon-btn — that one is allowed.)
+        injected = pg.evaluate("""() => {
+            const r = document.getElementById('rows');
+            const bad = r.querySelectorAll('img, script, b').length;
+            const svgs = [...r.querySelectorAll('svg')].filter(s => !s.closest('.icon-btn')).length;
+            return bad + svgs;
+        }""")
+        check(injected == 0, "no injected elements in the imports table")
         txt = rows.text_content()   # raw text (the .pill CSS capitalizes inner_text)
         check(XSS_IMG in txt, "hostile note shown as literal text")
         check("<svg onload" in txt, "hostile account hint shown as literal text")
