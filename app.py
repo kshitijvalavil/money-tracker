@@ -9,7 +9,7 @@ import threading
 import time
 from collections import defaultdict, deque
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request
 
 from billreader import BillReadError, parse_bill_text, read_bill
 
@@ -168,7 +168,9 @@ def insights():
 
 @app.route("/reports")
 def reports():
-    return render_template("reports.html", page="reports")
+    # Reports merged into Insights (Sprint 6 IA). Keep the path as a redirect
+    # so old links, bookmarks and the PWA cache still resolve.
+    return redirect("/insights", code=301)
 
 
 @app.route("/imports")
