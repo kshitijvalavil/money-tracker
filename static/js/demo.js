@@ -135,8 +135,20 @@ function seed() {
   byNote("Flat rent").forEach((t) => tag(t, L["Essentials"]));
   byNote("Groceries").forEach((t) => tag(t, L["Essentials"]));
 
+  // Investments (Sprint 6): a small mixed portfolio, one holding in the red.
+  const investments = [
+    ["Nifty 50 index fund", "mutual_fund", 120000, 138450, "SIP, monthly"],
+    ["Infosys", "stocks", 45000, 41200, ""],
+    ["SBI fixed deposit", "fixed_deposit", 100000, 104800, "7.1% for 2 years"],
+    ["Sovereign gold bond", "gold", 30000, 36900, ""],
+    ["PPF", "retirement", 150000, 161250, ""],
+  ].map(([name, kind, invested_amount, current_value, note]) => ({
+    id: uid(), name, kind, invested_amount, current_value, note,
+    as_of: day(thisMonth, 1), created_at: new Date().toISOString(),
+  }));
+
   return { accounts, categories, transactions, budgets, pending_imports, recurring,
-           goals, goal_contributions, labels, transaction_labels };
+           goals, goal_contributions, labels, transaction_labels, investments };
 }
 
 // Same SQLSTATE-style errors as the real functions.
@@ -488,6 +500,7 @@ function enrich(s, table, row) {
 // Column defaults the database would fill in.
 const DEFAULTS = {
   recurring: { next_seq: 0, auto_post: false, active: true, source: "manual" },
+  investments: { kind: "other", note: "", as_of: localDate(new Date()) },
 };
 
 // ---- a tiny chainable, awaitable query builder ----------------------------

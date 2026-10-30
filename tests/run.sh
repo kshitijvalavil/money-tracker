@@ -104,3 +104,9 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d gl \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/goals_labels_test.sql"
+
+# ---- Investments (0010): checks, RLS between users, cascade -----------------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres inv
+"${PSQL[@]}" -d inv \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/investments_test.sql"

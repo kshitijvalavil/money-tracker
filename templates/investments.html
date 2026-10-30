@@ -1,0 +1,211 @@
+{% extends "_shell.html" %}
+{% block title %}Investments — Money Tracker{% endblock %}
+{% block head %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Investments</h1>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="mom" id="summary">
+    <div class="stat"><div class="stat-label">Current value</div><div class="stat-value" id="sumValue">—</div></div>
+    <div class="stat"><div class="stat-label">Invested</div><div class="stat-value" id="sumInvested">—</div></div>
+    <div class="stat"><div class="stat-label">Gain / loss</div><div class="stat-value" id="sumGain">—</div>
+      <div class="stat-delta" id="sumPct"></div></div>
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h2 id="formTitle">Add a holding</h2>
+    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">
+      Track what you put in and what it is worth today. Update the value whenever
+      you check your broker or passbook.</p>
+    <form id="form">
+      <div class="field"><label for="name">Name</label>
+        <input type="text" id="name" maxlength="80" placeholder="e.g. Nifty 50 index fund" required></div>
+      <div class="field"><label for="kind">Type</label>
+        <select id="kind"></select></div>
+      <div class="row">
+        <div class="field"><label for="invested">Invested (₹)</label>
+          <input type="number" id="invested" step="0.01" min="0" required></div>
+        <div class="field"><label for="value">Current value (₹)</label>
+          <input type="number" id="value" step="0.01" min="0" required></div>
+      </div>
+      <div class="field"><label for="note">Note (optional)</label>
+        <input type="text" id="note" maxlength="200"></div>
+      <div class="row" style="margin:0;gap:8px">
+        <button class="btn" type="submit" id="submitBtn">Add holding</button>
+        <button class="btn ghost" type="button" id="cancelEdit" hidden>Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Allocation</h2>
+    <div id="allocWrap"><div class="empty">Loading…</div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h2>Holdings</h2>
+  <div class="table-wrap">
+    <table id="holdings">
+      <thead><tr><th>Name</th><th>Type</th><th style="text-align:right">Invested</th>
+        <th style="text-align:right">Value</th><th style="text-align:right">Gain / loss</th>
+        <th>Updated</th><th></th></tr></thead>
+      <tbody id="holdingRows"></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, money, esc, toast, today } from "{{ url_for('static', filename='js/app.js') }}";
+  const $ = (id) => document.getElementById(id);
+
+  // Must match the check constraint in migration 0010.
+  const KINDS = {
+    mutual_fund: "Mutual fund", stocks: "Stocks", fixed_deposit: "Fixed deposit",
+    gold: "Gold", retirement: "PPF / EPF / NPS", crypto: "Crypto", other: "Other",
+  };
+  const PALETTE = ["#004D61", "#5CC0D6", "#27ae60", "#e1a200", "#e4572e", "#8e44ad", "#789262"];
+  $("kind").innerHTML = Object.entries(KINDS)
+    .map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+
+  let rows = [], editing = null, alloc;
+
+  const pct = (gain, base) => (base > 0 ? (gain / base) * 100 : 0);
+  function gainHtml(gain, base) {
+    if (gain === 0) return `<span class="muted">${money(0)}</span>`;
+    const cls = gain > 0 ? "pos" : "neg";
+    const sign = gain > 0 ? "+" : "−";
+    return `<span class="${cls}">${sign}${money(Math.abs(gain))}` +
+           (base > 0 ? ` <small>(${sign}${Math.abs(pct(gain, base)).toFixed(1)}%)</small>` : "") + `</span>`;
+  }
+
+  function paintSummary() {
+    const inv = rows.reduce((s, r) => s + Number(r.invested_amount), 0);
+    const val = rows.reduce((s, r) => s + Number(r.current_value), 0);
+    const gain = val - inv;
+    $("sumValue").textContent = money(val);
+    $("sumInvested").textContent = money(inv);
+    $("sumGain").innerHTML = gainHtml(gain, 0);
+    $("sumPct").innerHTML = inv > 0
+      ? `<span class="${gain >= 0 ? "pos" : "neg"}">${gain >= 0 ? "▲" : "▼"} ${Math.abs(pct(gain, inv)).toFixed(1)}%</span> <span class="muted">overall</span>`
+      : "";
+  }
+
+  function paintAlloc() {
+    if (alloc) { alloc.destroy(); alloc = null; }
+    const byKind = {};
+    for (const r of rows) byKind[r.kind] = (byKind[r.kind] || 0) + Number(r.current_value);
+    const kinds = Object.keys(byKind).filter((k) => byKind[k] > 0).sort((a, b) => byKind[b] - byKind[a]);
+    if (!kinds.length) {
+      $("allocWrap").innerHTML = `<div class="empty">Add a holding to see how your money is spread.</div>`;
+      return;
+    }
+    $("allocWrap").innerHTML = `<canvas id="alloc" height="240"></canvas>`;
+    alloc = new Chart($("alloc"), {
+      type: "doughnut",
+      data: {
+        labels: kinds.map((k) => KINDS[k] || k),
+        datasets: [{ data: kinds.map((k) => byKind[k]),
+                     backgroundColor: kinds.map((_, i) => PALETTE[i % PALETTE.length]),
+                     borderWidth: 2, borderColor: "transparent" }],
+      },
+      options: {
+        plugins: {
+          legend: { position: "bottom", labels: { padding: 14, font: { size: 12 } } },
+          tooltip: { callbacks: { label: (c) => ` ${c.label}: ${money(c.parsed)}` } },
+        },
+        cutout: "62%",
+      },
+    });
+  }
+
+  function paintRows() {
+    $("holdingRows").innerHTML = rows.length ? rows.map((r) => {
+      const inv = Number(r.invested_amount), val = Number(r.current_value);
+      return `<tr data-id="${r.id}">
+        <td class="h-name"><strong>${esc(r.name)}</strong>${r.note ? `<div class="muted" style="font-size:0.82rem">${esc(r.note)}</div>` : ""}</td>
+        <td class="h-kind"><span class="pill">${esc(KINDS[r.kind] || r.kind)}</span></td>
+        <td class="amt h-inv"><span class="cell-label">Invested</span>${money(inv)}</td>
+        <td class="amt h-val"><span class="cell-label">Value</span>${money(val)}</td>
+        <td class="amt h-gain">${gainHtml(val - inv, inv)}</td>
+        <td class="muted h-date">${esc(r.as_of)}</td>
+        <td class="h-act">
+          <button class="icon-btn" title="Edit" aria-label="Edit ${esc(r.name)}" data-edit="${r.id}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+          <button class="icon-btn" title="Delete" aria-label="Delete ${esc(r.name)}" data-del="${r.id}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="7" class="empty">No holdings yet. Add your first one above.</td></tr>`;
+
+    $("holdingRows").querySelectorAll("[data-edit]").forEach((b) => { b.onclick = () => startEdit(b.dataset.edit); });
+    $("holdingRows").querySelectorAll("[data-del]").forEach((b) => {
+      b.onclick = async () => {
+        const r = rows.find((x) => x.id === b.dataset.del);
+        if (!confirm(`Delete ${r ? r.name : "this holding"}?`)) return;
+        const { error } = await db.from("investments").delete().eq("id", b.dataset.del);
+        if (error) return toast(error.message);
+        if (editing === b.dataset.del) stopEdit();
+        load();
+      };
+    });
+  }
+
+  function startEdit(id) {
+    const r = rows.find((x) => x.id === id);
+    if (!r) return;
+    editing = id;
+    $("name").value = r.name; $("kind").value = r.kind;
+    $("invested").value = r.invested_amount; $("value").value = r.current_value;
+    $("note").value = r.note || "";
+    $("formTitle").textContent = "Update holding";
+    $("submitBtn").textContent = "Save changes";
+    $("cancelEdit").hidden = false;
+    $("value").focus();
+  }
+  function stopEdit() {
+    editing = null;
+    $("form").reset();
+    $("formTitle").textContent = "Add a holding";
+    $("submitBtn").textContent = "Add holding";
+    $("cancelEdit").hidden = true;
+  }
+  $("cancelEdit").onclick = stopEdit;
+
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = $("name").value.trim();
+    const invested = parseFloat($("invested").value);
+    const value = parseFloat($("value").value);
+    if (!name) return toast("Give the holding a name.");
+    if (!(invested >= 0) || !(value >= 0)) return toast("Amounts can't be negative.");
+    const row = { name, kind: $("kind").value, invested_amount: invested, current_value: value,
+                  note: $("note").value.trim(), as_of: today() };
+    const q = editing
+      ? db.from("investments").update(row).eq("id", editing)
+      : db.from("investments").insert(row);
+    const { error } = await q;
+    if (error) return toast(error.message);
+    toast(editing ? "Holding updated." : "Holding added.", "ok");
+    stopEdit();
+    load();
+  });
+
+  async function load() {
+    const { data, error } = await db.from("investments")
+      .select("id, name, kind, invested_amount, current_value, as_of, note")
+      .order("current_value", { ascending: false });
+    if (error) return toast(error.message);
+    rows = data;
+    paintSummary(); paintAlloc(); paintRows();
+  }
+
+  if (db) load();
+</script>
+{% endblock %}

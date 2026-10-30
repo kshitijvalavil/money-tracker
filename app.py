@@ -161,6 +161,11 @@ def goals():
     return render_template("goals.html", page="goals")
 
 
+@app.route("/investments")
+def investments():
+    return render_template("investments.html", page="investments")
+
+
 @app.route("/insights")
 def insights():
     return render_template("insights.html", page="insights")

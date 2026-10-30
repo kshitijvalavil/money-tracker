@@ -577,3 +577,31 @@ ol.rank li::before { content: counter(rank); color: var(--muted); font-weight: 7
 .capture-status.ok { color: var(--pos); background: var(--pos-bg); }
 .capture-status.warn { color: var(--brand-dark); background: var(--brand-soft); }
 .capture-status.err { color: var(--neg); background: var(--neg-bg); }
+
+/* Investments (Sprint 6) -------------------------------------------------- */
+#holdings .pill, #holdings .h-date, #holdings .h-act { white-space: nowrap; }
+#holdings .h-gain small { font-weight: 600; }
+#holdings .cell-label { display: none; }
+/* Phone: each holding becomes a small card instead of a sideways-scrolling row. */
+@media (max-width: 640px) {
+  #holdings, #holdings tbody { display: block; }
+  #holdings thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  #holdings tr[data-id] {
+    display: grid; grid-template-columns: 1fr 1fr;
+    grid-template-areas: "name gain" "kind date" "inv val" "act act";
+    gap: 6px 12px; padding: 14px 0; border-bottom: 1px solid var(--line);
+  }
+  #holdings tr[data-id]:last-child { border-bottom: none; }
+  #holdings tr[data-id] td { display: block; padding: 0; border: none; }
+  #holdings .h-name { grid-area: name; }
+  #holdings .h-gain { grid-area: gain; text-align: right; }
+  #holdings .h-gain small { display: block; }
+  #holdings .h-kind { grid-area: kind; }
+  #holdings .h-date { grid-area: date; text-align: right; font-size: 0.82rem; align-self: center; }
+  #holdings .h-inv { grid-area: inv; text-align: left; }
+  #holdings .h-val { grid-area: val; }
+  #holdings tr[data-id] td.h-act { grid-area: act; display: flex; justify-content: flex-end; gap: 4px; }
+  #holdings .cell-label { display: block; font-size: 0.72rem; font-weight: 600; color: var(--muted);
+                          text-transform: uppercase; letter-spacing: .02em; margin-bottom: 2px; }
+  #holdings .h-act .icon-btn { min-width: 44px; min-height: 44px; }
+}
