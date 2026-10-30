@@ -1,5 +1,6 @@
 // Money Tracker service worker — makes the app installable and gives it an
-// offline app shell. Bump CACHE whenever the precached shell changes so old
+// offline app shell. The server (app.py, /sw.js) replaces "money-tracker-v1"
+// with a hash of the static files, so each deploy gets a fresh cache and old
 // caches are cleared on activate.
 const CACHE = "money-tracker-v1";
 

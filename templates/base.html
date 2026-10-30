@@ -38,6 +38,16 @@
   <!-- Register the service worker for offline support and installability. -->
   <script>
     if ("serviceWorker" in navigator) {
+      // A page that was already controlled by an older worker loaded that
+      // release's CSS and JS; when the new worker takes over, reload once so
+      // the new release shows straight away.
+      var hadController = !!navigator.serviceWorker.controller;
+      var reloaded = false;
+      navigator.serviceWorker.addEventListener("controllerchange", function () {
+        if (!hadController || reloaded) return;
+        reloaded = true;
+        window.location.reload();
+      });
       window.addEventListener("load", function () {
         navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(function () {});
       });
