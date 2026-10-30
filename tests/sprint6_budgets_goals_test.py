@@ -114,6 +114,13 @@ def main():
         check("to go" in undated, "undated goal shows amount to go")
         check(pg.evaluate("() => /[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/u.test(document.body.innerText)") is False,
               "no emojis on Goals")
+        check(pg.is_visible("#cutPlan"), "spend-cut analysis shows for dated goals")
+        check(pg.locator("#cutRows .cut-row").count() >= 1, "cut plan lists spending categories")
+        check(re.search(r"need about ₹[\d,.]+ a month", pg.inner_text("#cutIntro")) is not None,
+              "cut plan states the monthly need")
+        check("a month" in pg.inner_text("#cutTotal"), "cut plan totals what trimming frees")
+        names = pg.locator("#cutRows .cut-name").all_inner_texts()
+        check(not any(n.lower() in ("rent", "bills") for n in names), f"fixed costs never suggested ({names})")
         shot(pg, "bg-02-goals.png")
         b.close()
 

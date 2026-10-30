@@ -630,3 +630,8 @@ ol.rank li::before { content: counter(rank); color: var(--muted); font-weight: 7
 .seg-count { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 999px;
              background: var(--brand); color: #fff; font-size: 0.72rem; line-height: 18px; text-align: center; }
 .pill.channel { background: var(--brand-soft); color: var(--brand); white-space: nowrap; }
+.cut-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline;
+           padding: 10px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.cut-name { font-weight: 600; color: var(--ink); }
+.cut-save { font-weight: 600; color: var(--brand); text-align: right; min-width: 7.5em; }
+@media (max-width: 420px) { .cut-row { grid-template-columns: 1fr auto; } .cut-row .muted { display: none; } }
