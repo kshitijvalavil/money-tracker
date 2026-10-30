@@ -1,7 +1,12 @@
 {% extends "_shell.html" %}
 {% block title %}Transactions — Money Tracker{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Transactions</h1></div>
+<div class="page-head">
+  <h1>Transactions</h1>
+  <div class="head-actions">
+    <a class="btn ghost" href="/bills#add" id="addBillLink"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>Add a bill</a>
+  </div>
+</div>
 {% include "_txn_tabs.html" %}
 
 <div class="card" style="margin-bottom:16px">

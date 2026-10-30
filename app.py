@@ -4,6 +4,7 @@ This server only serves pages. The pages talk to Supabase directly from the
 browser (auth + data), protected by Row Level Security in the database, so this
 server never holds your database password or sees your data.
 """
+import hashlib
 import os
 import threading
 import time
@@ -194,11 +195,34 @@ def offline():
     return render_template("offline.html")
 
 
+def _asset_version():
+    """Short hash of everything under static/, worked out once at start-up.
+    It changes whenever a deploy changes any CSS, JS or icon file."""
+    digest = hashlib.sha256()
+    root = app.static_folder
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames.sort()
+        for name in sorted(filenames):
+            path = os.path.join(dirpath, name)
+            digest.update(os.path.relpath(path, root).encode())
+            with open(path, "rb") as f:
+                digest.update(f.read())
+    return digest.hexdigest()[:12]
+
+
+ASSET_VERSION = _asset_version()
+
+
 @app.route("/sw.js")
 def service_worker():
     # Served from the root so the worker can control the whole app ("/"),
-    # which a file under /static/ could not.
-    resp = app.send_static_file("sw.js")
+    # which a file under /static/ could not. The cache name is stamped with
+    # ASSET_VERSION, so every deploy that changes a static file ships a new
+    # worker: browsers install it, drop the old cache and fetch the new CSS
+    # and JS instead of serving the previous release's copies.
+    with open(os.path.join(app.static_folder, "sw.js"), encoding="utf-8") as f:
+        body = f.read().replace('"money-tracker-v1"', f'"money-tracker-{ASSET_VERSION}"')
+    resp = app.response_class(body, mimetype="application/javascript")
     resp.headers["Service-Worker-Allowed"] = "/"
     resp.headers["Cache-Control"] = "no-cache"
     return resp

@@ -796,8 +796,10 @@
     resetForm();
     showLoading();
     await postDueBills();      // render after auto-posting so dates are current
-    load(true);
+    await load(true);
     loadSuggestions();
+    // "Add a bill" from Transactions (or anywhere) lands here with #add.
+    if (location.hash === "#add") startAdd();
   }
 </script>
 {% endblock %}

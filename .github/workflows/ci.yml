@@ -107,6 +107,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint6_email_ui_test.py
+      - name: Sprint 6 hotfix tests (fresh design after deploy, add a bill)
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint6_hotfix_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true
