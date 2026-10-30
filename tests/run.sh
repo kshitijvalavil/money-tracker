@@ -110,3 +110,9 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d inv \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/investments_test.sql"
+
+# ---- Import channel labels (0011): Google Pay / bank label on approve --------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres chan
+"${PSQL[@]}" -d chan \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/import_channel_test.sql"

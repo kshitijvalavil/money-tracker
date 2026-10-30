@@ -26,6 +26,8 @@ jobs:
         run: python3 tests/test_scanner.py
       - name: Scanner adversarial tests
         run: python3 tests/test_scanner_adversarial.py
+      - name: Bank alert + Google Pay parser tests
+        run: python3 tests/test_channel_parsers.py
       - name: Recurring bills tests
         run: python3 tests/test_recurring.py
       - name: Bill reader tests
@@ -101,6 +103,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint6_budgets_goals_test.py
+      - name: Sprint 6 email import UI tests
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint6_email_ui_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

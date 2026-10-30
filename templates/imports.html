@@ -1,13 +1,14 @@
 {% extends "_shell.html" %}
-{% block title %}Email imports — Money Tracker{% endblock %}
+{% block title %}From email — Money Tracker{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Email imports</h1>
+  <h1>Transactions</h1>
   <div class="head-actions">
     <span class="bulk-status" id="bulkStatus" role="status" aria-live="polite"></span>
     <button class="btn" id="approveAll" hidden>Approve all</button>
   </div>
 </div>
+{% include "_txn_tabs.html" %}
 
 <div class="card">
   <p class="card-intro">
@@ -161,7 +162,7 @@
       const hintId = `nocat-${esc(p.id)}`;
       return `<tr data-id="${esc(p.id)}"${blocked ? ' data-blocked="1"' : ""}>
         <td class="c-date nowrap">${esc(p.occurred_on)}</td>
-        <td class="c-source"><span class="pill">${esc(sourceLabel(p.source))}</span></td>
+        <td class="c-source"><span class="pill${p.channel ? " channel" : ""}">${esc(p.channel || sourceLabel(p.source))}</span></td>
         <td class="c-note">${esc(p.note || "—")}${p.account_hint
           ? ` <span class="pill" title="Account hint from the email">…${esc(p.account_hint)}</span>` : ""}
           <div class="row-msg" role="alert" hidden></div></td>

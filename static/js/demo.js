@@ -59,15 +59,16 @@ function seed() {
   // Sample transactions "detected from email", awaiting review (demo only).
   // The hints/sources are chosen so the Imports page can pre-select a matching
   // account for some rows (HDFC by bank name, Credit Card by hint).
-  const pi = (source, direction, amount, d, account_hint, note, n) => ({
+  const pi = (source, direction, amount, d, account_hint, note, n, channel = null) => ({
     id: uid(), source, direction, amount, occurred_on: day(thisMonth, d), account_hint, note,
-    source_message_id: `demo-${n}`, status: "pending", created_at: new Date().toISOString(),
+    source_message_id: `demo-${n}`, status: "pending", created_at: new Date().toISOString(), channel,
   });
+  // Channel rule (0011): UPI -> "Google Pay", other bank alerts -> the bank.
   const pending_imports = [
-    pi("hdfc_alert", "income", 5000, 5, "0001", "UPI transfer from Ravi", 1),
+    pi("hdfc_alert", "income", 5000, 5, "0001", "UPI transfer from Ravi", 1, "Google Pay"),
     pi("statement", "expense", 450, 7, "card", "POS purchase", 2),
     pi("receipt", "expense", 299, 8, null, "Zomato order", 3),
-    pi("hdfc_alert", "expense", 1200, 9, "0001", "Electricity bill autopay", 4),
+    pi("hdfc_alert", "expense", 1200, 9, "0001", "Electricity bill autopay", 4, "HDFC Bank"),
     pi("receipt", "expense", 186, 11, null, "Uber trip", 5),
   ];
 
@@ -340,6 +341,16 @@ function importRpc(s, name, params) {
       created_at: new Date().toISOString(),
     };
     s.transactions.push(t);
+  }
+  // 0011: label by channel ("Google Pay", "SBI", ...), reusing a label of the
+  // same name (any case) and keeping labels the transaction already has.
+  const channel = String(imp.channel || "").trim();
+  if (channel) {
+    let label = s.labels.find((l) => l.name.trim().toLowerCase() === channel.toLowerCase());
+    if (!label) { label = { id: uid(), name: channel, created_at: new Date().toISOString() }; s.labels.push(label); }
+    if (!s.transaction_labels.some((tl) => tl.transaction_id === t.id && tl.label_id === label.id)) {
+      s.transaction_labels.push({ transaction_id: t.id, label_id: label.id });
+    }
   }
   imp.status = "approved";
   return t.id;

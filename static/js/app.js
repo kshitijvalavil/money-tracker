@@ -104,9 +104,10 @@ export function toast(message, kind = "error") {
 }
 
 // --- Pending email imports badge (sidebar) ---------------------------------
-// The shell renders <a data-nav="imports"> with an empty #importsBadge. These
-// keep the count in sync; the Imports page calls refreshImportsBadge() after
-// every approve/reject.
+// The shell's Transactions link carries data-nav="imports" and an empty
+// #importsBadge (email review lives under Transactions since Sprint 6); the
+// "From email" tab has its own count. These keep both in sync; the imports
+// view calls refreshImportsBadge() after every approve/reject.
 export function setImportsBadge(n) {
   const badge = document.getElementById("importsBadge");
   const link = document.querySelector('[data-nav="imports"]');
@@ -114,8 +115,12 @@ export function setImportsBadge(n) {
   const count = Math.max(0, Number(n) || 0);
   badge.textContent = count > 99 ? "99+" : String(count);
   badge.hidden = count === 0;
-  if (count) link.setAttribute("aria-label", `Email imports, ${count} waiting for review`);
+  if (count) link.setAttribute("aria-label", `Transactions, ${count} from email waiting for review`);
   else link.removeAttribute("aria-label");
+  document.querySelectorAll("[data-imports-count]").forEach((el) => {
+    el.textContent = badge.textContent;
+    el.hidden = count === 0;
+  });
 }
 
 export async function refreshImportsBadge() {

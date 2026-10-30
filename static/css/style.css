@@ -627,3 +627,6 @@ ol.rank li::before { content: counter(rank); color: var(--muted); font-weight: 7
 .goal-plan.soon, .goal-plan.late { color: var(--warn); }
 .goal-top { flex-wrap: wrap; row-gap: 0; }
 .goal-top .muted { font-size: 0.85rem; }
+.seg-count { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 6px; border-radius: 999px;
+             background: var(--brand); color: #fff; font-size: 0.72rem; line-height: 18px; text-align: center; }
+.pill.channel { background: var(--brand-soft); color: var(--brand); white-space: nowrap; }

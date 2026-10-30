@@ -1,6 +1,8 @@
-{# Sub-navigation for the Transactions area: Bills & subscriptions live here
-   instead of being their own top-level page (Sprint 6 IA). #}
+{# Sub-navigation for the Transactions area: Bills & subscriptions and the
+   email review queue live here instead of being top-level pages (Sprint 6 IA). #}
 <nav class="seg-nav" aria-label="Transactions views">
   <a href="/transactions"{% if page == 'transactions' %} aria-current="page"{% endif %}>History</a>
   <a href="/bills"{% if page == 'bills' %} aria-current="page"{% endif %}>Bills &amp; subscriptions</a>
+  <a href="/imports"{% if page == 'imports' %} aria-current="page"{% endif %}>From email
+    <span class="seg-count" data-imports-count hidden></span></a>
 </nav>
