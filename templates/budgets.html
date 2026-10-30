@@ -3,14 +3,25 @@
 {% block content %}
 <div class="page-head">
   <h1>Budgets</h1>
-  <input type="month" id="month" style="width:auto">
+  <div class="month-nav">
+    <button class="icon-btn month-step" type="button" id="monthPrev" aria-label="Previous month"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <input type="month" id="month" aria-label="Month shown">
+    <button class="icon-btn month-step" type="button" id="monthNext" aria-label="Next month"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+  </div>
+</div>
+
+<div class="card budget-summary" id="summary" style="margin-bottom:16px" hidden>
+  <div class="stat-label" id="sumLabel">Left to spend</div>
+  <div class="budget-big" id="sumLeft">—</div>
+  <div class="bar budget-bar"><div id="sumBar"></div><span class="pace" id="sumPace" hidden></span></div>
+  <div class="budget-sub"><span id="sumOf"></span> <span class="muted" id="sumHint"></span></div>
 </div>
 
 <div class="grid cols-2">
   <div class="card">
-    <h2>Set a monthly limit</h2>
+    <h2 id="formTitle">Set a monthly limit</h2>
     <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">
-      A limit repeats every month. Set one per expense category.</p>
+      A limit repeats every month. Pick a category and how much you want to spend on it.</p>
     <form id="form">
       <div class="row">
         <div class="field"><label for="category">Category</label>
@@ -18,64 +29,167 @@
         <div class="field"><label for="limit">Monthly limit (₹)</label>
           <input type="number" id="limit" step="0.01" min="0.01" required></div>
       </div>
-      <button class="btn" type="submit">Save limit</button>
+      <button class="btn" type="submit" id="saveBtn">Save limit</button>
     </form>
   </div>
 
   <div class="card">
-    <h2>Progress this month</h2>
-    <div id="progress"></div>
+    <h2>Categories</h2>
+    <div id="progress"><div class="empty">Loading…</div></div>
   </div>
 </div>
 {% endblock %}
 
 {% block page_script %}
 <script type="module">
-  import { db, money, esc, thisMonth, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  import { db, money, esc, thisMonth, today, toast } from "{{ url_for('static', filename='js/app.js') }}";
   const $ = (id) => document.getElementById(id);
-  $("month").value = thisMonth();
+  const monthInput = $("month");
+  monthInput.value = thisMonth();
+  monthInput.max = thisMonth();
+
+  let categories = [], budgets = [];
+
+  // Same month stepping as the dashboard.
+  const shiftMonth = (ym, n) => {
+    const [y, m] = ym.split("-").map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+  const syncMonthNav = () => { $("monthNext").disabled = (monthInput.value || thisMonth()) >= thisMonth(); };
+  const stepMonth = (n) => {
+    const next = shiftMonth(monthInput.value || thisMonth(), n);
+    if (next > thisMonth()) return;
+    monthInput.value = next;
+    syncMonthNav();
+    loadProgress();
+  };
+  $("monthPrev").onclick = () => stepMonth(-1);
+  $("monthNext").onclick = () => stepMonth(1);
+  monthInput.addEventListener("change", () => { syncMonthNav(); loadProgress(); });
+
+  // How far through the month we are (0-1), or null for a past month.
+  function pace(month) {
+    if (month !== thisMonth()) return null;
+    const [y, m] = month.split("-").map(Number);
+    const days = new Date(y, m, 0).getDate();
+    return Number(today().slice(8, 10)) / days;
+  }
+
+  // ok / warn / over, from share used and (for this month) how far in we are.
+  function stateOf(used, p) {
+    if (used > 1) return "over";
+    if (used >= 0.9 || (p !== null && used > p + 0.15)) return "warn";
+    return "ok";
+  }
+  const PILL = { ok: ["ok", "On track"], warn: ["warn", "Watch it"], over: ["bad", "Over"] };
+
+  function fillCategories() {
+    const limitOf = Object.fromEntries(budgets.map((b) => [b.category_id, b.monthly_limit]));
+    const keep = $("category").value;
+    $("category").innerHTML = categories.map((c) =>
+      `<option value="${c.id}">${esc(c.name)}${limitOf[c.id] ? ` (now ${money(limitOf[c.id])})` : ""}</option>`).join("");
+    if (keep) $("category").value = keep;
+    syncSaveLabel();
+  }
+  function syncSaveLabel() {
+    const has = budgets.some((b) => b.category_id === $("category").value);
+    $("saveBtn").textContent = has ? "Update limit" : "Save limit";
+  }
+  $("category").addEventListener("change", syncSaveLabel);
 
   async function loadCategories() {
     const { data, error } = await db.from("categories")
       .select("id, name").eq("kind", "expense").order("name");
     if (error) return toast(error.message);
-    $("category").innerHTML = data.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("");
+    categories = data;
   }
 
   async function loadProgress() {
-    const month = $("month").value || thisMonth();
+    const month = monthInput.value || thisMonth();
     // budget_status returns category name, limit, spent — but we need ids to edit/remove.
-    const [status, budgets] = await Promise.all([
+    const [status, res] = await Promise.all([
       db.rpc("budget_status", { p_month: month }),
       db.from("budgets").select("id, monthly_limit, category_id, categories(name)"),
     ]);
     if (status.error) return toast(status.error.message);
-    if (budgets.error) return toast(budgets.error.message);
+    if (res.error) return toast(res.error.message);
+    budgets = res.data;
+    fillCategories();
 
-    if (!budgets.data.length) {
-      $("progress").innerHTML = `<div class="empty">No budgets set yet.</div>`;
+    if (!budgets.length) {
+      $("summary").hidden = true;
+      $("progress").innerHTML = `<div class="empty">No budgets yet. Set your first limit to see what's left each month.</div>`;
       return;
     }
-    const spentByName = Object.fromEntries(status.data.map((s) => [s.category, s.spent]));
-    $("progress").innerHTML = budgets.data
-      .sort((a, b) => (a.categories?.name || "").localeCompare(b.categories?.name || ""))
-      .map((b) => {
-        const name = b.categories?.name || "—";
-        const spent = Number(spentByName[name] || 0);
-        const pct = Math.min(100, (spent / b.monthly_limit) * 100);
-        const over = spent > b.monthly_limit;
-        return `<div class="bar-row">
-          <div class="top">
-            <span>${esc(name)}</span>
-            <span class="${over ? "neg" : ""}">${money(spent)} / ${money(b.monthly_limit)}
-              <button class="icon-btn" title="Remove limit" data-del="${b.id}">✕</button></span>
-          </div>
-          <div class="bar"><div class="${over ? "over" : ""}" style="width:${pct}%"></div></div>
-        </div>`;
-      }).join("");
+    const p = pace(month);
+    const spentByName = Object.fromEntries(status.data.map((s) => [s.category, Number(s.spent)]));
+    const rows = budgets.map((b) => {
+      const name = b.categories?.name || "—";
+      const limit = Number(b.monthly_limit);
+      const spent = spentByName[name] || 0;
+      return { ...b, name, limit, spent, used: spent / limit };
+    }).sort((a, b) => b.used - a.used || a.name.localeCompare(b.name));   // most urgent first
 
+    // Summary: left to spend across all budgeted categories.
+    const total = rows.reduce((s, r) => s + r.limit, 0);
+    const spent = rows.reduce((s, r) => s + r.spent, 0);
+    const left = total - spent;
+    const st = stateOf(spent / total, p);
+    $("summary").hidden = false;
+    $("summary").dataset.state = st;
+    $("sumLabel").textContent = left >= 0 ? "Left to spend" : "Over budget by";
+    $("sumLeft").textContent = money(Math.abs(left));
+    $("sumLeft").className = "budget-big " + (left < 0 ? "neg" : "");
+    $("sumBar").style.width = `${Math.min(100, (spent / total) * 100)}%`;
+    $("sumBar").className = st === "ok" ? "" : st;
+    $("sumOf").textContent = `${money(spent)} spent of ${money(total)}`;
+    $("sumPace").hidden = p === null;
+    if (p !== null) $("sumPace").style.left = `${p * 100}%`;
+    // Days left including today, so the last day still gets a daily figure.
+    const [yy, mm] = month.split("-").map(Number);
+    const daysLeft = p === null ? 0 : new Date(yy, mm, 0).getDate() - Number(today().slice(8, 10)) + 1;
+    $("sumHint").textContent = p === null
+      ? (left >= 0 ? "· stayed within budget" : "· went over budget")
+      : left > 0 && daysLeft > 0
+        ? `· about ${money(left / daysLeft)} a day for the ${daysLeft} day${daysLeft === 1 ? "" : "s"} left`
+        : "";
+
+    $("progress").innerHTML = rows.map((r) => {
+      const s = stateOf(r.used, p);
+      const [pillCls, pillTxt] = PILL[s];
+      const leftTxt = r.spent <= r.limit
+        ? `<span>${money(r.limit - r.spent)} left</span>`
+        : `<span class="neg">${money(r.spent - r.limit)} over</span>`;
+      return `<div class="bar-row budget-row" data-state="${s}">
+          <div class="top">
+            <span class="budget-name">${esc(r.name)} <span class="pill ${pillCls}">${pillTxt}</span></span>
+            <span class="budget-left">${leftTxt}</span>
+          </div>
+          <div class="bar"><div class="${s === "ok" ? "" : s}" style="width:${Math.min(100, r.used * 100)}%"></div>${
+            p === null ? "" : `<span class="pace" style="left:${p * 100}%" title="Where you are in the month"></span>`}</div>
+          <div class="budget-foot">
+            <span class="muted">${money(r.spent)} of ${money(r.limit)}</span>
+            <span class="budget-actions">
+              <button class="icon-btn" title="Change limit" aria-label="Change ${esc(r.name)} limit" data-edit="${r.category_id}" data-limit="${r.limit}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+              <button class="icon-btn" title="Remove limit" aria-label="Remove ${esc(r.name)} limit" data-del="${r.id}" data-name="${esc(r.name)}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+            </span>
+          </div>
+        </div>`;
+    }).join("");
+
+    $("progress").querySelectorAll("[data-edit]").forEach((btn) => {
+      btn.onclick = () => {
+        $("category").value = btn.dataset.edit;
+        $("limit").value = btn.dataset.limit;
+        syncSaveLabel();
+        $("limit").focus();
+        $("limit").select();
+      };
+    });
     $("progress").querySelectorAll("[data-del]").forEach((btn) => {
       btn.onclick = async () => {
+        if (!confirm(`Remove the ${btn.dataset.name} limit?`)) return;
         const { error } = await db.from("budgets").delete().eq("id", btn.dataset.del);
         if (error) return toast(error.message);
         loadProgress();
@@ -97,7 +211,7 @@
     loadProgress();
   });
 
-  $("month").addEventListener("change", loadProgress);
+  syncMonthNav();
   if (db) { await loadCategories(); loadProgress(); }
 </script>
 {% endblock %}

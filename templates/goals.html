@@ -5,28 +5,42 @@
   <h1>Savings goals</h1>
 </div>
 
-<div class="grid cols-2">
-  <div class="card">
-    <h2>New goal</h2>
-    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">
-      Set a target to save toward. Add money to it whenever you put some aside.</p>
-    <form id="form">
+<div class="card" id="summary" style="margin-bottom:16px" hidden>
+  <div class="mom">
+    <div class="stat"><div class="stat-label">Saved so far</div><div class="stat-value" id="sumSaved">—</div>
+      <div class="stat-delta muted" id="sumOf"></div></div>
+    <div class="stat"><div class="stat-label">Still to save</div><div class="stat-value" id="sumLeft">—</div></div>
+    <div class="stat"><div class="stat-label">Goals reached</div><div class="stat-value" id="sumDone">—</div></div>
+  </div>
+</div>
+
+<div class="card goals-list" style="margin-bottom:16px">
+  <h2>Your goals</h2>
+  <div id="goals"><div class="empty">Loading…</div></div>
+</div>
+
+<div class="card" id="cutPlan" style="margin-bottom:16px" hidden>
+  <h2>Where the money could come from</h2>
+  <p class="muted" id="cutIntro" style="font-size:0.9rem;margin-bottom:12px"></p>
+  <div id="cutRows"></div>
+  <p id="cutTotal" style="font-size:0.9rem;margin-top:8px"></p>
+</div>
+
+<div class="card goals-new">
+  <h2>New goal</h2>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">
+    Set a target to save toward. Add money to it whenever you put some aside.</p>
+  <form id="form">
+    <div class="row">
       <div class="field"><label for="name">Goal</label>
         <input type="text" id="name" maxlength="80" placeholder="e.g. Japan trip" required></div>
-      <div class="row">
-        <div class="field"><label for="target">Target (₹)</label>
-          <input type="number" id="target" step="0.01" min="0.01" required></div>
-        <div class="field"><label for="date">Target date (optional)</label>
-          <input type="date" id="date"></div>
-      </div>
-      <button class="btn" type="submit">Create goal</button>
-    </form>
-  </div>
-
-  <div class="card">
-    <h2>Your goals</h2>
-    <div id="goals"><div class="empty">Loading…</div></div>
-  </div>
+      <div class="field"><label for="target">Target (₹)</label>
+        <input type="number" id="target" step="0.01" min="0.01" required></div>
+      <div class="field"><label for="date">Target date (optional)</label>
+        <input type="date" id="date"></div>
+    </div>
+    <button class="btn" type="submit">Create goal</button>
+  </form>
 </div>
 {% endblock %}
 
@@ -48,28 +62,90 @@
     </svg>`;
   }
 
+  // Whole months from today to a target date (at least 1 while it is ahead).
+  function monthsUntil(dateStr) {
+    const [ty, tm, td] = today().split("-").map(Number);
+    const [y, m, d] = dateStr.split("-").map(Number);
+    let n = (y - ty) * 12 + (m - tm) + (d >= td ? 0 : -1);
+    return Math.max(n, 0);
+  }
+
+  // The line under each goal: what it takes to get there on time.
+  function plan(g) {
+    if (g.pct >= 100) return `<span class="pill ok">Reached</span>`;
+    if (!g.target_date) return `<span class="muted">${money(g.remaining)} to go</span>`;
+    if (g.target_date < today())
+      return `<span class="goal-plan late">Target date passed · ${money(g.remaining)} to go</span>`;
+    const months = monthsUntil(g.target_date);
+    if (months < 1)
+      return `<span class="goal-plan soon">${money(g.remaining)} to go this month</span>`;
+    return `<span class="goal-plan">Save ${money(Math.ceil(g.remaining / months))} a month</span>
+            <span class="muted">· ${months} month${months === 1 ? "" : "s"} left</span>`;
+  }
+
+  // Spend-cut analysis: what the dated goals need each month, set against the
+  // three biggest spending categories last month, trimmed by a fifth.
+  const TRIM = 0.2;
+  // Fixed costs you can't simply spend a fifth less on; never suggested.
+  const FIXED = /\b(rent|bills?|emi|loan|insurance|health|medical|education|school|fees|utilities|tax)\b/i;
+  async function loadCutPlan(goals) {
+    const need = goals.filter((g) => g.pct < 100 && g.target_date && g.target_date >= today())
+      .reduce((t, g) => t + Math.ceil(Number(g.remaining) / Math.max(monthsUntil(g.target_date), 1)), 0);
+    if (!need) { $("cutPlan").hidden = true; return; }
+    const [y, m] = today().split("-").map(Number);
+    const prev = new Date(y, m - 2, 1);
+    const month = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+    const { data, error } = await db.rpc("spending_by_category", { p_month: month });
+    if (error || !data.length) { $("cutPlan").hidden = true; return; }
+    const top = data.filter((c) => !FIXED.test(c.category)).slice(0, 3);
+    if (!top.length) { $("cutPlan").hidden = true; return; }
+    const freed = top.reduce((t, c) => t + Math.round(Number(c.total) * TRIM), 0);
+    const monthName = prev.toLocaleDateString(undefined, { month: "long" });
+    $("cutIntro").textContent = `Your dated goals need about ${money(need)} a month. ` +
+      `Here is what spending ${TRIM * 100}% less on your biggest everyday categories from ${monthName} would free up.`;
+    $("cutRows").innerHTML = top.map((c) => `<div class="cut-row">
+        <span class="cut-name">${esc(c.category)}</span>
+        <span class="muted">${money(c.total)} spent</span>
+        <span class="cut-save">${money(Math.round(Number(c.total) * TRIM))} a month</span>
+      </div>`).join("");
+    const share = Math.min(100, Math.round((freed / need) * 100));
+    $("cutTotal").innerHTML = freed >= need
+      ? `<span class="pos"><strong>${money(freed)} a month</strong></span> covers everything your goals need.`
+      : `<strong>${money(freed)} a month</strong> <span class="muted">covers about ${share}% of what your goals need.</span>`;
+    $("cutPlan").hidden = false;
+  }
+
   async function load() {
     const { data, error } = await db.rpc("goal_progress");
     if (error) return toast(error.message);
     if (!data.length) {
+      $("summary").hidden = true;
+      $("cutPlan").hidden = true;
       $("goals").innerHTML = `<div class="empty">No goals yet. Create one to start saving.</div>`;
       return;
     }
+    const saved = data.reduce((t, g) => t + Number(g.saved), 0);
+    const target = data.reduce((t, g) => t + Number(g.target_amount), 0);
+    $("summary").hidden = false;
+    $("sumSaved").textContent = money(saved);
+    $("sumOf").textContent = `of ${money(target)} across ${data.length} goal${data.length === 1 ? "" : "s"}`;
+    $("sumLeft").textContent = money(data.reduce((t, g) => t + Number(g.remaining), 0));
+    $("sumDone").textContent = `${data.filter((g) => g.pct >= 100).length} of ${data.length}`;
+    loadCutPlan(data);
     $("goals").innerHTML = data.map((g) => {
       const date = g.target_date
-        ? `<span class="muted">by ${esc(g.target_date)}</span>` : "";
-      const done = g.pct >= 100;
+        ? `<span class="muted">by ${esc(new Date(g.target_date + "T00:00").toLocaleDateString(undefined,
+            { day: "numeric", month: "short", year: "numeric" }))}</span>` : "";
       return `<div class="goal-row">
         ${ring(g.pct)}
         <div class="goal-main">
           <div class="goal-top"><span class="goal-name">${esc(g.name)}</span> ${date}</div>
-          <div class="goal-sub">${money(g.saved)} of ${money(g.target_amount)}
-            ${done ? `<span class="pill ok">Reached 🎉</span>`
-                   : `<span class="muted">· ${money(g.remaining)} to go</span>`}</div>
+          <div class="goal-sub">${money(g.saved)} of ${money(g.target_amount)}</div>
+          <div class="goal-sub">${plan(g)}</div>
         </div>
         <div class="goal-actions">
-          <button class="btn ghost sm" data-add="${g.id}" data-name="${esc(g.name)}">+ Add money</button>
-          <button class="icon-btn" title="Delete goal" data-del="${g.id}">✕</button>
+          <button class="btn ghost sm" data-add="${g.id}" data-name="${esc(g.name)}">Add money</button>
+          <button class="icon-btn" title="Delete goal" aria-label="Delete goal" data-del="${g.id}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </div>
       </div>`;
     }).join("");

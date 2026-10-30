@@ -71,11 +71,15 @@ export function setTheme(theme) {
   try { localStorage.setItem("theme", theme); } catch (e) {}
 }
 
+// Clean line icons (no emoji) for the theme toggle.
+const SUN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const MOON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+
 // Wire up a sidebar toggle button; keeps its icon/label in sync.
 export function initThemeToggle(btn, iconEl, labelEl) {
   const paint = () => {
     const dark = currentTheme() === "dark";
-    if (iconEl) iconEl.textContent = dark ? "☀️" : "🌙";
+    if (iconEl) iconEl.innerHTML = dark ? SUN_SVG : MOON_SVG;
     if (labelEl) labelEl.textContent = dark ? "Day mode" : "Night mode";
   };
   paint();
@@ -100,9 +104,10 @@ export function toast(message, kind = "error") {
 }
 
 // --- Pending email imports badge (sidebar) ---------------------------------
-// The shell renders <a data-nav="imports"> with an empty #importsBadge. These
-// keep the count in sync; the Imports page calls refreshImportsBadge() after
-// every approve/reject.
+// The shell's Transactions link carries data-nav="imports" and an empty
+// #importsBadge (email review lives under Transactions since Sprint 6); the
+// "From email" tab has its own count. These keep both in sync; the imports
+// view calls refreshImportsBadge() after every approve/reject.
 export function setImportsBadge(n) {
   const badge = document.getElementById("importsBadge");
   const link = document.querySelector('[data-nav="imports"]');
@@ -110,8 +115,12 @@ export function setImportsBadge(n) {
   const count = Math.max(0, Number(n) || 0);
   badge.textContent = count > 99 ? "99+" : String(count);
   badge.hidden = count === 0;
-  if (count) link.setAttribute("aria-label", `Email imports, ${count} waiting for review`);
+  if (count) link.setAttribute("aria-label", `Transactions, ${count} from email waiting for review`);
   else link.removeAttribute("aria-label");
+  document.querySelectorAll("[data-imports-count]").forEach((el) => {
+    el.textContent = badge.textContent;
+    el.hidden = count === 0;
+  });
 }
 
 export async function refreshImportsBadge() {

@@ -36,7 +36,7 @@ tests/                     a SQL test of the schema, security rules and money lo
 2. Open **SQL Editor** and run each file in `supabase/migrations/` **in order**:
    `0001_schema.sql`, `0002_rls.sql`, `0003_functions.sql`, `0004_seed_trigger.sql`,
    `0005_imports.sql`, `0006_approve_import.sql`, `0007_recurring.sql`, `0008_suggest_recurring.sql`,
-   `0009_goals_labels.sql`.
+   `0009_goals_labels.sql`, `0010_investments.sql`, `0011_import_channel.sql`, `0012_security_hardening.sql`.
    (Paste the contents of each, run, then the next.)
 3. Create your own account: **Authentication → Users → Add user** (set an email
    and password). The seed trigger gives you starter categories and a Cash

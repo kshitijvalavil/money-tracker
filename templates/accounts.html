@@ -66,8 +66,8 @@
         <td><span class="pill">${esc(a.type)}</span></td>
         <td class="amt ${a.balance < 0 ? "neg" : ""}">${money(a.balance)}</td>
         <td style="text-align:right;white-space:nowrap">
-          <button class="icon-btn" title="Edit" data-edit="${a.id}" style="color:var(--brand)">✎</button>
-          <button class="icon-btn" title="Delete" data-del="${a.id}">✕</button>
+          <button class="icon-btn" title="Edit" aria-label="Edit account" data-edit="${a.id}" style="color:var(--brand)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg></button>
+          <button class="icon-btn" title="Delete" aria-label="Delete account" data-del="${a.id}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         </td>
       </tr>`).join("") : `<tr><td colspan="4" class="empty">No accounts yet.</td></tr>`;
 

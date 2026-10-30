@@ -149,12 +149,12 @@ def layout(b):
             ctx.close()
     ctx, pg = open_page(b, "/bills")
     nav = ev(pg, "() => [...document.querySelectorAll('.nav a')].map(a => a.textContent.trim())")
-    i_b = next((i for i, t in enumerate(nav) if t.endswith("Budgets")), -1)
-    # Sprint 3 inserted Goals between Budgets and Bills in the sidebar.
-    check(i_b >= 0 and i_b + 2 < len(nav) and "Goals" in nav[i_b + 1] and "Bills" in nav[i_b + 2],
-          f"nav: Goals then Bills after Budgets ({nav})")
-    check(ev(pg, "() => document.querySelector('.nav a[href=\"/bills\"]').classList.contains('active')"),
-          "Bills nav item marked active on /bills")
+    # Sprint 6 IA: Bills lives under Transactions, not as its own sidebar item.
+    check(not any(t.endswith("Bills") for t in nav), f"no separate Bills item in the sidebar ({nav})")
+    check(ev(pg, "() => document.querySelector('.nav a[href=\"/transactions\"]').classList.contains('active')"),
+          "Transactions nav item marked active on /bills")
+    check(ev(pg, "() => document.querySelector('.seg-nav a[href=\"/bills\"]')?.getAttribute('aria-current') === 'page'"),
+          "Bills & subscriptions tab marked current on /bills")
     ctx.close()
 
 

@@ -59,15 +59,16 @@ function seed() {
   // Sample transactions "detected from email", awaiting review (demo only).
   // The hints/sources are chosen so the Imports page can pre-select a matching
   // account for some rows (HDFC by bank name, Credit Card by hint).
-  const pi = (source, direction, amount, d, account_hint, note, n) => ({
+  const pi = (source, direction, amount, d, account_hint, note, n, channel = null) => ({
     id: uid(), source, direction, amount, occurred_on: day(thisMonth, d), account_hint, note,
-    source_message_id: `demo-${n}`, status: "pending", created_at: new Date().toISOString(),
+    source_message_id: `demo-${n}`, status: "pending", created_at: new Date().toISOString(), channel,
   });
+  // Channel rule (0011): UPI -> "Google Pay", other bank alerts -> the bank.
   const pending_imports = [
-    pi("hdfc_alert", "income", 5000, 5, "0001", "UPI transfer from Ravi", 1),
+    pi("hdfc_alert", "income", 5000, 5, "0001", "UPI transfer from Ravi", 1, "Google Pay"),
     pi("statement", "expense", 450, 7, "card", "POS purchase", 2),
     pi("receipt", "expense", 299, 8, null, "Zomato order", 3),
-    pi("hdfc_alert", "expense", 1200, 9, "0001", "Electricity bill autopay", 4),
+    pi("hdfc_alert", "expense", 1200, 9, "0001", "Electricity bill autopay", 4, "HDFC Bank"),
     pi("receipt", "expense", 186, 11, null, "Uber trip", 5),
   ];
 
@@ -135,8 +136,20 @@ function seed() {
   byNote("Flat rent").forEach((t) => tag(t, L["Essentials"]));
   byNote("Groceries").forEach((t) => tag(t, L["Essentials"]));
 
+  // Investments (Sprint 6): a small mixed portfolio, one holding in the red.
+  const investments = [
+    ["Nifty 50 index fund", "mutual_fund", 120000, 138450, "SIP, monthly"],
+    ["Infosys", "stocks", 45000, 41200, ""],
+    ["SBI fixed deposit", "fixed_deposit", 100000, 104800, "7.1% for 2 years"],
+    ["Sovereign gold bond", "gold", 30000, 36900, ""],
+    ["PPF", "retirement", 150000, 161250, ""],
+  ].map(([name, kind, invested_amount, current_value, note]) => ({
+    id: uid(), name, kind, invested_amount, current_value, note,
+    as_of: day(thisMonth, 1), created_at: new Date().toISOString(),
+  }));
+
   return { accounts, categories, transactions, budgets, pending_imports, recurring,
-           goals, goal_contributions, labels, transaction_labels };
+           goals, goal_contributions, labels, transaction_labels, investments };
 }
 
 // Same SQLSTATE-style errors as the real functions.
@@ -329,6 +342,16 @@ function importRpc(s, name, params) {
     };
     s.transactions.push(t);
   }
+  // 0011: label by channel ("Google Pay", "SBI", ...), reusing a label of the
+  // same name (any case) and keeping labels the transaction already has.
+  const channel = String(imp.channel || "").trim();
+  if (channel) {
+    let label = s.labels.find((l) => l.name.trim().toLowerCase() === channel.toLowerCase());
+    if (!label) { label = { id: uid(), name: channel, created_at: new Date().toISOString() }; s.labels.push(label); }
+    if (!s.transaction_labels.some((tl) => tl.transaction_id === t.id && tl.label_id === label.id)) {
+      s.transaction_labels.push({ transaction_id: t.id, label_id: label.id });
+    }
+  }
   imp.status = "approved";
   return t.id;
 }
@@ -488,6 +511,7 @@ function enrich(s, table, row) {
 // Column defaults the database would fill in.
 const DEFAULTS = {
   recurring: { next_seq: 0, auto_post: false, active: true, source: "manual" },
+  investments: { kind: "other", note: "", as_of: localDate(new Date()) },
 };
 
 // ---- a tiny chainable, awaitable query builder ----------------------------

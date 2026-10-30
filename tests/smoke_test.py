@@ -85,12 +85,12 @@ def main():
 
         check(pg.evaluate("() => typeof window.supabase !== 'undefined'"), "supabase-js loaded")
 
-        pg.goto(BASE + "/reports", wait_until="networkidle")
+        pg.goto(BASE + "/insights", wait_until="networkidle")
         pg.wait_for_timeout(900)
         check(pg.evaluate("() => typeof window.Chart !== 'undefined'"), "Chart.js loaded")
         check(pg.evaluate("() => !!Chart.getChart('pie')"), "pie chart drawn")
         check(pg.evaluate("() => !!Chart.getChart('bars')"), "bar chart drawn")
-        shot(pg, "05-reports.png")
+        shot(pg, "05-insights.png")
 
         b.close()
 

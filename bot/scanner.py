@@ -36,7 +36,7 @@ MAX_AMOUNT = 999999999999.99
 # Exactly the pending_imports columns we send (PostgREST bulk insert needs
 # every object to carry the same keys).
 ROW_KEYS = ("source", "direction", "amount", "occurred_on", "account_hint",
-            "note", "source_message_id")
+            "note", "source_message_id", "channel")
 
 
 def _iso_date(value):
@@ -75,6 +75,7 @@ def to_row(parsed):
         "account_hint": parsed.get("account_hint"),
         "note": parsed.get("note") or "",
         "source_message_id": str(parsed["source_message_id"]),
+        "channel": (str(parsed.get("channel")).strip()[:40] or None) if parsed.get("channel") else None,
     }
 
 
