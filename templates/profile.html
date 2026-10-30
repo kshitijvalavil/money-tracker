@@ -28,12 +28,12 @@
   <div class="card">
     <h2>Change password</h2>
     <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">
-      Use at least 6 characters. You stay signed in after changing it.</p>
+      Use at least 8 characters. You stay signed in after changing it.</p>
     <form id="pwForm" autocomplete="off">
       <div class="field"><label for="pw1">New password</label>
-        <input type="password" id="pw1" autocomplete="new-password" minlength="6" required></div>
+        <input type="password" id="pw1" autocomplete="new-password" minlength="8" required></div>
       <div class="field"><label for="pw2">Confirm new password</label>
-        <input type="password" id="pw2" autocomplete="new-password" minlength="6" required></div>
+        <input type="password" id="pw2" autocomplete="new-password" minlength="8" required></div>
       <button class="btn" type="submit" id="pwSubmit">Update password</button>
     </form>
   </div>
@@ -70,7 +70,7 @@
     if (DEMO) { toast("Password changes are disabled in demo mode.", "ok"); return; }
     if (!db) { toast("Supabase isn't configured yet."); return; }
     const pw1 = $("pw1").value, pw2 = $("pw2").value;
-    if (pw1.length < 6) { toast("Password must be at least 6 characters."); return; }
+    if (pw1.length < 8) { toast("Password must be at least 8 characters."); return; }
     if (pw1 !== pw2) { toast("The two passwords don't match."); return; }
     const btn = $("pwSubmit");
     btn.disabled = true; btn.textContent = "Updating…";
