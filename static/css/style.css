@@ -605,3 +605,25 @@ ol.rank li::before { content: counter(rank); color: var(--muted); font-weight: 7
                           text-transform: uppercase; letter-spacing: .02em; margin-bottom: 2px; }
   #holdings .h-act .icon-btn { min-width: 44px; min-height: 44px; }
 }
+
+/* Budgets (Sprint 6): what's left, at a glance ----------------------------- */
+.budget-big { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 12px;
+              color: var(--ink); font-variant-numeric: tabular-nums; }
+.budget-big.neg { color: var(--neg); }
+.budget-bar { height: 12px; }
+.budget-sub { margin-top: 10px; font-size: 0.9rem; }
+.bar { position: relative; }
+.bar > div.warn { background: var(--warn); }
+.bar > .pace { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
+               background: var(--ink); opacity: .45; border-radius: 1px; }
+.budget-row .budget-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.budget-row .budget-left { font-weight: 600; font-variant-numeric: tabular-nums; }
+.budget-foot { display: flex; justify-content: space-between; align-items: center;
+               font-size: 0.82rem; margin-top: 4px; }
+.budget-actions { display: flex; gap: 2px; }
+.pill.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+.pill.bad  { background: var(--neg-bg); color: var(--neg); }
+.goal-plan { font-weight: 600; color: var(--brand); }
+.goal-plan.soon, .goal-plan.late { color: var(--warn); }
+.goal-top { flex-wrap: wrap; row-gap: 0; }
+.goal-top .muted { font-size: 0.85rem; }
