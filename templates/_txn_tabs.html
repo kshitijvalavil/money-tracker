@@ -1,0 +1,6 @@
+{# Sub-navigation for the Transactions area: Bills & subscriptions live here
+   instead of being their own top-level page (Sprint 6 IA). #}
+<nav class="seg-nav" aria-label="Transactions views">
+  <a href="/transactions"{% if page == 'transactions' %} aria-current="page"{% endif %}>History</a>
+  <a href="/bills"{% if page == 'bills' %} aria-current="page"{% endif %}>Bills &amp; subscriptions</a>
+</nav>

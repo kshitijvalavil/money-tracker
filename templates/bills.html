@@ -1,13 +1,14 @@
 {% extends "_shell.html" %}
-{% block title %}Bills — Money Tracker{% endblock %}
+{% block title %}Bills &amp; subscriptions — Money Tracker{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Bills</h1>
+    <h1>Transactions</h1>
     <p class="page-sub" id="monthlyTotal" aria-live="polite"></p>
   </div>
   <button class="btn" id="addBillBtn" type="button">Add bill</button>
 </div>
+{% include "_txn_tabs.html" %}
 
 <div class="card capture-card" id="captureCard">
   <h2>Snap a bill</h2>
