@@ -195,7 +195,7 @@ def main(argv=None):
     else:
         from bot import gmail_source
         messages = gmail_source.fetch_messages(
-            query=args.query or os.environ.get("GMAIL_QUERY") or gmail_source.DEFAULT_QUERY,
+            query=args.query or os.environ.get("GMAIL_QUERY") or gmail_source.default_query(),
             max_messages=args.max)
 
     url, jwt = os.environ.get("SUPABASE_URL", ""), os.environ.get("SUPABASE_USER_JWT", "")

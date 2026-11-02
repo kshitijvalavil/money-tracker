@@ -19,6 +19,19 @@ export const db = DEMO
 // and browser tests. Never set for a real Supabase client.
 if (DEMO) window.__demoDb = db;
 
+// Headers that prove who's signed in, for our own /api calls that need it.
+// The demo client has no session, so demo calls go without one.
+export async function authHeaders() {
+  if (DEMO || !db?.auth?.getSession) return {};
+  try {
+    const { data } = await db.auth.getSession();
+    const token = data?.session?.access_token;
+    return token ? { Authorization: "Bearer " + token } : {};
+  } catch (e) {
+    return {};
+  }
+}
+
 // Format money the Indian way: ₹1,23,456.00
 const inr = new Intl.NumberFormat("en-IN", {
   style: "currency",

@@ -22,7 +22,16 @@ import urllib.request
 from datetime import datetime, timezone
 
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
-DEFAULT_QUERY = "from:(alerts.sbi.bank.in) newer_than:30d"
+DEFAULT_QUERY = "from:(alerts.sbi.bank.in) newer_than:30d"   # kept for old callers
+
+
+def default_query(days=30):
+    """A Gmail search for every sender the parsers understand: SBI and the
+    other banks, Google Pay, and the merchant receipts, over the last `days`."""
+    from bot.parsers import BANKS, MERCHANTS
+    senders = ["alerts.sbi.bank.in", "sbi.co.in"] + sorted(BANKS) + \
+        ["googlepay-noreply@google.com", "payments-noreply@google.com"] + sorted(MERCHANTS)
+    return "from:(" + " OR ".join(senders) + ") newer_than:%dd" % int(days)
 
 
 # --- pure parsing -----------------------------------------------------------
