@@ -154,8 +154,11 @@ as a redirect URI, then use the OAuth Playground ("Use your own OAuth
 credentials") to authorize `https://www.googleapis.com/auth/gmail.readonly` and
 copy the refresh token. Put these four in Render's environment settings (never in
 the code): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`,
-`GMAIL_OWNER_EMAIL`. Testing-mode refresh tokens expire after 7 days; when the
-button says the Gmail connection expired, repeat the Playground step.
+`GMAIL_OWNER_EMAIL`. In Testing mode Google expires the refresh token after 7
+days. To avoid redoing it weekly, set the consent screen's publishing status to
+**In production** before the Playground step (Google shows an "unverified app"
+warning when you authorize your own account; that is expected for a personal
+app). If the button ever says the Gmail connection expired, repeat that step.
 
 ## Email import scanner
 
