@@ -24,14 +24,3 @@ services:
         sync: false
       - key: BILL_MODEL
         sync: false
-      # "Check email now" (Sprint 9): read-only Gmail access for the owner's
-      # account only. Set all four in the Render UI; until then the button
-      # shows "Email checking isn't switched on yet". Never commit these.
-      - key: GOOGLE_CLIENT_ID
-        sync: false
-      - key: GOOGLE_CLIENT_SECRET
-        sync: false
-      - key: GMAIL_REFRESH_TOKEN
-        sync: false
-      - key: GMAIL_OWNER_EMAIL
-        sync: false

@@ -138,27 +138,16 @@ backup of your transactions.
 
 ---
 
-## Check email now (the button)
+## Email sync and the review list
 
-On Transactions > From email, **Check email now** reads the last 30 days of bank
-and Google Pay alerts (SBI, HDFC, Kotak, ICICI, Axis, Yes, IDFC, Slice, Google
-Pay) from the owner's Gmail and adds new ones as **pending**. Nothing reaches the
-tracker until you approve it. Only the account whose email matches
-`GMAIL_OWNER_EMAIL` can use it; everyone else sees "coming with Premium". It is
-rate limited (3 checks per 10 minutes) and uses read-only Gmail access.
-
-One-time setup (free): in Google Cloud, enable the Gmail API, make an OAuth
-consent screen in **Testing** with your Gmail as a test user, create a **Web
-application** OAuth client with `https://developers.google.com/oauthplayground`
-as a redirect URI, then use the OAuth Playground ("Use your own OAuth
-credentials") to authorize `https://www.googleapis.com/auth/gmail.readonly` and
-copy the refresh token. Put these four in Render's environment settings (never in
-the code): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`,
-`GMAIL_OWNER_EMAIL`. In Testing mode Google expires the refresh token after 7
-days. To avoid redoing it weekly, set the consent screen's publishing status to
-**In production** before the Playground step (Google shows an "unverified app"
-warning when you authorize your own account; that is expected for a personal
-app). If the button ever says the Gmail connection expired, repeat that step.
+New spending reaches **Transactions > To review** through an email sync that
+Claude runs with the Gmail connector on the owner's own Claude account (say
+"sync my email"). The app itself holds no Gmail keys. The sync reads only bank,
+Google Pay, Swiggy and Zomato emails, runs them through `bot/parsers.py`, merges
+the 2-3 emails of one payment (`bot/review.py`), suggests a category from your
+rules, and saves each as a **pending** row for your account only. Nothing is
+counted until you accept it. Anyone else running this build connects their own
+Gmail to their own Claude and their own Supabase project.
 
 ## Email import scanner
 

@@ -474,7 +474,7 @@ def main():
             const l = 0.2126 * L[0] + 0.7152 * L[1] + 0.0722 * L[2];
             return Math.round(1.05 / (l + 0.05) * 100) / 100; }"""
         for path, sel in (("/bills", "#addBillBtn"), ("/bills", "#billRows .mark-paid"), ("/transactions", ".btn"),
-                          ("/budgets", ".btn"), ("/imports", "#approveAll")):
+                          ("/budgets", ".btn"), ("/imports", ".act-accept")):
             ctx, pg = page_with(b, theme="dark")
             pg.goto(BASE + path, wait_until="networkidle")
             settle(pg, 600)

@@ -40,27 +40,27 @@ def main():
         pg.wait_for_timeout(500)
         nav = pg.evaluate("() => [...document.querySelectorAll('.nav a')].map(a => a.getAttribute('href'))")
         check("/imports" not in nav, f"no separate Email imports item in the sidebar ({nav})")
-        check(pg.inner_text("#importsBadge") == "5" and pg.is_visible("#importsBadge"),
-              "Transactions shows 5 waiting from email")
+        check(pg.inner_text("#importsBadge") == "6" and pg.is_visible("#importsBadge"),
+              "Transactions shows 6 waiting to review")
 
         pg.goto(BASE + "/imports", wait_until="networkidle")
         pg.wait_for_timeout(600)
         check(pg.locator(".nav a[href='/transactions']").get_attribute("class") == "active",
               "Transactions is active on the email view")
         tab = pg.locator(".seg-nav a[href='/imports']")
-        check(tab.get_attribute("aria-current") == "page", "From email tab is current")
-        check(tab.locator("[data-imports-count]").inner_text() == "5", "From email tab shows the count")
-        pills = pg.locator("#rows .c-source .pill").all_text_contents()
+        check(tab.get_attribute("aria-current") == "page", "To review tab is current")
+        check(tab.locator("[data-imports-count]").inner_text() == "6", "To review tab shows the count")
+        pills = " | ".join(pg.locator("#list .rv-from").all_text_contents())
         check("Google Pay" in pills and "HDFC Bank" in pills, f"imports show their channel ({pills})")
         if SHOTS:
             pg.screenshot(path=os.path.join(SHOTS, "email-01.png"), full_page=True)
 
         # Approve the Google Pay one -> its transaction carries the label.
-        row = pg.locator("#rows tr", has=pg.locator(".pill", has_text="Google Pay"))
-        row.locator(".approve").click()
+        row = pg.locator("#list .rv-item", has_text="Ravi")
+        row.locator(".act-accept").click()
         pg.wait_for_timeout(900)
-        check(pg.locator("#rows .pill", has_text="Google Pay").count() == 0, "approved import leaves the list")
-        check(tab.locator("[data-imports-count]").inner_text() == "4", "tab count drops to 4")
+        check(pg.locator("#list .rv-item", has_text="Ravi").count() == 0, "accepted item leaves the list")
+        check(tab.locator("[data-imports-count]").inner_text() == "5", "tab count drops to 5")
 
         # Demo data resets on reload, so look the transaction up on this page
         # through the same client the page uses.

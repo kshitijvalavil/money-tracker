@@ -38,11 +38,25 @@
     </form>
   </div>
 </div>
+
+<div class="card rules-card" style="margin-top:16px">
+  <div class="card-head">
+    <h2 id="rulesHeading">Rules</h2>
+  </div>
+  <p class="card-intro">Rules sort new transactions for you. When a shop name or UPI ID contains the words, the review list suggests that category.</p>
+  <form id="ruleForm" class="rule-form" autocomplete="off">
+    <div class="field"><label for="ruleText">When it contains</label>
+      <input id="ruleText" maxlength="60" minlength="2" required placeholder="e.g. blinkit"></div>
+    <div class="field"><label for="ruleCat">Put it in</label><select id="ruleCat" required></select></div>
+    <button class="btn" type="submit" id="ruleAdd">Add rule</button>
+  </form>
+  <ul class="rule-list" id="ruleList" aria-labelledby="rulesHeading" aria-busy="true"></ul>
+</div>
 {% endblock %}
 
 {% block page_script %}
 <script type="module">
-  import { db, DEMO, toast, signOut, currentTheme, setTheme } from "{{ url_for('static', filename='js/app.js') }}";
+  import { db, DEMO, toast, esc, signOut, currentTheme, setTheme } from "{{ url_for('static', filename='js/app.js') }}";
   const $ = (id) => document.getElementById(id);
 
   // --- Account -------------------------------------------------------------
@@ -63,6 +77,53 @@
   $("themeDay").onclick = () => { setTheme("light"); paintTheme(); };
   $("themeNight").onclick = () => { setTheme("dark"); paintTheme(); };
   paintTheme();
+
+  // --- Rules (Sprint 9) ---------------------------------------------------
+  let cats = [], rules = [];
+  async function loadRules() {
+    if (!db) return;
+    const [c, r] = await Promise.all([
+      db.from("categories").select("id, name, kind").order("name"),
+      db.from("category_rules").select("id, match_text, category_id, hits").order("match_text"),
+    ]);
+    $("ruleList").removeAttribute("aria-busy");
+    if (c.error || r.error) { $("ruleList").innerHTML = `<li class="empty">Couldn't load your rules. Refresh to try again.</li>`; return; }
+    cats = c.data; rules = r.data;
+    $("ruleCat").innerHTML = cats.map((x) => `<option value="${x.id}">${esc(x.name)}${x.kind === "income" ? " (income)" : ""}</option>`).join("");
+    $("ruleList").innerHTML = r.data.length
+      ? r.data.map((x) => `<li class="rule-item" data-id="${esc(x.id)}">
+          <span class="rule-what"><b>${esc(x.match_text)}</b> <span class="muted">goes to</span>
+            <label class="sr-only" for="rc-${esc(x.id)}">Category for ${esc(x.match_text)}</label>
+            <select id="rc-${esc(x.id)}" class="rule-cat">${cats.map((k) =>
+              `<option value="${k.id}"${k.id === x.category_id ? " selected" : ""}>${esc(k.name)}</option>`).join("")}</select></span>
+          <button type="button" class="btn ghost sm rule-del" aria-label="Delete the rule for ${esc(x.match_text)}">Delete</button>
+        </li>`).join("")
+      : `<li class="empty">No rules yet. Fix the same shop twice in your review list and you'll be offered one.</li>`;
+    $("ruleList").querySelectorAll(".rule-item").forEach((li) => {
+      li.querySelector(".rule-cat").onchange = async (e) => {
+        const { error } = await db.from("category_rules").update({ category_id: e.target.value }).eq("id", li.dataset.id);
+        toast(error ? "Couldn't save that change. Try again." : "Rule updated.", error ? "error" : "ok");
+      };
+      li.querySelector(".rule-del").onclick = async () => {
+        const { error } = await db.from("category_rules").delete().eq("id", li.dataset.id);
+        if (error) return toast("Couldn't delete that rule. Try again.");
+        toast("Rule deleted.", "ok");
+        loadRules();
+      };
+    });
+  }
+  $("ruleForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = $("ruleText").value.trim().toLowerCase();
+    if (text.length < 2) return toast("Use at least 2 letters.");
+    if (rules.some((x) => x.match_text.trim().toLowerCase() === text)) return toast("You already have a rule for that.");
+    const { error } = await db.from("category_rules").insert({ match_text: text, category_id: $("ruleCat").value });
+    if (error) return toast(error.code === "23505" ? "You already have a rule for that." : "Couldn't add the rule. Try again.");
+    $("ruleText").value = "";
+    toast("Rule added.", "ok");
+    loadRules();
+  });
+  loadRules();
 
   // --- Change password -----------------------------------------------------
   $("pwForm").addEventListener("submit", async (e) => {

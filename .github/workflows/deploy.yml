@@ -1,0 +1,31 @@
+name: Deploy to Render
+
+# Runs only after CI passes on main. Calls the Render deploy hook kept in the
+# RENDER_DEPLOY_HOOK repository secret (never in code). If the secret isn't set,
+# it says so and does nothing.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_DEPLOY_HOOK secret is not set; skipping (deploy manually in Render)."
+            exit 0
+          fi
+          case "$HOOK" in https://api.render.com/deploy/*) ;; *) echo "Secret is not a Render deploy hook URL"; exit 1;; esac
+          curl -fsS -X POST "${HOOK}&ref=${SHA}" -o /dev/null || curl -fsS -X POST "$HOOK" -o /dev/null
+          echo "Render deploy triggered for ${SHA}"
