@@ -36,8 +36,8 @@ jobs:
         run: python3 tests/billtext_test.py
       - name: Security hardening tests
         run: python3 tests/security_test.py
-      - name: Check email now (server side, offline)
-        run: python3 tests/test_emailscan.py
+      - name: Review inbox (duplicate merging + rules)
+        run: python3 tests/test_review.py
       - name: Scanner dry run on fixtures
         run: python3 -m bot.scanner --from-dir tests/fixtures
       - name: Database tests (schema, RLS, money math)
@@ -73,10 +73,6 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/smoke_test.py
-      - name: Imports page tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/imports_ui_test.py
       - name: Bills page tests
         env:
           BASE_URL: http://127.0.0.1:8099
@@ -117,10 +113,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/phone_layout_test.py
-      - name: Check email now button (web + phone)
+      - name: Review inbox UI (phone + desktop)
         env:
           BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint9_email_button_test.py
+        run: python tests/sprint9_review_inbox_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

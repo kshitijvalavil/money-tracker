@@ -64,13 +64,25 @@ function seed() {
     source_message_id: `demo-${n}`, status: "pending", created_at: new Date().toISOString(), channel,
   });
   // Channel rule (0011): UPI -> "Google Pay", other bank alerts -> the bank.
+  // Sprint 9: shop name, suggested category and merged emails (0013).
+  const pi9 = (extra, ...args) => ({ ...pi(...args), merchant: null, suggested_category_id: null,
+    merged_message_ids: [], merged_sources: [], ...extra });
   const pending_imports = [
-    pi("hdfc_alert", "income", 5000, 5, "0001", "UPI transfer from Ravi", 1, "Google Pay"),
-    pi("statement", "expense", 450, 7, "card", "POS purchase", 2),
-    pi("receipt", "expense", 299, 8, null, "Zomato order", 3),
-    pi("hdfc_alert", "expense", 1200, 9, "0001", "Electricity bill autopay", 4, "HDFC Bank"),
-    pi("receipt", "expense", 186, 11, null, "Uber trip", 5),
+    pi9({ merchant: "Ravi" }, "hdfc_alert", "income", 5000, 5, "0001", "UPI transfer from Ravi", 1, "Google Pay"),
+    pi9({ merchant: "POS purchase" }, "statement", "expense", 450, 7, "card", "POS purchase", 2),
+    pi9({ merchant: "Swiggy", suggested_category_id: C["Food"], merged_message_ids: ["demo-6", "demo-7"],
+          merged_sources: ["Google Pay", "HDFC"] }, "receipt", "expense", 450, 8, null, "Swiggy order", 3, "Google Pay"),
+    pi9({ merchant: "Zomato", suggested_category_id: C["Food"] }, "receipt", "expense", 299, 8, null, "Zomato order", 8),
+    pi9({ merchant: "Electricity bill autopay", suggested_category_id: C["Bills"] },
+        "hdfc_alert", "expense", 1200, 9, "0001", "Electricity bill autopay", 4, "HDFC Bank"),
+    pi9({ merchant: "Uber" }, "receipt", "expense", 186, 11, null, "Uber trip", 5),
   ];
+  const category_rules = [
+    { id: uid(), match_text: "zomato", category_id: C["Food"], label: null, hits: 6, created_at: new Date().toISOString() },
+    { id: uid(), match_text: "swiggy", category_id: C["Food"], label: null, hits: 9, created_at: new Date().toISOString() },
+  ];
+  const sync_status = [{ user_id: "demo-user", last_synced_at: new Date(now.getTime() - 40 * 60000).toISOString(),
+                         last_found: 7, last_added: 4 }];
 
   // Recurring bills, placed relative to today so the demo always shows one
   // overdue bill, one due soon, one auto-posting today and one far off.
@@ -149,7 +161,8 @@ function seed() {
   }));
 
   return { accounts, categories, transactions, budgets, pending_imports, recurring,
-           goals, goal_contributions, labels, transaction_labels, investments };
+           goals, goal_contributions, labels, transaction_labels, investments,
+           category_rules, sync_status };
 }
 
 // Same SQLSTATE-style errors as the real functions.
@@ -356,8 +369,25 @@ function importRpc(s, name, params) {
   return t.id;
 }
 
+// Mirrors undo_approve (0013): delete the transaction an accept made in the
+// last 10 minutes and put the import back to pending.
+function undoApprove(s, params) {
+  const imp = s.pending_imports.find((p) => p.id === params?.p_import_id);
+  if (!imp) fail("P0002", `import ${params?.p_import_id} not found`);
+  if (imp.status !== "approved") fail("55000", `import ${imp.id} is ${imp.status}, nothing to undo`);
+  const cutoff = Date.now() - 10 * 60000;
+  const t = s.transactions.find((x) => x.source_message_id === imp.source_message_id
+    && Date.parse(x.created_at) > cutoff);
+  if (!t) fail("55000", "too late to undo");
+  s.transactions = s.transactions.filter((x) => x !== t);
+  s.transaction_labels = s.transaction_labels.filter((tl) => tl.transaction_id !== t.id);
+  imp.status = "pending";
+  return null;
+}
+
 function rpc(s, name, params) {
   if (name === "approve_import" || name === "reject_import") return importRpc(s, name, params);
+  if (name === "undo_approve") return undoApprove(s, params);
   if (RECURRING_RPCS.includes(name)) return recurringRpc(s, name, params);
   const m = params?.p_month;
   if (name === "account_balances") return accountBalances(s);
@@ -615,7 +645,7 @@ export function createDemoClient() {
     from(table) { return makeBuilder(store, table); },
     async rpc(name, params) {
       // Write RPCs get a short fake network delay so loading states are visible.
-      if (["approve_import", "reject_import", "mark_recurring_paid", "skip_recurring",
+      if (["approve_import", "reject_import", "undo_approve", "mark_recurring_paid", "skip_recurring",
            "set_transaction_labels"].includes(name)) {
         await new Promise((r) => setTimeout(r, 350));
       }

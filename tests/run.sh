@@ -122,3 +122,9 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d sec \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/security_hardening_test.sql"
+
+# ---- Review inbox (0013): rules, suggestions, sync status, undo ---------------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres rev
+"${PSQL[@]}" -d rev \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/review_inbox_test.sql"

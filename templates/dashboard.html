@@ -10,6 +10,8 @@
   </div>
 </div>
 
+<nav class="needs needs-desk" id="needsDesk" aria-label="Needs you" hidden></nav>
+
 <div class="grid cols-3" style="margin-bottom:16px">
   <div class="card stat"><div class="label">Total balance</div><div class="value" id="balance">—</div></div>
   <div class="card stat"><div class="label">Income this month</div><div class="value pos" id="income">—</div></div>
@@ -25,6 +27,8 @@
   <div class="lts-sub" id="ltsSub"></div>
   <div class="bar"><div id="ltsBar"></div></div>
 </div>
+
+<nav class="needs needs-phone" id="needsPhone" aria-label="Needs you" hidden></nav>
 
 <div class="card upcoming-card" style="margin-bottom:16px">
   <div class="card-head">
@@ -161,6 +165,31 @@
         }).join("")
       : `<tr><td colspan="5" class="empty">No transactions yet. <a href="/transactions" style="color:var(--brand)">Add one →</a></td></tr>`;
   }
+
+  // --- Needs you (Sprint 9): what to look at today -----------------------
+  // Items to review, bills due within 7 days (or overdue), budgets at 90%+.
+  async function loadNeeds() {
+    const [rev, bills, bud] = await Promise.all([
+      db.from("pending_imports").select("id", { count: "exact", head: true }).eq("status", "pending"),
+      db.rpc("upcoming_recurring", { p_days: 7, p_as_of: today() }),
+      db.rpc("budget_status", { p_month: thisMonth() }),
+    ]);
+    const chips = [];
+    const n = rev.error ? 0 : (rev.count || 0);
+    if (n) chips.push(`<a class="need" href="/imports"><span class="n">${n}</span>to review</a>`);
+    const b = bills.error ? 0 : (bills.data || []).length;
+    if (b) chips.push(`<a class="need" href="/bills"><span class="n">${b}</span>${b === 1 ? "bill" : "bills"} this week</a>`);
+    if (!bud.error) {
+      (bud.data || []).filter((x) => Number(x.monthly_limit) > 0 && Number(x.spent) / Number(x.monthly_limit) >= 0.9)
+        .sort((x, y) => y.spent / y.monthly_limit - x.spent / x.monthly_limit).slice(0, 2)
+        .forEach((x) => chips.push(`<a class="need warn" href="/budgets"><span class="n">${Math.round(100 * x.spent / x.monthly_limit)}%</span>${esc(x.category)} budget</a>`));
+    }
+    for (const id of ["needsDesk", "needsPhone"]) {
+      $(id).innerHTML = chips.join("");
+      $(id).hidden = !chips.length;
+    }
+  }
+  loadNeeds();
 
   // --- Upcoming bills (next 7 days + overdue) ------------------------------
   const paying = new Set();
