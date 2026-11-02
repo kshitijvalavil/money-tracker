@@ -111,6 +111,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint6_hotfix_test.py
+      - name: Phone layout tests (every page fits, transaction amounts on screen)
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/phone_layout_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

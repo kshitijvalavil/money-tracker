@@ -635,3 +635,35 @@ ol.rank li::before { content: counter(rank); color: var(--muted); font-weight: 7
 .cut-name { font-weight: 600; color: var(--ink); }
 .cut-save { font-weight: 600; color: var(--brand); text-align: right; min-width: 7.5em; }
 @media (max-width: 420px) { .cut-row { grid-template-columns: 1fr auto; } .cut-row .muted { display: none; } }
+
+/* Transactions history + dashboard "Recent transactions": below 640px each
+   row becomes a small card (category and amount first, then date, type and
+   account, then the note), so the amount is never cut off at the edge. */
+@media (max-width: 640px) {
+  .tx-table, .tx-table tbody { display: block; }
+  .tx-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  .tx-table tr[data-tx] {
+    display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "cat cat cat amt"
+      "date type acc acc"
+      "note note note act";
+    gap: 4px 8px; align-items: center; padding: 12px 2px; border-bottom: 1px solid var(--line);
+  }
+  .tx-table tr[data-tx]:last-child { border-bottom: none; }
+  /* Dashboard rows have no Type cell: let the account sit right after the date. */
+  .tx-table tr[data-tx]:not(:has(.t-type)) {
+    grid-template-areas: "cat cat cat amt" "date acc acc acc" "note note note act";
+  }
+  .tx-table tr[data-tx] td { display: block; padding: 0; border: none; min-width: 0; }
+  .tx-table .t-cat { grid-area: cat; font-weight: 600; }
+  .tx-table .amt { grid-area: amt; font-weight: 600; white-space: nowrap; }
+  .tx-table .t-date { grid-area: date; color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+  .tx-table .t-type { grid-area: type; }
+  .tx-table .t-acc { grid-area: acc; color: var(--muted); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tx-table .t-acc::before { content: "· "; }
+  .tx-table .t-note { grid-area: note; font-size: 0.9rem; overflow-wrap: anywhere; }
+  .tx-table .t-note:empty { display: none; }
+  .tx-table .t-act { grid-area: act; justify-self: end; }
+  .tx-table tr:not([data-tx]) td { display: block; }
+}
