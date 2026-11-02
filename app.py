@@ -13,6 +13,7 @@ from collections import defaultdict, deque
 from flask import Flask, jsonify, redirect, render_template, request
 
 from billreader import BillReadError, parse_bill_text, read_bill
+from bot import emailscan
 
 
 def _load_dotenv(path=".env"):
@@ -105,13 +106,15 @@ def _client_ip():
     return fwd.split(",")[0].strip() if fwd else (request.remote_addr or "unknown")
 
 
-def _rate_limited(key):
+def _rate_limited(key, max_hits=None, window=None):
+    max_hits = _RL_MAX if max_hits is None else max_hits
+    window = _RL_WINDOW if window is None else window
     now = time.monotonic()
     with _RL_LOCK:
         hits = _RL_HITS[key]
-        while hits and hits[0] <= now - _RL_WINDOW:
+        while hits and hits[0] <= now - window:
             hits.popleft()
-        if len(hits) >= _RL_MAX:
+        if len(hits) >= max_hits:
             return True
         hits.append(now)
         return False
@@ -269,6 +272,65 @@ def api_parse_bill_text():
         return jsonify({"error": "No text was read from the photo. Try a clearer, straight-on shot."}), 400
     # The form only needs a little text; ignore anything huge.
     return jsonify(parse_bill_text(text[:20000]))
+
+
+# --- "Check email now" (Sprint 9) ------------------------------------------
+# Reads the owner's recent bank / Google Pay alert emails and adds them to
+# From email as PENDING rows (nothing is approved automatically). Owner-only:
+# the caller's Supabase token must belong to GMAIL_OWNER_EMAIL. The Gmail keys
+# live only in Render's environment settings, never in the code.
+_SCAN_MAX = int(os.environ.get("EMAIL_SCAN_RATE_MAX", "3"))       # scans...
+_SCAN_WINDOW = int(os.environ.get("EMAIL_SCAN_RATE_WINDOW", "600"))  # ...per 10 min
+
+
+def _bearer():
+    h = request.headers.get("Authorization", "")
+    return h[7:].strip() if h.lower().startswith("bearer ") else ""
+
+
+def _scan_caller():
+    """(user, error_response). Checks sign-in, then that it's the owner."""
+    user = emailscan.who_is(_bearer(), SUPABASE_URL, SUPABASE_ANON_KEY)
+    if not user:
+        return None, (jsonify({"error": "Please sign in and try again."}), 401)
+    if not emailscan.is_owner(user.get("email")):
+        return None, (jsonify({"error": "Connect your email is coming with Premium.",
+                               "available": False, "reason": "premium"}), 403)
+    return user, None
+
+
+@app.route("/api/scan-email", methods=["GET"])
+def api_scan_email_status():
+    if DEMO_MODE:
+        return jsonify({"available": True, "reason": "demo"})
+    if not emailscan.configured():
+        return jsonify({"available": False, "reason": "not_configured"})
+    user, err = _scan_caller()
+    if err:
+        return err if err[1] == 401 else (jsonify({"available": False, "reason": "premium"}), 200)
+    return jsonify({"available": True, "reason": "owner"})
+
+
+@app.route("/api/scan-email", methods=["POST"])
+def api_scan_email():
+    if DEMO_MODE:
+        # Demo stores nothing and reads no real email.
+        return jsonify({"checked": 0, "added": 0, "demo": True})
+    if not emailscan.configured():
+        return jsonify({"error": "Email checking isn't switched on yet."}), 503
+    user, err = _scan_caller()
+    if err:
+        return err
+    if _rate_limited("scan:" + user["id"], _SCAN_MAX, _SCAN_WINDOW):
+        resp = jsonify({"error": "You've checked a few times already. Please wait a few minutes and try again."})
+        resp.headers["Retry-After"] = str(_SCAN_WINDOW)
+        return resp, 429
+    try:
+        token = emailscan.gmail_access_token()
+        result = emailscan.run_scan(_bearer(), SUPABASE_URL, SUPABASE_ANON_KEY, token)
+    except emailscan.ScanError as e:
+        return jsonify({"error": e.message}), e.status
+    return jsonify(result)
 
 
 @app.route("/healthz")

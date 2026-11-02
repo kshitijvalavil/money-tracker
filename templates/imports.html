@@ -5,6 +5,7 @@
   <h1>Transactions</h1>
   <div class="head-actions">
     <span class="bulk-status" id="bulkStatus" role="status" aria-live="polite"></span>
+    <button class="btn ghost" id="checkEmail" hidden>Check email now</button>
     <button class="btn" id="approveAll" hidden>Approve all</button>
   </div>
 </div>
@@ -15,6 +16,7 @@
     Transactions the bot found in your email. Check the account and category for
     each, then approve to add it to your tracker. Nothing is added until you approve.
   </p>
+  <p class="scan-status" id="scanStatus" role="status" aria-live="polite" hidden></p>
   <div class="notice" id="noAccounts" hidden>
     You need an account before you can approve imports.
     <a href="/accounts"><strong>Add an account</strong></a>, then come back here.
@@ -36,7 +38,7 @@
 
 {% block page_script %}
 <script type="module">
-  import { db, money, esc, toast, refreshImportsBadge } from "{{ url_for('static', filename='js/app.js') }}";
+  import { db, DEMO, authHeaders, money, esc, toast, refreshImportsBadge } from "{{ url_for('static', filename='js/app.js') }}";
   const $ = (id) => document.getElementById(id);
 
   let accounts = [], categories = [], pending = [];
@@ -355,6 +357,66 @@
     toast(summary, failed ? "error" : "ok");
   };
 
-  if (db) load();
+  // --- Check email now ----------------------------------------------------
+  // Asks the server to read the last 30 days of bank and Google Pay alerts
+  // and add new ones here as pending. Only the owner's account can use it.
+  function scanNote(text) {
+    $("scanStatus").textContent = text || "";
+    $("scanStatus").hidden = !text;
+  }
+
+  async function setupScan() {
+    let info = {};
+    try {
+      const resp = await fetch("/api/scan-email", { headers: await authHeaders() });
+      info = await resp.json().catch(() => ({}));
+    } catch (e) {
+      return;
+    }
+    if (info.available) {
+      $("checkEmail").hidden = false;
+      scanNote(DEMO ? "Demo mode: Check email now doesn't read any real email." : "");
+    } else if (info.reason === "premium") {
+      scanNote("Connect your email: coming with Premium.");
+    } else if (info.reason === "not_configured") {
+      scanNote("Email checking isn't switched on yet.");
+    }
+  }
+
+  $("checkEmail").onclick = async () => {
+    const btn = $("checkEmail");
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+    scanNote("Reading the last 30 days of bank and Google Pay alerts…");
+    try {
+      const resp = await fetch("/api/scan-email", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(await authHeaders()) },
+        body: "{}",
+      });
+      const out = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        scanNote(out.error || "Couldn't check your email. Please try again.");
+        toast(out.error || "Couldn't check your email. Please try again.");
+        return;
+      }
+      const msg = out.demo
+        ? "Demo mode: no real email was read."
+        : out.added
+          ? `Checked ${out.checked} emails and found ${out.added} new ${out.added === 1 ? "transaction" : "transactions"}. Review them below.`
+          : `Checked ${out.checked} emails. Nothing new to add.`;
+      scanNote(msg);
+      toast(msg, "ok");
+      if (out.added) load();
+    } catch (e) {
+      scanNote("Check your connection and try again.");
+      toast("Check your connection and try again.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Check email now";
+    }
+  };
+
+  if (db) { load(); setupScan(); }
 </script>
 {% endblock %}

@@ -317,6 +317,7 @@ select:disabled { opacity: .6; cursor: not-allowed; }
 .bulk-status { color: var(--muted); font-size: 0.88rem; }
 .bulk-status:empty { display: none; }
 .card-intro { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; max-width: 68ch; }
+.scan-status { color: var(--muted); font-size: 0.88rem; margin: -6px 0 14px; }
 .table-wrap { overflow-x: auto; position: relative; } /* contains sr-only text too */
 .nowrap { white-space: nowrap; }
 .cell-select { padding: 6px 8px; font-size: 0.88rem; min-width: 132px; }
