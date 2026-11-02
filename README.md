@@ -138,6 +138,25 @@ backup of your transactions.
 
 ---
 
+## Check email now (the button)
+
+On Transactions > From email, **Check email now** reads the last 30 days of bank
+and Google Pay alerts (SBI, HDFC, Kotak, ICICI, Axis, Yes, IDFC, Slice, Google
+Pay) from the owner's Gmail and adds new ones as **pending**. Nothing reaches the
+tracker until you approve it. Only the account whose email matches
+`GMAIL_OWNER_EMAIL` can use it; everyone else sees "coming with Premium". It is
+rate limited (3 checks per 10 minutes) and uses read-only Gmail access.
+
+One-time setup (free): in Google Cloud, enable the Gmail API, make an OAuth
+consent screen in **Testing** with your Gmail as a test user, create a **Web
+application** OAuth client with `https://developers.google.com/oauthplayground`
+as a redirect URI, then use the OAuth Playground ("Use your own OAuth
+credentials") to authorize `https://www.googleapis.com/auth/gmail.readonly` and
+copy the refresh token. Put these four in Render's environment settings (never in
+the code): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`,
+`GMAIL_OWNER_EMAIL`. Testing-mode refresh tokens expire after 7 days; when the
+button says the Gmail connection expired, repeat the Playground step.
+
 ## Email import scanner
 
 `bot/scanner.py` turns bank-alert and merchant-receipt emails into rows in
