@@ -159,6 +159,12 @@ def bills():
     return render_template("bills.html", page="bills")
 
 
+@app.route("/calendar")
+def calendar():
+    # Sprint 11: a month view of recurring bills and their due dates.
+    return render_template("calendar.html", page="calendar")
+
+
 @app.route("/goals")
 def goals():
     return render_template("goals.html", page="goals")
@@ -167,6 +173,18 @@ def goals():
 @app.route("/investments")
 def investments():
     return render_template("investments.html", page="investments")
+
+
+@app.route("/net-worth")
+def net_worth():
+    # Sprint 11: everything you own minus everything you owe, over time.
+    return render_template("networth.html", page="networth")
+
+
+@app.route("/wealth")
+def wealth():
+    # Sprint 11: where your money is invested (allocation + holdings).
+    return render_template("wealth.html", page="wealth")
 
 
 @app.route("/insights")
