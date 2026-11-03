@@ -16,8 +16,8 @@ from playwright.sync_api import sync_playwright
 
 BASE = os.environ.get("BASE_URL", "http://127.0.0.1:8099")
 CHROME = os.environ.get("CHROME_PATH", "/opt/pw-browsers/chromium")
-PAGES = ["/", "/transactions", "/bills", "/imports", "/accounts", "/budgets",
-         "/goals", "/investments", "/insights", "/profile"]
+PAGES = ["/", "/transactions", "/bills", "/calendar", "/imports", "/accounts", "/budgets",
+         "/goals", "/net-worth", "/investments", "/wealth", "/insights", "/profile"]
 
 errors, results = [], []
 
