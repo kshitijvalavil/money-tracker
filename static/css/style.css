@@ -863,3 +863,83 @@ kbd { font: 600 0.7rem/1.4 inherit; border: 1px solid var(--line); border-bottom
   border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 .recap-row:first-child { border-top: 0; }
 .recap-row .v { font-weight: 600; }
+
+/* ===== Sprint 12 — forecast, flow (Sankey), sparklines, custom Home ===== */
+
+/* Custom Home grid */
+.home-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.home-card { grid-column: span 1; min-width: 0; }
+.home-card.span2 { grid-column: span 2; }
+.home-card.is-hidden { display: none; }
+@media (max-width: 760px) {
+  .home-grid { grid-template-columns: 1fr; }
+  .home-card, .home-card.span2 { grid-column: 1 / -1; }
+}
+
+/* Card tools (reorder handle + show/hide), shown only while customizing */
+.card-tools { display: none; align-items: center; gap: 10px; margin-bottom: 8px; padding: 6px 10px;
+  background: color-mix(in srgb, var(--brand) 7%, transparent); border: 1px solid var(--line); border-radius: 12px; }
+.customizing .card-tools { display: flex; }
+.customizing .home-card.is-hidden { display: block; opacity: 0.5; }
+.tool-title { font-weight: 600; font-size: 0.9rem; flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drag-handle { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted);
+  cursor: grab; touch-action: none; flex: none; }
+.drag-handle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.home-card.dragging { opacity: 0.5; }
+.home-card.dragging .drag-handle { cursor: grabbing; }
+
+/* Show/hide toggle switch */
+.hide-toggle { position: relative; width: 40px; height: 22px; border: none; padding: 0; background: transparent; cursor: pointer; flex: none; }
+.tgl-ui { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .15s; }
+.tgl-ui::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.hide-toggle[aria-checked="true"] .tgl-ui { background: var(--brand); }
+.hide-toggle[aria-checked="true"] .tgl-ui::after { transform: translateX(18px); }
+.hide-toggle:focus-visible .tgl-ui { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.customize-hint { color: var(--muted); font-size: 0.85rem; margin: -4px 0 14px; max-width: 70ch; }
+
+/* Stat foot + delta + sparkline */
+.stat-row { margin-top: 0; }
+.stat-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; min-height: 30px; }
+.delta { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+.delta.pos { color: var(--pos); } .delta.neg { color: var(--neg); }
+.spark { width: 88px; height: 28px; flex: none; }
+.home-spark { width: 100%; height: 56px; display: block; margin: 8px 0; }
+
+/* Hero figure (forecast card on Home) */
+.hero-value { font-size: 1.7rem; font-weight: 700; margin-top: 4px; }
+.hero-sub { color: var(--muted); font-size: 0.85rem; }
+.hero-foot { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+
+/* Forecast page chart + legend */
+.fc-chart { width: 100%; height: auto; display: block; }
+.fc-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; color: var(--muted); font-size: 0.82rem; }
+.fc-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.fc-swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.fc-dash { width: 18px; height: 0; border-top: 2px dashed var(--brand); display: inline-block; }
+.fc-mini { margin-top: 14px; }
+
+/* Shared mini metric grid */
+.mini { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px; }
+.m-label { color: var(--muted); font-size: 0.78rem; font-weight: 600; }
+.m-val { font-size: 1.15rem; font-weight: 700; margin-top: 3px; }
+
+/* Driver / outlook / flow-top / trend rows */
+.amt { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.amt.pos { color: var(--pos); } .amt.neg { color: var(--neg); }
+.row-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.row-line:last-child { border-bottom: none; }
+.row-main, .sp-main { min-width: 0; }
+.row-name, .sp-name { font-weight: 600; }
+.row-meta, .sp-sub { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+
+/* Flow (Sankey) on Insights */
+.flow-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.flow-svg { width: 100%; min-width: 680px; height: auto; display: block; }
+.flow-top { margin-top: 16px; }
+.flow-top-head { font-weight: 600; font-size: 0.85rem; margin-bottom: 8px; }
+.sp-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.sp-row:last-child { border-bottom: none; }

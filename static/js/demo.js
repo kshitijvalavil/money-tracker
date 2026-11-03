@@ -174,7 +174,7 @@ function seed() {
 
   return { accounts, categories, transactions, budgets, pending_imports, recurring,
            goals, goal_contributions, labels, transaction_labels, investments,
-           category_rules, sync_status, net_worth_snapshots: [] };
+           category_rules, sync_status, net_worth_snapshots: [], user_prefs: [] };
 }
 
 // Same SQLSTATE-style errors as the real functions.

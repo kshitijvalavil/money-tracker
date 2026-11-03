@@ -140,3 +140,9 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d nw \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/net_worth_test.sql"
+
+# ---- Home layout (0016): user_prefs grants, one row per user, checks, RLS -----
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres prefs
+"${PSQL[@]}" -d prefs \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/sprint12_prefs_test.sql"
