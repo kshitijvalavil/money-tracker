@@ -151,12 +151,17 @@ $$;
 -- ===== Capture this month's snapshot =========================================
 -- Upserts the current month's net worth from the live breakdown. The browser
 -- calls this once per load, so history fills in on its own month by month.
+-- #variable_conflict use_column: the RETURNS TABLE columns (as_of_month, ...)
+-- are also PL/pgSQL variables, so the ON CONFLICT target would otherwise be
+-- ambiguous; this pins bare names to the table column. The INSERT values and
+-- the final RETURN QUERY use the v_* locals, so resolution stays correct.
 create or replace function public.capture_net_worth_snapshot()
 returns table (as_of_month date, assets numeric, liabilities numeric, net numeric)
 language plpgsql
 security invoker
 set search_path = ''
 as $$
+#variable_conflict use_column
 declare
     v_uid    uuid := auth.uid();
     v_month  date := date_trunc('month', current_date)::date;
