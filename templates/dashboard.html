@@ -20,12 +20,21 @@
 
 <div class="card lts-card" id="ltsCard" style="margin-bottom:16px" hidden>
   <div class="card-head">
-    <h2 id="ltsHeading">Left to spend this month</h2>
+    <h2 id="ltsHeading">Left to spend freely</h2>
     <a href="/budgets" class="card-link">Budgets <span aria-hidden="true">→</span></a>
   </div>
   <div class="lts-value" id="ltsValue">—</div>
   <div class="lts-sub" id="ltsSub"></div>
-  <div class="bar"><div id="ltsBar"></div></div>
+  <div class="bar budget-bar"><div id="ltsBar"></div><span class="pace" id="ltsPace" hidden></span></div>
+  <div class="budget-sub lts-foot"><span id="ltsFoot" class="muted"></span></div>
+</div>
+
+<div class="card buckets-card" id="bucketsCard" style="margin-bottom:16px" hidden>
+  <div class="card-head">
+    <h2>Your money this month</h2>
+    <a href="/budgets" class="card-link">Budgets <span aria-hidden="true">→</span></a>
+  </div>
+  <div id="buckets"></div>
 </div>
 
 <nav class="needs needs-phone" id="needsPhone" aria-label="Needs you" hidden></nav>
@@ -93,11 +102,82 @@
   $("monthPrev").onclick = () => stepMonth(-1);
   $("monthNext").onclick = () => stepMonth(1);
 
+  const BUCKETS = [
+    { key: "fixed", label: "Fixed", desc: "Rent, EMIs, subscriptions" },
+    { key: "flexible", label: "Flexible", desc: "Food, shopping, fun" },
+    { key: "non_monthly", label: "Non-monthly", desc: "Insurance, travel, gifts" },
+  ];
+
+  // How far through the month we are (0-1), or null for a past/future month.
+  function pace(month) {
+    if (month !== thisMonth()) return null;
+    const [y, m] = month.split("-").map(Number);
+    const days = new Date(y, m, 0).getDate();
+    return Number(today().slice(8, 10)) / days;
+  }
+
+  // The "Left to spend freely" hero and the three-bucket card, from flex_overview.
+  function renderFlex(rows, month) {
+    const by = Object.fromEntries(rows.map((r) => [r.bucket, r]));
+    const flexRow = by.flexible || { budgeted: 0, spent: 0 };
+    const budgeted = Number(flexRow.budgeted) || 0;
+    const spent = Number(flexRow.spent) || 0;
+    const p = pace(month);
+
+    if (budgeted > 0) {
+      const left = budgeted - spent;
+      $("ltsValue").textContent = money(Math.abs(left));
+      $("ltsValue").className = "lts-value " + (left < 0 ? "neg" : "pos");
+      $("ltsSub").textContent = left < 0
+        ? `${money(-left)} over your ${money(budgeted)} flexible this month`
+        : `of ${money(budgeted)} flexible this month`;
+      const bar = $("ltsBar");
+      bar.style.width = Math.min(100, (spent / budgeted) * 100) + "%";
+      bar.className = left < 0 ? "over" : "";
+      $("ltsPace").hidden = p === null;
+      if (p !== null) $("ltsPace").style.left = `${p * 100}%`;
+      const [yy, mm] = month.split("-").map(Number);
+      const daysLeft = p === null ? 0 : new Date(yy, mm, 0).getDate() - Number(today().slice(8, 10)) + 1;
+      $("ltsFoot").textContent = p === null
+        ? `${money(spent)} spent of ${money(budgeted)}`
+        : left > 0 && daysLeft > 0
+          ? `${money(spent)} spent · ${money(left / daysLeft)}/day for the ${daysLeft} day${daysLeft === 1 ? "" : "s"} left`
+          : `${money(spent)} spent`;
+      $("ltsCard").hidden = false;
+    } else {
+      $("ltsCard").hidden = true;
+    }
+
+    const anyActivity = rows.some((r) => Number(r.budgeted) > 0 || Number(r.spent) > 0);
+    if (anyActivity) {
+      $("buckets").innerHTML = BUCKETS.map((b) => {
+        const r = by[b.key] || { budgeted: 0, spent: 0 };
+        const bd = Number(r.budgeted) || 0, sp = Number(r.spent) || 0;
+        const pct = bd > 0 ? Math.min(100, (sp / bd) * 100) : (sp > 0 ? 100 : 0);
+        const over = bd > 0 && sp > bd;
+        const note = b.key === "flexible" && bd > 0
+          ? `${Math.round((sp / bd) * 100)}% of ${money(bd)} used`
+          : bd > 0 ? `of ${money(bd)} budgeted` : b.desc;
+        return `<div class="bucket-row" data-bucket="${b.key}">
+            <div class="bucket-top">
+              <span class="bucket-name">${b.label}</span>
+              <span class="bucket-amt ${over ? "neg" : ""}">${money(sp)}</span>
+            </div>
+            <div class="bar"><div class="${over ? "over" : ""} bucket-fill-${b.key}" style="width:${pct}%"></div></div>
+            <div class="bucket-note muted">${note}</div>
+          </div>`;
+      }).join("");
+      $("bucketsCard").hidden = false;
+    } else {
+      $("bucketsCard").hidden = true;
+    }
+  }
+
   async function load() {
     syncMonthNav();
     const month = monthInput.value || thisMonth();
 
-    const [summary, accounts, budgets, recent, lts] = await Promise.all([
+    const [summary, accounts, budgets, recent, flex] = await Promise.all([
       db.rpc("dashboard_summary", { p_month: month }),
       db.rpc("account_balances"),
       db.rpc("budget_status", { p_month: month }),
@@ -106,30 +186,14 @@
         .order("occurred_on", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(8),
-      db.rpc("left_to_spend", { p_month: month }),
+      db.rpc("flex_overview", { p_month: month }),
     ]);
 
     for (const r of [summary, accounts, budgets, recent]) {
       if (r.error) { toast(r.error.message); return; }
     }
 
-    // Left to spend: only shown once at least one budget is set.
-    const l = (!lts.error && lts.data && lts.data[0]) || null;
-    if (l && Number(l.budgeted) > 0) {
-      const left = Number(l.remaining);
-      $("ltsValue").textContent = money(left);
-      $("ltsValue").className = "lts-value " + (left < 0 ? "neg" : "pos");
-      $("ltsSub").textContent = left < 0
-        ? `${money(-left)} over your ${money(l.budgeted)} of budgets`
-        : `${money(l.spent)} spent of ${money(l.budgeted)} budgeted`;
-      const pct = Math.min(100, (Number(l.spent) / Number(l.budgeted)) * 100);
-      const bar = $("ltsBar");
-      bar.style.width = pct + "%";
-      bar.className = left < 0 ? "over" : "";
-      $("ltsCard").hidden = false;
-    } else {
-      $("ltsCard").hidden = true;
-    }
+    renderFlex((!flex.error && flex.data) || [], month);
 
     const s = summary.data[0] || { total_balance: 0, month_income: 0, month_expense: 0 };
     $("balance").textContent = money(s.total_balance);
