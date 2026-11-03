@@ -5,6 +5,7 @@
   <header class="topbar">
     <button class="hamburger" id="menuBtn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     <div class="brand">Money<span>Tracker</span></div>
+    <a href="/alerts" class="topbar-bell {{ 'active' if page=='alerts' }}" aria-label="Alerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg><span class="nav-badge dot" id="alertsBadgeTop" aria-hidden="true" hidden></span></a>
   </header>
   <div class="scrim" id="scrim" hidden></div>
 
@@ -14,6 +15,8 @@
       <a href="/"             class="{{ 'active' if page=='dashboard' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 001 1h12a1 1 0 001-1v-9"/></svg></span> Dashboard</a>
       <a href="/transactions" class="{{ 'active' if page in ('transactions', 'bills', 'imports') }}" data-nav="imports"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 16V5M7 5L4 8M7 5l3 3"/><path d="M17 8v11M17 19l3-3M17 19l-3-3"/></svg></span> Transactions
         <span class="nav-badge" id="importsBadge" aria-hidden="true" hidden></span></a>
+      <a href="/alerts"       class="{{ 'active' if page=='alerts' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></span> Alerts
+        <span class="nav-badge" id="alertsBadge" aria-hidden="true" hidden></span></a>
       <a href="/accounts"     class="{{ 'active' if page=='accounts' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-5 9 5"/><path d="M5 9v9M9 9v9M15 9v9M19 9v9"/><path d="M3 20h18"/></svg></span> Accounts</a>
       <a href="/budgets"      class="{{ 'active' if page=='budgets' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/></svg></span> Budgets</a>
       <a href="/calendar"     class="{{ 'active' if page=='calendar' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></span> Bills calendar</a>
@@ -23,6 +26,7 @@
       <a href="/wealth"       class="{{ 'active' if page=='wealth' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 12V3"/><path d="M12 12l7 4.5"/></svg></span> Wealth</a>
       <a href="/forecast"     class="{{ 'active' if page=='forecast' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l5-5 4 3 5-7"/><path d="M17 8h4v4"/><path d="M3 21h18"/></svg></span> Forecast</a>
       <a href="/insights"     class="{{ 'active' if page=='insights' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 00-3.8 10.6c.5.5.8 1.2.8 1.9v.5h6v-.5c0-.7.3-1.4.8-1.9A6 6 0 0012 3z"/></svg></span> Insights</a>
+      <a href="/ask"          class="{{ 'active' if page=='ask' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 114 2c-.9.7-1.6 1.2-1.6 2.4"/><path d="M12 17h.01"/></svg></span> Ask your money</a>
       <a href="/profile"      class="{{ 'active' if page=='profile' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></span> Profile &amp; settings</a>
     </nav>
     <div class="bottom">
@@ -45,7 +49,7 @@
   </nav>
 </div>
 <script type="module">
-  import { requireAuth, signOut, initThemeToggle, refreshImportsBadge, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
+  import { requireAuth, signOut, initThemeToggle, refreshImportsBadge, refreshAlertsBadge, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
   document.querySelector(".nav a.active")?.setAttribute("aria-current", "page");
   document.querySelector(".tabbar a.active")?.setAttribute("aria-current", "page");
 
@@ -73,9 +77,10 @@
   if (user) {
     postDueBills();          // auto-post bills that came due (once per page load)
     refreshImportsBadge();
+    refreshAlertsBadge();    // Sprint 13: unread-alerts count on the bell
     // New imports can land while the tab sits in the background.
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") refreshImportsBadge();
+      if (document.visibilityState === "visible") { refreshImportsBadge(); refreshAlertsBadge(); }
     });
   }
 </script>

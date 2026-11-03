@@ -2,6 +2,7 @@
 // window.__CONFIG is set in base.html from the server's Supabase settings.
 
 import { createDemoClient } from "./demo.js";
+import { computeAlerts, withDefaults } from "./alerts.js";
 
 const CONFIG = window.__CONFIG || {};
 export const DEMO = !!CONFIG.demo;
@@ -40,6 +41,32 @@ const inr = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2,
 });
 export const money = (n) => inr.format(Number(n) || 0);
+
+// Sprint 13 number polish ---------------------------------------------------
+// Whole rupees, Indian grouping, no paise: ₹1,23,456 (for summaries/tiles).
+const inrWhole = new Intl.NumberFormat("en-IN", {
+  style: "currency", currency: "INR",
+  minimumFractionDigits: 0, maximumFractionDigits: 0,
+});
+export const moneyWhole = (n) => inrWhole.format(Math.round(Number(n) || 0));
+
+// Compact Indian units for big numbers on tiles: ₹12,480 · ₹2.48L · ₹1.25Cr.
+// Keeps the ₹ symbol and a true minus for negatives. Below ₹1,00,000 it falls
+// back to whole rupees so small amounts stay exact and legible.
+export function moneyCompact(n) {
+  const v = Number(n) || 0;
+  const sign = v < 0 ? "−" : "";
+  const a = Math.abs(v);
+  const trim = (x) => String(Number(x.toFixed(2))); // 2.50 -> "2.5", 2.00 -> "2"
+  if (a >= 1e7) return `${sign}₹${trim(a / 1e7)}Cr`;
+  if (a >= 1e5) return `${sign}₹${trim(a / 1e5)}L`;
+  return sign + moneyWhole(a);
+}
+
+// Format an amount with a true minus sign for negatives (− not -), using the
+// given formatter (whole rupees by default).
+export const signedMoney = (n, fmt = moneyWhole) =>
+  (Number(n) < 0 ? "−" + fmt(Math.abs(n)) : fmt(n));
 
 // Current month as YYYY-MM
 // Dates use the browser's local calendar day (SB-11): toISOString() is UTC, so
@@ -143,6 +170,57 @@ export async function refreshImportsBadge() {
     .eq("status", "pending");
   if (error) return; // The badge is only a hint; never shout about it.
   setImportsBadge(count);
+}
+
+// --- Alerts badge (sidebar + topbar bell) ----------------------------------
+// Sprint 13: the bell shows how many alerts you haven't looked at yet. Alerts
+// are computed on the device, so this just runs the same cheap queries and
+// counts the ones whose id isn't in the "seen" set the Alerts page writes.
+const ALERTS_SEEN_KEY = "alertsSeen";
+function seenAlerts() {
+  try { return new Set(JSON.parse(localStorage.getItem(ALERTS_SEEN_KEY) || "[]")); }
+  catch (e) { return new Set(); }
+}
+export function setAlertsBadge(n) {
+  const count = Math.max(0, Number(n) || 0);
+  const side = document.getElementById("alertsBadge");
+  if (side) {
+    side.textContent = count > 99 ? "99+" : String(count);
+    side.hidden = count === 0;
+  }
+  const top = document.getElementById("alertsBadgeTop");
+  if (top) top.hidden = count === 0;
+  const bell = document.querySelector(".topbar-bell");
+  if (bell) {
+    if (count) bell.setAttribute("aria-label", `Alerts, ${count} new`);
+    else bell.setAttribute("aria-label", "Alerts");
+  }
+}
+export async function refreshAlertsBadge() {
+  if (!db) return;
+  try {
+    const t = new Date();
+    const month = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`;
+    const since = (() => { const d = new Date(t.getFullYear(), t.getMonth() - 3, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; })();
+    const [bal, bud, bills, goals, tx, cats, pr] = await Promise.all([
+      db.rpc("account_balances"),
+      db.rpc("budget_status"),
+      db.rpc("upcoming_recurring", { p_days: 30, p_as_of: today() }),
+      db.rpc("goal_progress"),
+      db.from("transactions").select("id, occurred_on, amount, type, category_id").gte("occurred_on", since),
+      db.from("categories").select("id, name, kind"),
+      db.from("user_prefs").select("alert_prefs").limit(1),
+    ]);
+    if (bal.error) return;
+    const prefs = withDefaults(pr.data && pr.data[0] ? pr.data[0].alert_prefs : null);
+    const alerts = computeAlerts({
+      balances: bal.data || [], budgets: bud.data || [], bills: bills.data || [],
+      goals: goals.data || [], txns: tx.data || [], categories: cats.data || [], month,
+    }, prefs);
+    const seen = seenAlerts();
+    setAlertsBadge(alerts.filter((a) => !seen.has(a.id)).length);
+  } catch (e) { /* the badge is only a hint */ }
 }
 
 // --- Recurring bills: post due auto-post bills once per page load ----------

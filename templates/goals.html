@@ -142,7 +142,14 @@
     if (!data.length) {
       $("summary").hidden = true;
       $("cutPlan").hidden = true;
-      $("goals").innerHTML = `<div class="empty">No goals yet. Create one to start saving.</div>`;
+      $("goals").innerHTML = `<div class="empty-state"><div class="es-icon" aria-hidden="true">` +
+        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 4h12l-2.5 3.5L18 11H6"/></svg></div>` +
+        `<h3>No goals yet</h3><p>Set a target — a trip, an emergency fund, a new laptop — and track it here with a projected finish date.</p>` +
+        `<button class="btn" type="button" id="goalEmptyAdd">Add a goal</button></div>`;
+      document.getElementById("goalEmptyAdd")?.addEventListener("click", () => {
+        document.getElementById("form")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById("name")?.focus();
+      });
       return;
     }
     const saved = data.reduce((t, g) => t + Number(g.saved), 0);

@@ -113,7 +113,7 @@
 
 {% block page_script %}
 <script type="module">
-  import { db, money, esc, thisMonth, toast, today, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
+  import { db, money, moneyCompact, esc, thisMonth, toast, today, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
   import { dueLabel, shortDate, addDays, daysBetween } from "{{ url_for('static', filename='js/recurring.js') }}";
   import { sparkline } from "{{ url_for('static', filename='js/charts.js') }}";
   import { expandScheduled, estimateDailySpend, actualPath, projectForward, tightestDay } from "{{ url_for('static', filename='js/forecast.js') }}";
@@ -186,8 +186,10 @@
     renderFlex((!flex.error && flex.data) || [], month);
 
     const s = summary.data[0] || { total_balance: 0, month_income: 0, month_expense: 0 };
-    $("balance").textContent = money(s.total_balance); $("balance").className = "value " + (s.total_balance < 0 ? "neg" : "pos");
-    $("income").textContent = money(s.month_income); $("expense").textContent = money(s.month_expense);
+    $("balance").textContent = moneyCompact(s.total_balance); $("balance").className = "value " + (s.total_balance < 0 ? "neg" : "pos");
+    $("balance").title = money(s.total_balance);   // exact amount on hover/long-press
+    $("income").textContent = moneyCompact(s.month_income); $("income").title = money(s.month_income);
+    $("expense").textContent = moneyCompact(s.month_expense); $("expense").title = money(s.month_expense);
 
     $("accounts").innerHTML = accounts.data.length
       ? accounts.data.map((a) => `<tr><td>${esc(a.name)} <span class="pill">${esc(a.type)}</span></td><td class="amt ${a.balance < 0 ? "neg" : ""}">${money(a.balance)}</td></tr>`).join("")
@@ -197,7 +199,10 @@
       : `<div class="empty">No budgets set. <a href="/budgets" style="color:var(--brand)">Add one →</a></div>`;
     $("recent").innerHTML = recent.data.length
       ? recent.data.map((t) => { const sign = t.type === "income" ? "+" : t.type === "expense" ? "−" : ""; const cls = t.type === "income" ? "pos" : t.type === "expense" ? "neg" : ""; const label = t.type === "transfer" ? "Transfer" : esc(t.categories?.name || "—"); return `<tr data-tx><td class="t-date">${t.occurred_on}</td><td class="t-cat">${label}</td><td class="t-acc">${esc(t.accounts?.name || "—")}</td><td class="t-note">${esc(t.note)}</td><td class="amt ${cls}">${sign}${money(t.amount)}</td></tr>`; }).join("")
-      : `<tr><td colspan="5" class="empty">No transactions yet. <a href="/transactions" style="color:var(--brand)">Add one →</a></td></tr>`;
+      : `<tr><td colspan="5"><div class="empty-state"><div class="es-icon" aria-hidden="true">` +
+        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></div>` +
+        `<h3>Welcome to Money Tracker</h3><p>Import from your email or add a transaction and your dashboard fills in automatically. We never store your email password.</p>` +
+        `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><a class="btn" href="/imports">Import from email</a><a class="btn ghost" href="/transactions">Add transaction</a></div></div></td></tr>`;
   }
 
   // --- Sprint 12: stat sparklines + deltas (from the 12-month totals) --------

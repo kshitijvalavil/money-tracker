@@ -13,6 +13,8 @@ const SHELL = [
   "/static/js/app.js",
   "/static/js/demo.js",
   "/static/js/recurring.js",
+  "/static/js/alerts.js",
+  "/static/js/ask.js",
   "/static/vendor/supabase.js",
   "/static/manifest.webmanifest",
   "/static/icons/icon-192.png",
