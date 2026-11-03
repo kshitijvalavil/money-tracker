@@ -171,7 +171,10 @@ def logic_checks(ctx):
 
 def main():
     with sync_playwright() as p:
-        browser = p.chromium.launch(executable_path=CHROME, args=["--no-sandbox"])
+        launch = {"args": ["--no-sandbox"]}
+        if os.path.exists(CHROME):
+            launch["executable_path"] = CHROME
+        browser = p.chromium.launch(**launch)
         for tag, theme, w, h in [("phone-dark", "dark", 390, 844), ("desktop-light", "light", 1280, 900)]:
             ctx = browser.new_context(
                 viewport={"width": w, "height": h},
