@@ -111,19 +111,16 @@ begin
         'investments should be an asset';
 end $$;
 
--- Series: 6 months, ascending, last month equals the live net worth (222000).
+-- Series: 6 months, ascending range, last month equals the live net worth.
 do $$
-declare n int; last_net numeric; ordered boolean;
+declare n int; last_net numeric; first_m text; last_m text;
 begin
     select count(*) into n from public.net_worth_series(6);
     assert n = 6, 'series should return 6 months, got ' || n;
     select net into last_net from public.net_worth_series(6) order by month desc limit 1;
     assert last_net = 222000, 'latest series net wrong: ' || last_net;
-    select bool_and(month = o) into ordered from (
-        select month, to_char((select min(month) from public.net_worth_series(6))::date, 'YYYY-MM')
-        from public.net_worth_series(6) limit 0
-    ) q(month, o);
-    -- p_months out of range is rejected.
+    select min(month), max(month) into first_m, last_m from public.net_worth_series(6);
+    assert last_m > first_m, 'series months not an ascending range: ' || first_m || '..' || last_m;
     begin
         perform public.net_worth_series(0);
         raise exception 'p_months 0 accepted';
