@@ -206,7 +206,7 @@ export async function refreshAlertsBadge() {
     const [bal, bud, bills, goals, tx, cats, pr] = await Promise.all([
       db.rpc("account_balances"),
       db.rpc("budget_status"),
-      db.rpc("upcoming_recurring", { p_days: 30 }),
+      db.rpc("upcoming_recurring", { p_days: 30, p_as_of: today() }),
       db.rpc("goal_progress"),
       db.from("transactions").select("id, occurred_on, amount, type, category_id").gte("occurred_on", since),
       db.from("categories").select("id, name, kind"),
