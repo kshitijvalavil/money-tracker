@@ -125,6 +125,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint11_networth_test.py
+      - name: Sprint 12 forecast, flow (Sankey), sparklines, custom Home UI
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint12_ui_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

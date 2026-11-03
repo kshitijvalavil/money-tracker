@@ -187,6 +187,12 @@ def wealth():
     return render_template("wealth.html", page="wealth")
 
 
+@app.route("/forecast")
+def forecast():
+    # Sprint 12: where your balance is headed by the end of the month.
+    return render_template("forecast.html", page="forecast")
+
+
 @app.route("/insights")
 def insights():
     return render_template("insights.html", page="insights")

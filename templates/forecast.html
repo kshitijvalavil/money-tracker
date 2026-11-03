@@ -1,0 +1,184 @@
+{% extends "_shell.html" %}
+{% block title %}Forecast — Money Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Forecast</h1>
+  <div class="month-nav" id="monthLabel" style="padding:8px 12px"></div>
+</div>
+
+<p class="card-intro" id="fcIntro" style="margin-top:-8px">
+  Where your balance is headed by the end of the month, from your scheduled bills,
+  expected income and recent everyday spending.
+</p>
+
+<div class="grid cols-3" id="fcStats" style="margin-bottom:16px">
+  <div class="card stat"><div class="label">Projected month-end</div>
+    <div class="value" id="fcEnd">—</div>
+    <div class="stat-foot"><span class="delta muted" id="fcEndNote"></span></div></div>
+  <div class="card stat"><div class="label">Tightest day</div>
+    <div class="value" id="fcLow">—</div>
+    <div class="stat-foot"><span class="delta" id="fcLowNote" style="color:var(--warn)"></span></div></div>
+  <div class="card stat"><div class="label">Safe to spend / day</div>
+    <div class="value" id="fcSafe">—</div>
+    <div class="stat-foot"><span class="delta muted" id="fcSafeNote"></span></div></div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head"><h2>Balance to month-end</h2></div>
+  <div id="fcChartWrap"><svg class="fc-chart" id="fcChart" role="img" aria-label="Cash-flow forecast chart"></svg></div>
+  <div class="fc-legend" id="fcLegend">
+    <span><span class="fc-swatch" style="background:var(--brand)"></span>Balance so far</span>
+    <span><span class="fc-dash"></span>Projected</span>
+    <span><span class="fc-swatch" style="background:var(--warn)"></span>Tightest day</span>
+  </div>
+  <div class="mini fc-mini" id="fcMini"></div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <div class="card-head"><h2>What's driving the forecast</h2></div>
+    <div id="fcDrivers"><div class="empty">Loading…</div></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Three-month outlook</h2></div>
+    <p class="card-intro" style="margin-bottom:10px">An estimate from your bills and recent spending.</p>
+    <div id="fcOutlook"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, money, esc, today, thisMonth, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  import { addDays, daysBetween } from "{{ url_for('static', filename='js/recurring.js') }}";
+  import { expandScheduled, estimateDailySpend, actualPath, projectForward,
+           tightestDay, safeDailySpend, monthlyOutlook } from "{{ url_for('static', filename='js/forecast.js') }}";
+
+  const $ = (id) => document.getElementById(id);
+  const t = today();
+  const [Y, M] = t.split("-").map(Number);
+  const monthStart = `${Y}-${String(M).padStart(2, "0")}-01`;
+  const monthEnd = `${Y}-${String(M).padStart(2, "0")}-${String(new Date(Y, M, 0).getDate()).padStart(2, "0")}`;
+  const monthName = new Date(Y, M - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  $("monthLabel").textContent = monthName;
+
+  const fmtDay = (d) => {
+    const [y, m, dd] = d.split("-").map(Number);
+    return new Date(y, m - 1, dd).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  };
+  const signed = (n) => (n < 0 ? "−" + money(Math.abs(n)) : money(n));
+
+  function drawChart(actual, projected, low) {
+    const el = $("fcChart");
+    const Wv = 720, Hv = 250, L = 58, R = 18, T = 24, B = 34;
+    const pts = [...actual, ...projected];
+    if (!pts.length) { el.innerHTML = ""; return; }
+    const vals = pts.map((p) => p.balance);
+    let mn = Math.min(0, ...vals), mx = Math.max(...vals, 1);
+    const span = (mx - mn) || 1;
+    mx += span * 0.08; if (mn < 0) mn -= span * 0.08;
+    const totalDays = Math.max(daysBetween(monthStart, monthEnd), 1);
+    const x = (d) => L + (daysBetween(monthStart, d) / totalDays) * (Wv - L - R);
+    const y = (v) => T + ((mx - v) / (mx - mn)) * (Hv - T - B);
+    const fmtAxis = (v) => (Math.abs(v) >= 1000 ? Math.round(v / 1000) + "k" : Math.round(v));
+
+    const ptsStr = (arr) => arr.map((p) => `${x(p.date).toFixed(1)} ${y(p.balance).toFixed(1)}`).join(" L");
+    const solid = actual.length ? `M${ptsStr(actual)}` : "";
+    const area = actual.length
+      ? `${solid} L${x(actual[actual.length - 1].date).toFixed(1)} ${y(mn).toFixed(1)} L${x(actual[0].date).toFixed(1)} ${y(mn).toFixed(1)} Z`
+      : "";
+    const proj = projected.length > 1 ? `M${ptsStr(projected)}` : "";
+
+    const gy = [mx, (mx + mn) / 2, mn];
+    const grid = gy.map((v) => `<line x1="${L}" y1="${y(v).toFixed(1)}" x2="${Wv - R}" y2="${y(v).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>` +
+      `<text x="${L - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="12" font-family="Inter,sans-serif" fill="var(--muted)">₹${fmtAxis(v)}</text>`).join("");
+    const todayX = x(t);
+    const marker = `<line x1="${todayX.toFixed(1)}" y1="${T}" x2="${todayX.toFixed(1)}" y2="${Hv - B}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 4" opacity="0.45"/>` +
+      `<text x="${(todayX + 4).toFixed(1)}" y="${T + 8}" font-size="11" font-family="Inter,sans-serif" fill="var(--muted)">Today · ${esc(fmtDay(t))}</text>`;
+    const lowMark = low ? `<circle cx="${x(low.date).toFixed(1)}" cy="${y(low.balance).toFixed(1)}" r="4" fill="var(--warn)"/>` +
+      `<text x="${x(low.date).toFixed(1)}" y="${(y(low.balance) + 18).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" font-family="Inter,sans-serif" fill="var(--warn)">${esc("Low " + money(low.balance))}</text>` : "";
+    const endDot = projected.length ? `<circle cx="${x(projected[projected.length - 1].date).toFixed(1)}" cy="${y(projected[projected.length - 1].balance).toFixed(1)}" r="4" fill="var(--brand)"/>` : "";
+    const xlabels = `<text x="${L}" y="${Hv - 12}" font-size="11" font-family="Inter,sans-serif" fill="var(--muted)">${esc(fmtDay(monthStart))}</text>` +
+      `<text x="${Wv - R}" y="${Hv - 12}" text-anchor="end" font-size="11" font-family="Inter,sans-serif" fill="var(--muted)">${esc(fmtDay(monthEnd))}</text>`;
+
+    el.setAttribute("viewBox", `0 0 ${Wv} ${Hv}`);
+    el.innerHTML =
+      `<defs><linearGradient id="fcg" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0" stop-color="var(--brand)" stop-opacity="0.24"/>` +
+      `<stop offset="1" stop-color="var(--brand)" stop-opacity="0"/></linearGradient></defs>` +
+      grid +
+      (area ? `<path d="${area}" fill="url(#fcg)"/>` : "") +
+      (solid ? `<path d="${solid}" fill="none" stroke="var(--brand)" stroke-width="2.4" stroke-linejoin="round"/>` : "") +
+      (proj ? `<path d="${proj}" fill="none" stroke="var(--brand)" stroke-width="2.4" stroke-dasharray="6 5" opacity="0.85"/>` : "") +
+      marker + lowMark + endDot + xlabels;
+  }
+
+  function driverRow(name, date, amount, note) {
+    const cls = amount >= 0 ? "pos" : "neg";
+    return `<div class="row-line"><div class="row-main"><div class="row-name">${esc(name)}</div>` +
+      `<div class="row-meta">${esc(date)}${note ? " · " + esc(note) : ""}</div></div>` +
+      `<div class="amt ${cls}">${amount >= 0 ? "+" : "−"}${money(Math.abs(amount))}</div></div>`;
+  }
+
+  async function load() {
+    const [bal, rec, tx] = await Promise.all([
+      db.rpc("account_balances"),
+      db.from("recurring").select("*"),
+      db.from("transactions").select("occurred_on, amount, type, source")
+        .gte("occurred_on", addDays(t, -70)).order("occurred_on", { ascending: true }),
+    ]);
+    if (bal.error) return toast(bal.error.message);
+    const balanceNow = (bal.data || []).reduce((n, a) => n + Number(a.balance), 0);
+    const recurring = (rec.data || []);
+    const txns = (tx.data || []);
+
+    const dailySpend = estimateDailySpend(txns, t, 60);
+    const future = expandScheduled(recurring, addDays(t, 1), monthEnd);
+    const actual = actualPath(balanceNow, txns, monthStart, t);
+    const projected = projectForward(balanceNow, t, monthEnd, dailySpend, future);
+    const low = tightestDay(projected);
+    const safe = safeDailySpend(balanceNow, t, monthEnd, future);
+    const projEnd = projected[projected.length - 1].balance;
+    const remaining = Math.max(daysBetween(t, monthEnd), 0);
+
+    drawChart(actual, projected, low);
+
+    $("fcEnd").textContent = signed(projEnd);
+    $("fcEnd").className = "value " + (projEnd < 0 ? "neg" : "pos");
+    $("fcEndNote").textContent = projEnd < 0 ? "heading into the red" : "comfortable finish";
+    if (low) {
+      $("fcLow").textContent = signed(low.balance);
+      $("fcLow").className = "value" + (low.balance < 0 ? " neg" : "");
+      $("fcLowNote").textContent = fmtDay(low.date);
+    } else {
+      $("fcLow").textContent = signed(projEnd); $("fcLowNote").textContent = "month is over";
+    }
+    $("fcSafe").textContent = money(safe);
+    $("fcSafeNote").textContent = remaining > 0 ? `over the ${remaining} day${remaining === 1 ? "" : "s"} left` : "no days left";
+
+    const income = future.filter((s) => s.amount > 0).reduce((n, s) => n + s.amount, 0);
+    const bills = future.filter((s) => s.amount < 0).reduce((n, s) => n + -s.amount, 0);
+    $("fcMini").innerHTML =
+      `<div><div class="m-label">Expected income</div><div class="m-val pos">+${money(income)}</div></div>` +
+      `<div><div class="m-label">Scheduled bills</div><div class="m-val neg">−${money(bills)}</div></div>` +
+      `<div><div class="m-label">Avg. daily spend</div><div class="m-val">${money(Math.round(dailySpend))}</div></div>`;
+
+    const drivers = future.map((s) => driverRow(s.name, fmtDay(s.date), s.amount,
+      s.type === "income" ? "expected" : "scheduled"));
+    if (remaining > 0 && dailySpend > 0) {
+      drivers.push(driverRow("Everyday spend", `through ${fmtDay(monthEnd)}`,
+        -Math.round(dailySpend * remaining), "estimated from your average"));
+    }
+    $("fcDrivers").innerHTML = drivers.length ? drivers.join("")
+      : `<div class="empty">Nothing scheduled for the rest of the month.</div>`;
+
+    const outlook = monthlyOutlook(projEnd, t, recurring, dailySpend, 3);
+    $("fcOutlook").innerHTML = outlook.map((o, i) =>
+      `<div class="row-line"><div class="row-main"><div class="row-name">End of ${esc(o.label)}</div>` +
+      `<div class="row-meta">${i === 0 ? "this month" : "projected"}</div></div>` +
+      `<div class="amt ${o.balance < 0 ? "neg" : ""}">${signed(o.balance)}</div></div>`).join("");
+  }
+
+  if (db) load();
+</script>
+{% endblock %}

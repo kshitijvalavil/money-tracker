@@ -50,6 +50,27 @@
     <div id="labels"><div class="empty">Loading…</div></div>
   </div>
 </div>
+
+<div class="card flow-card" id="flowCard" style="margin-top:16px">
+  <div class="card-head">
+    <h2>Where your money flows</h2>
+    <span class="pill brand" id="flowIn" hidden></span>
+  </div>
+  <p class="card-intro" style="margin-bottom:10px">Income splits into your budget buckets, then into the categories you spent in. Band thickness is the amount.</p>
+  <div class="flow-scroll" id="flowScroll"><svg class="flow-svg" id="flowSvg" aria-label="Money flow for the month"></svg></div>
+  <div class="fc-legend" id="flowLegend">
+    <span><span class="fc-swatch" style="background:var(--muted)"></span>Fixed</span>
+    <span><span class="fc-swatch" style="background:var(--brand)"></span>Flexible</span>
+    <span><span class="fc-swatch" style="background:#c9972b"></span>Non-monthly</span>
+    <span><span class="fc-swatch" style="background:var(--pos)"></span>Savings</span>
+  </div>
+  <div id="flowTop" class="flow-top"></div>
+</div>
+
+<div class="card" id="trendCard" style="margin-top:16px">
+  <div class="card-head"><h2>Spending trends</h2><span class="muted" style="font-size:0.82rem">Last 6 months</span></div>
+  <div id="trends"><div class="empty">Loading…</div></div>
+</div>
 {% endblock %}
 
 {% block page_script %}
@@ -250,5 +271,125 @@
   $("month").addEventListener("change", loadMonthly);
   $("export").addEventListener("click", exportCsv);
   if (db) { loadMonthly(); loadBars(); }
+</script>
+
+<script type="module">
+  // Sprint 12: money-flow (Sankey) for the selected month + 6-month category sparklines.
+  import { db, money, esc, thisMonth } from "{{ url_for('static', filename='js/app.js') }}";
+  import { sankey, sparkline, trendDir } from "{{ url_for('static', filename='js/charts.js') }}";
+  const $ = (id) => document.getElementById(id);
+  const BK = { fixed: "var(--muted)", flexible: "var(--brand)", non_monthly: "#c9972b", savings: "var(--pos)" };
+  const BK_LABEL = { fixed: "Fixed", flexible: "Flexible", non_monthly: "Non-monthly", savings: "Savings" };
+
+  function monthsBack(n) {
+    const out = [], base = new Date();
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+      out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+    return out;
+  }
+
+  function buildFlow(cats, txns, month) {
+    const monthTx = txns.filter((t) => t.occurred_on.slice(0, 7) === month);
+    const incomeAgg = {}, expenseByCat = {}, bucketTot = { fixed: 0, flexible: 0, non_monthly: 0 };
+    for (const t of monthTx) {
+      const c = cats[t.category_id]; if (!c) continue;
+      const amt = Number(t.amount);
+      if (t.type === "income") incomeAgg[c.name] = (incomeAgg[c.name] || 0) + amt;
+      else if (t.type === "expense") {
+        const bk = c.bucket || "flexible";
+        expenseByCat[c.name] = { bucket: bk, amount: (expenseByCat[c.name]?.amount || 0) + amt };
+        bucketTot[bk] += amt;
+      }
+    }
+    const incomeTotal = Object.values(incomeAgg).reduce((n, v) => n + v, 0);
+    const expenseTotal = bucketTot.fixed + bucketTot.flexible + bucketTot.non_monthly;
+    const savings = Math.max(0, incomeTotal - expenseTotal);
+    const hasData = incomeTotal > 0 || expenseTotal > 0;
+    $("flowIn").hidden = incomeTotal <= 0;
+    $("flowIn").textContent = money(incomeTotal) + " in";
+    if (!hasData) {
+      $("flowScroll").innerHTML = `<div class="empty">No money in or out this month.</div>`;
+      $("flowLegend").hidden = true; $("flowTop").innerHTML = "";
+      return;
+    }
+    $("flowLegend").hidden = false;
+
+    const srcTotal = incomeTotal > 0 ? incomeTotal : expenseTotal;
+    const sources = incomeTotal > 0
+      ? Object.entries(incomeAgg).sort((a, b) => b[1] - a[1])
+          .map(([name, v]) => ({ id: "src:" + name, label: name, sub: money(v), value: v, color: "var(--ink)" }))
+      : [{ id: "src:spend", label: "Spending", sub: money(expenseTotal), value: expenseTotal, color: "var(--ink)" }];
+
+    const bucketOrder = ["fixed", "flexible", "non_monthly", "savings"];
+    const bucketVal = { ...bucketTot, savings: incomeTotal > 0 ? savings : 0 };
+    const buckets = bucketOrder.filter((b) => bucketVal[b] > 0).map((b) => ({
+      id: "bk:" + b, label: BK_LABEL[b], sub: money(bucketVal[b]), value: bucketVal[b], color: BK[b] }));
+
+    const catNodes = Object.entries(expenseByCat)
+      .sort((a, b) => bucketOrder.indexOf(a[1].bucket) - bucketOrder.indexOf(b[1].bucket) || b[1].amount - a[1].amount)
+      .map(([name, o]) => ({ id: "cat:" + name, label: name, sub: money(o.amount), value: o.amount, color: BK[o.bucket], _bucket: o.bucket }));
+    if (bucketVal.savings > 0) catNodes.push({ id: "cat:savings", label: "Savings", sub: money(savings), value: savings, color: BK.savings, _bucket: "savings" });
+
+    const links = [];
+    for (const s of sources) for (const b of buckets) {
+      const key = b.id.slice(3);
+      links.push({ from: s.id, to: b.id, value: s.value * (bucketVal[key] / srcTotal), color: b.color });
+    }
+    for (const c of catNodes) links.push({ from: "bk:" + c._bucket, to: c.id, value: c.value, color: c.color });
+
+    sankey($("flowSvg"), [sources, buckets, catNodes], links,
+      { width: 860, height: 380, pad: 16, nodeW: 22, gap: 9, colX: [120, 440, 720] });
+
+    const top = catNodes.slice().sort((a, b) => b.value - a.value).slice(0, 5);
+    $("flowTop").innerHTML = `<div class="flow-top-head">Top flows this month</div>` + top.map((c) =>
+      `<div class="row-line"><div class="row-main"><div class="row-name">${esc(c.label)}</div>` +
+      `<div class="row-meta">${esc(BK_LABEL[c._bucket])}</div></div><div class="amt">${money(c.value)}</div></div>`).join("");
+  }
+
+  function buildTrends(cats, txns) {
+    const months = monthsBack(6), mset = new Set(months);
+    const byCat = {};
+    for (const t of txns) {
+      if (t.type !== "expense") continue;
+      const c = cats[t.category_id]; if (!c) continue;
+      const ym = t.occurred_on.slice(0, 7); if (!mset.has(ym)) continue;
+      (byCat[c.name] ||= {})[ym] = (byCat[c.name][ym] || 0) + Number(t.amount);
+    }
+    const rows = Object.entries(byCat).map(([name, m]) => {
+      const series = months.map((ym) => Math.round(m[ym] || 0));
+      return { name, series, total: series.reduce((n, v) => n + v, 0), latest: series[series.length - 1] };
+    }).filter((r) => r.total > 0).sort((a, b) => b.total - a.total).slice(0, 8);
+
+    if (!rows.length) { $("trends").innerHTML = `<div class="empty">No spending in the last six months yet.</div>`; return; }
+    $("trends").innerHTML = rows.map((r, i) =>
+      `<div class="sp-row"><div class="sp-main"><div class="sp-name">${esc(r.name)}</div>` +
+      `<div class="sp-sub">6-month trend</div></div><div class="amt">${money(r.latest)}</div>` +
+      `<svg class="spark" data-i="${i}"></svg></div>`).join("");
+    rows.forEach((r, i) => {
+      const raw = trendDir(r.series);
+      const dir = raw === "up" ? "down" : raw === "down" ? "up" : "flat";   // rising spend is red
+      sparkline($("trends").querySelector(`.spark[data-i="${i}"]`), r.series, { dir });
+    });
+  }
+
+  let cache = null;
+  async function loadFlow() {
+    const month = $("month").value || thisMonth();
+    if (!cache) {
+      const [catRes, txRes] = await Promise.all([
+        db.from("categories").select("*"),
+        db.from("transactions").select("occurred_on, amount, type, category_id")
+          .gte("occurred_on", monthsBack(7)[0] + "-01").order("occurred_on", { ascending: true }),
+      ]);
+      if (catRes.error || txRes.error) return;
+      cache = { cats: Object.fromEntries((catRes.data || []).map((c) => [c.id, c])), txns: txRes.data || [] };
+      buildTrends(cache.cats, cache.txns);
+    }
+    buildFlow(cache.cats, cache.txns, month);
+  }
+  $("month").addEventListener("change", loadFlow);
+  if (db) loadFlow();
 </script>
 {% endblock %}
