@@ -83,6 +83,27 @@
             <span class="muted">· ${months} month${months === 1 ? "" : "s"} left</span>`;
   }
 
+  // Sprint 11: a forecast from the pace you have actually been saving at.
+  // goal_forecast adds monthly_rate (saved / active months) and a projected
+  // date; for a dated goal we say whether that pace gets there in time.
+  function fmtMonthYear(dateStr) {
+    return new Date(dateStr + "T00:00").toLocaleDateString(undefined, { month: "short", year: "numeric" });
+  }
+  function forecast(g) {
+    if (g.pct >= 100 || !(Number(g.monthly_rate) > 0)) return "";
+    const proj = g.projected_date ? fmtMonthYear(g.projected_date) : null;
+    const rate = money(Number(g.monthly_rate));
+    if (g.target_date) {
+      const onTrack = g.projected_date && g.projected_date <= g.target_date;
+      const pill = onTrack ? `<span class="pill ok">On track</span>` : `<span class="pill warn">Behind</span>`;
+      const tail = proj ? ` reaches it ${esc(proj)}` : "";
+      return `<div class="goal-sub goal-forecast">${pill} <span class="muted">Saving ${rate}/mo ·${tail}</span></div>`;
+    }
+    return proj
+      ? `<div class="goal-sub goal-forecast"><span class="muted">Saving ${rate}/mo · on track for ${esc(proj)}</span></div>`
+      : "";
+  }
+
   // Spend-cut analysis: what the dated goals need each month, set against the
   // three biggest spending categories last month, trimmed by a fifth.
   const TRIM = 0.2;
@@ -116,7 +137,7 @@
   }
 
   async function load() {
-    const { data, error } = await db.rpc("goal_progress");
+    const { data, error } = await db.rpc("goal_forecast");
     if (error) return toast(error.message);
     if (!data.length) {
       $("summary").hidden = true;
@@ -142,6 +163,7 @@
           <div class="goal-top"><span class="goal-name">${esc(g.name)}</span> ${date}</div>
           <div class="goal-sub">${money(g.saved)} of ${money(g.target_amount)}</div>
           <div class="goal-sub">${plan(g)}</div>
+          ${forecast(g)}
         </div>
         <div class="goal-actions">
           <button class="btn ghost sm" data-add="${g.id}" data-name="${esc(g.name)}">Add money</button>

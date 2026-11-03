@@ -174,7 +174,7 @@ function seed() {
 
   return { accounts, categories, transactions, budgets, pending_imports, recurring,
            goals, goal_contributions, labels, transaction_labels, investments,
-           category_rules, sync_status };
+           category_rules, sync_status, net_worth_snapshots: [] };
 }
 
 // Same SQLSTATE-style errors as the real functions.
@@ -621,6 +621,100 @@ function rpc(s, name, params) {
       best_saver_cat: saver.name, best_saver_delta: saver.delta,
       rolled_over: rolled, flexible_left: flexBudget - flexSpent,
     }];
+  }
+
+  // ---- Sprint 11: net worth, snapshots, goal forecast (mirror migration 0015) ----
+  if (name === "net_worth_breakdown") {
+    const out = accountBalances(s).map((a) => ({
+      source: a.type, label: a.name,
+      kind: a.balance < 0 ? "liability" : "asset", amount: Math.abs(a.balance),
+    }));
+    const invTotal = s.investments.reduce((n, i) => n + Number(i.current_value), 0);
+    if (invTotal > 0) out.push({ source: "investments", label: "Investments", kind: "asset", amount: invTotal });
+    return out;
+  }
+  if (name === "net_worth_series") {
+    let p = Number(params?.p_months ?? 12);
+    if (!(p >= 1 && p <= 60)) fail("22023", `p_months must be between 1 and 60, got ${p}`);
+    p = Math.floor(p);
+    const base = new Date();
+    const snaps = Object.fromEntries((s.net_worth_snapshots || [])
+      .map((x) => [String(x.as_of_month).slice(0, 7), x]));
+    const out = [];
+    for (let i = p - 1; i >= 0; i--) {
+      const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+      const ym = localDate(d).slice(0, 7);
+      const monthEnd = localDate(new Date(base.getFullYear(), base.getMonth() - i + 1, 0));
+      let assets = 0, liab = 0;
+      for (const a of s.accounts) {
+        let bal = Number(a.opening_balance);
+        for (const t of s.transactions) {
+          if (t.occurred_on > monthEnd) continue;
+          if (t.account_id === a.id && t.type === "income") bal += Number(t.amount);
+          if (t.account_id === a.id && t.type === "expense") bal -= Number(t.amount);
+          if (t.account_id === a.id && t.type === "transfer") bal -= Number(t.amount);
+          if (t.to_account_id === a.id && t.type === "transfer") bal += Number(t.amount);
+        }
+        if (bal > 0) assets += bal; else if (bal < 0) liab += -bal;
+      }
+      for (const inv of s.investments) if (String(inv.as_of) <= monthEnd) assets += Number(inv.current_value);
+      const snap = snaps[ym];
+      if (snap) out.push({ month: ym, assets: Number(snap.assets),
+        liabilities: Number(snap.liabilities), net: Number(snap.net) });
+      else out.push({ month: ym, assets, liabilities: liab, net: assets - liab });
+    }
+    return out;
+  }
+  if (name === "capture_net_worth_snapshot") {
+    const bd = rpc(s, "net_worth_breakdown", {});
+    const assets = bd.filter((r) => r.kind === "asset").reduce((n, r) => n + r.amount, 0);
+    const liab = bd.filter((r) => r.kind === "liability").reduce((n, r) => n + r.amount, 0);
+    const ym = localDate(new Date()).slice(0, 7);
+    const month = ym + "-01";
+    s.net_worth_snapshots = s.net_worth_snapshots || [];
+    let snap = s.net_worth_snapshots.find((x) => String(x.as_of_month).slice(0, 7) === ym);
+    if (!snap) { snap = { id: uid(), as_of_month: month }; s.net_worth_snapshots.push(snap); }
+    snap.assets = assets; snap.liabilities = liab; snap.net = assets - liab;
+    snap.captured_at = new Date().toISOString();
+    return [{ as_of_month: month, assets, liabilities: liab, net: assets - liab }];
+  }
+  if (name === "goal_forecast") {
+    const todayYmd = localDate(new Date());
+    const monthsBetween = (fromYm, toYm) => {
+      const [fy, fm] = fromYm.split("-").map(Number);
+      const [ty, tm] = toYm.split("-").map(Number);
+      return (ty - fy) * 12 + (tm - fm);
+    };
+    return s.goals.map((g) => {
+      const contribs = s.goal_contributions.filter((c) => c.goal_id === g.id);
+      const saved = contribs.reduce((n, c) => n + Number(c.amount), 0);
+      const target = Number(g.target_amount);
+      const activeMonths = new Set(contribs.map((c) => c.occurred_on.slice(0, 7))).size;
+      const monthlyRate = contribs.length ? saved / Math.max(activeMonths, 1) : 0;
+      const remaining = Math.max(target - saved, 0);
+      let projected = null;
+      if (saved >= target) projected = todayYmd;
+      else if (monthlyRate > 0) {
+        const d = new Date(); d.setDate(1);
+        d.setMonth(d.getMonth() + Math.ceil(remaining / monthlyRate));
+        projected = localDate(d);
+      }
+      let needed = null;
+      if (g.target_date && saved < target) {
+        const ms = Math.max(monthsBetween(todayYmd.slice(0, 7), g.target_date.slice(0, 7)), 1);
+        needed = Math.round((remaining / ms) * 100) / 100;
+      }
+      return {
+        id: g.id, name: g.name, target_amount: target, target_date: g.target_date || null,
+        saved, remaining, pct: Math.min(Math.round((saved / target) * 1000) / 10, 100),
+        monthly_rate: Math.round(monthlyRate * 100) / 100, months_active: activeMonths,
+        projected_date: projected, needed_monthly: needed,
+      };
+    }).sort((a, b) => {
+      const ga = s.goals.find((g) => g.id === a.id).created_at;
+      const gb = s.goals.find((g) => g.id === b.id).created_at;
+      return ga < gb ? -1 : ga > gb ? 1 : 0;
+    });
   }
   return [];
 }

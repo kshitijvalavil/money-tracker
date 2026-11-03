@@ -1,0 +1,124 @@
+{% extends "_shell.html" %}
+{% block title %}Wealth — Money Tracker{% endblock %}
+{% block head %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+<style>
+  .wh-row { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+            padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .wh-row:last-child { border-bottom: none; }
+  .wh-main { min-width: 0; }
+  .wh-name { font-weight: 600; overflow-wrap: anywhere; }
+  .wh-kind { font-size: 0.78rem; margin-top: 2px; }
+  .wh-amt { text-align: right; white-space: nowrap; }
+  .wh-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .wh-gain { font-size: 0.8rem; font-weight: 600; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Wealth</h1></div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="mom" id="summary">
+    <div class="stat"><div class="stat-label">Current value</div><div class="stat-value" id="sumValue">—</div></div>
+    <div class="stat"><div class="stat-label">Invested</div><div class="stat-value" id="sumInvested">—</div></div>
+    <div class="stat"><div class="stat-label">Gain / loss</div><div class="stat-value" id="sumGain">—</div>
+      <div class="stat-delta" id="sumPct"></div></div>
+  </div>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h2>Where your money is</h2>
+    <div id="allocWrap"><div class="empty">Loading…</div></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h2>Holdings</h2><a class="card-link" href="/investments">Manage</a></div>
+    <div id="holdings"><div class="empty">Loading…</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, money, esc, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  const $ = (id) => document.getElementById(id);
+
+  // Same labels, palette and cutout as the Investments allocation donut.
+  const KINDS = {
+    mutual_fund: "Mutual fund", stocks: "Stocks", fixed_deposit: "Fixed deposit",
+    gold: "Gold", retirement: "PPF / EPF / NPS", crypto: "Crypto", other: "Other",
+  };
+  const PALETTE = ["#004D61", "#5CC0D6", "#27ae60", "#e1a200", "#e4572e", "#8e44ad", "#789262"];
+
+  let rows = [], alloc;
+  const pct = (gain, base) => (base > 0 ? (gain / base) * 100 : 0);
+  function gainHtml(gain, base) {
+    if (gain === 0) return `<span class="muted">${money(0)}</span>`;
+    const cls = gain > 0 ? "pos" : "neg";
+    const sign = gain > 0 ? "+" : "−";
+    return `<span class="${cls}">${sign}${money(Math.abs(gain))}` +
+           (base > 0 ? ` <small>(${sign}${Math.abs(pct(gain, base)).toFixed(1)}%)</small>` : "") + `</span>`;
+  }
+
+  function paintSummary() {
+    const inv = rows.reduce((s, r) => s + Number(r.invested_amount), 0);
+    const val = rows.reduce((s, r) => s + Number(r.current_value), 0);
+    const gain = val - inv;
+    $("sumValue").textContent = money(val);
+    $("sumInvested").textContent = money(inv);
+    $("sumGain").innerHTML = gainHtml(gain, 0);
+    $("sumPct").innerHTML = inv > 0
+      ? `<span class="${gain >= 0 ? "pos" : "neg"}">${gain >= 0 ? "▲" : "▼"} ${Math.abs(pct(gain, inv)).toFixed(1)}%</span> <span class="muted">overall</span>`
+      : "";
+  }
+
+  function paintAlloc() {
+    if (alloc) { alloc.destroy(); alloc = null; }
+    const byKind = {};
+    for (const r of rows) byKind[r.kind] = (byKind[r.kind] || 0) + Number(r.current_value);
+    const kinds = Object.keys(byKind).filter((k) => byKind[k] > 0).sort((a, b) => byKind[b] - byKind[a]);
+    if (!kinds.length) {
+      $("allocWrap").innerHTML = `<div class="empty">Add a holding on <a class="card-link" href="/investments">Investments</a> to see how your money is spread.</div>`;
+      return;
+    }
+    $("allocWrap").innerHTML = `<canvas id="alloc" height="240"></canvas>`;
+    alloc = new Chart($("alloc"), {
+      type: "doughnut",
+      data: { labels: kinds.map((k) => KINDS[k] || k),
+        datasets: [{ data: kinds.map((k) => byKind[k]),
+          backgroundColor: kinds.map((_, i) => PALETTE[i % PALETTE.length]),
+          borderWidth: 2, borderColor: "transparent" }] },
+      options: { plugins: {
+        legend: { position: "bottom", labels: { padding: 14, font: { size: 12 } } },
+        tooltip: { callbacks: { label: (c) => ` ${c.label}: ${money(c.parsed)}` } },
+      }, cutout: "62%" },
+    });
+  }
+
+  function paintHoldings() {
+    if (!rows.length) {
+      $("holdings").innerHTML = `<div class="empty">No holdings yet. Add your first on <a class="card-link" href="/investments">Investments</a>.</div>`;
+      return;
+    }
+    $("holdings").innerHTML = rows.map((r) => {
+      const inv = Number(r.invested_amount), val = Number(r.current_value);
+      return `<div class="wh-row">
+        <div class="wh-main"><div class="wh-name">${esc(r.name)}</div>
+          <div class="wh-kind muted"><span class="pill">${esc(KINDS[r.kind] || r.kind)}</span></div></div>
+        <div class="wh-amt"><div class="wh-val">${money(val)}</div>
+          <div class="wh-gain">${gainHtml(val - inv, inv)}</div></div>
+      </div>`;
+    }).join("");
+  }
+
+  async function load() {
+    const { data, error } = await db.from("investments")
+      .select("id, name, kind, invested_amount, current_value, as_of, note")
+      .order("current_value", { ascending: false });
+    if (error) return toast(error.message);
+    rows = data;
+    paintSummary(); paintAlloc(); paintHoldings();
+  }
+  if (db) load();
+</script>
+{% endblock %}

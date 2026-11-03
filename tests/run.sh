@@ -134,3 +134,9 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d flex \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/flex_budget_test.sql"
+
+# ---- Net worth (0015): balances, breakdown, series, snapshot, goal forecast --
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres nw
+"${PSQL[@]}" -d nw \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/net_worth_test.sql"

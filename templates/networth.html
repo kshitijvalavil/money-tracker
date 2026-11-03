@@ -1,0 +1,133 @@
+{% extends "_shell.html" %}
+{% block title %}Net worth — Money Tracker{% endblock %}
+{% block head %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+<style>
+  .nw-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+            padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .nw-row:last-child { border-bottom: none; }
+  .nw-row-main { min-width: 0; }
+  .nw-row-name { font-weight: 600; }
+  .nw-row-sub { display: block; font-size: 0.78rem; }
+  .nw-row-amt { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .nw-split { margin-top: 14px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Net worth</h1></div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="stat-label">Everything you own, minus what you owe</div>
+  <div class="budget-big" id="nwValue">—</div>
+  <div class="mom nw-split">
+    <div class="stat"><div class="stat-label">Assets</div><div class="stat-value pos" id="nwAssets">—</div></div>
+    <div class="stat"><div class="stat-label">Liabilities</div><div class="stat-value neg" id="nwLiab">—</div></div>
+    <div class="stat"><div class="stat-label">Change this year</div><div class="stat-value" id="nwChange">—</div>
+      <div class="stat-delta muted" id="nwChangeSub"></div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <h2>Net worth over the last 12 months</h2>
+  <div id="trendWrap" style="position:relative;height:260px;min-width:0"><canvas id="trend"></canvas></div>
+  <p class="muted" id="trendEmpty" hidden style="font-size:0.9rem">Add accounts and investments to watch your trend build up month by month.</p>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h2>What you own</h2>
+    <div id="assets"><div class="empty">Loading…</div></div>
+  </div>
+  <div class="card">
+    <h2>What you owe</h2>
+    <div id="liabs"><div class="empty">Loading…</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, money, esc, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  const $ = (id) => document.getElementById(id);
+  const css = getComputedStyle(document.documentElement);
+  const C = (n) => css.getPropertyValue(n).trim();
+
+  const signed = (n) => (n < 0 ? "−" + money(Math.abs(n)) : money(n));
+  const fmtMonth = (ym) => {
+    const [y, m] = ym.split("-").map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: "short" });
+  };
+  // Friendly label for the account type behind each row.
+  const SRC = { bank: "Bank", cash: "Cash", card: "Credit card", wallet: "Wallet",
+                loan: "Loan", investments: "Investments" };
+
+  function row(label, sub, amount, cls) {
+    return `<div class="nw-row"><div class="nw-row-main"><span class="nw-row-name">${esc(label)}</span>` +
+      (sub ? `<span class="muted nw-row-sub">${esc(sub)}</span>` : "") +
+      `</div><span class="nw-row-amt ${cls || ""}">${money(amount)}</span></div>`;
+  }
+
+  function paintBreakdown(rows) {
+    const assets = rows.filter((r) => r.kind === "asset" && Number(r.amount) > 0)
+      .sort((a, b) => Number(b.amount) - Number(a.amount));
+    const liabs = rows.filter((r) => r.kind === "liability" && Number(r.amount) > 0)
+      .sort((a, b) => Number(b.amount) - Number(a.amount));
+    $("assets").innerHTML = assets.length
+      ? assets.map((r) => row(r.label, SRC[r.source] || r.source, Number(r.amount))).join("")
+      : `<div class="empty">No assets yet. Add an account or an investment.</div>`;
+    $("liabs").innerHTML = liabs.length
+      ? liabs.map((r) => row(r.label, SRC[r.source] || r.source, Number(r.amount), "neg")).join("")
+      : `<div class="empty">Nothing owed. Nice.</div>`;
+    const A = assets.reduce((n, r) => n + Number(r.amount), 0);
+    const L = liabs.reduce((n, r) => n + Number(r.amount), 0);
+    $("nwAssets").textContent = money(A);
+    $("nwLiab").textContent = L > 0 ? "−" + money(L) : money(0);
+    const net = A - L;
+    $("nwValue").textContent = signed(net);
+    $("nwValue").className = "budget-big" + (net < 0 ? " neg" : "");
+  }
+
+  let chart;
+  function paintTrend(series) {
+    const pts = (series || []).map((s) => ({ month: s.month, net: Number(s.net) }));
+    const first = pts.length ? pts[0].net : 0, last = pts.length ? pts[pts.length - 1].net : 0;
+    const diff = last - first;
+    $("nwChange").textContent = (diff >= 0 ? "+" : "−") + money(Math.abs(diff));
+    $("nwChange").className = "stat-value " + (diff >= 0 ? "pos" : "neg");
+    $("nwChangeSub").textContent = pts.length > 1 ? `since ${fmtMonth(pts[0].month)}` : "building up";
+    if (!pts.length || pts.every((p) => p.net === 0)) {
+      $("trendWrap").hidden = true; $("trendEmpty").hidden = false; return;
+    }
+    const brand = C("--brand");
+    chart = new Chart($("trend"), {
+      type: "line",
+      data: { labels: pts.map((p) => fmtMonth(p.month)),
+        datasets: [{ data: pts.map((p) => p.net), borderColor: brand, backgroundColor: brand + "22",
+          fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: brand, borderWidth: 2 }] },
+      options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false },
+          tooltip: { callbacks: { label: (c) => " " + money(c.parsed.y) } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: C("--muted") } },
+          y: { grid: { color: C("--line") },
+            ticks: { color: C("--muted"), callback: (v) => (Math.abs(v) >= 1000 ? (v / 1000) + "k" : v) } },
+        },
+      },
+    });
+  }
+
+  async function load() {
+    // Best-effort: persist this month's snapshot so the trend keeps real history.
+    try { await db.rpc("capture_net_worth_snapshot"); } catch (e) { /* history is a bonus */ }
+    const [bd, sr] = await Promise.all([
+      db.rpc("net_worth_breakdown"),
+      db.rpc("net_worth_series", { p_months: 12 }),
+    ]);
+    if (bd.error) return toast(bd.error.message);
+    paintBreakdown(bd.data || []);
+    if (!sr.error) paintTrend(sr.data || []);
+  }
+  if (db) load();
+</script>
+{% endblock %}
