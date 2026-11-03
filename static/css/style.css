@@ -815,3 +815,51 @@ kbd { font: 600 0.7rem/1.4 inherit; border: 1px solid var(--line); border-bottom
   .rv-msg { grid-area: msg; }
 }
 .pill.merge { white-space: nowrap; justify-self: start; }
+
+/* ---- Sprint 10: flex budget, buckets, rollovers, recap ------------------- */
+
+/* Dashboard hero foot line under "Left to spend freely". */
+.lts-foot { margin-top: 8px; font-size: 0.82rem; }
+
+/* "Your money this month" — one row per bucket. */
+.bucket-row { margin-bottom: 14px; }
+.bucket-row:last-child { margin-bottom: 0; }
+.bucket-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.bucket-name { font-weight: 600; }
+.bucket-amt { font-weight: 650; font-variant-numeric: tabular-nums; }
+.bucket-amt.neg { color: var(--neg); }
+.bucket-note { font-size: 0.78rem; margin-top: 6px; }
+.bar > .bucket-fill-fixed { background: var(--muted); }
+.bar > .bucket-fill-flexible { background: var(--brand); }
+.bar > .bucket-fill-non_monthly { background: #c9972b; }
+
+/* Budgets page: categories grouped under a bucket heading. */
+.bucket-group { margin-bottom: 20px; }
+.bucket-group:last-child { margin-bottom: 0; }
+.bucket-head { font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted); margin: 0 0 12px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+
+/* "+₹X saved" tag on a rolling-over category. */
+.pill.carry { margin-left: 4px; }
+
+/* Rollover toggle inline in a budget row's action area. */
+.roll-toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-size: 0.74rem; color: var(--muted); user-select: none; margin-right: 4px; }
+.roll-toggle input { width: 15px; height: 15px; accent-color: var(--brand); cursor: pointer; }
+
+/* Hint under the rollover checkbox in the form. */
+.field-hint { font-size: 0.74rem; margin: 4px 0 0; }
+
+/* Monthly recap card (Insights). */
+.recap-hero { padding: 4px 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.recap-big { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0 6px;
+  font-variant-numeric: tabular-nums; }
+.recap-big.pos { color: var(--pos); }
+.recap-big.neg { color: var(--neg); }
+.recap-note { font-size: 0.86rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.recap-rows { margin-top: 4px; }
+.recap-row { display: flex; justify-content: space-between; padding: 9px 0;
+  border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.recap-row:first-child { border-top: 0; }
+.recap-row .v { font-weight: 600; }

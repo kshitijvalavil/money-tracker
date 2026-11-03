@@ -11,7 +11,7 @@
 </div>
 
 <div class="card budget-summary" id="summary" style="margin-bottom:16px" hidden>
-  <div class="stat-label" id="sumLabel">Left to spend</div>
+  <div class="stat-label" id="sumLabel">Left to spend freely</div>
   <div class="budget-big" id="sumLeft">—</div>
   <div class="bar budget-bar"><div id="sumBar"></div><span class="pace" id="sumPace" hidden></span></div>
   <div class="budget-sub"><span id="sumOf"></span> <span class="muted" id="sumHint"></span></div>
@@ -21,7 +21,7 @@
   <div class="card">
     <h2 id="formTitle">Set a monthly limit</h2>
     <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">
-      A limit repeats every month. Pick a category and how much you want to spend on it.</p>
+      A limit repeats every month. Pick a category, its bucket, and how much you want to spend.</p>
     <form id="form">
       <div class="row">
         <div class="field"><label for="category">Category</label>
@@ -29,12 +29,27 @@
         <div class="field"><label for="limit">Monthly limit (₹)</label>
           <input type="number" id="limit" step="0.01" min="0.01" required></div>
       </div>
+      <div class="row">
+        <div class="field"><label for="bucket">Bucket</label>
+          <select id="bucket">
+            <option value="fixed">Fixed — rent, EMIs, subscriptions</option>
+            <option value="flexible" selected>Flexible — food, shopping, fun</option>
+            <option value="non_monthly">Non-monthly — insurance, travel, gifts</option>
+          </select></div>
+        <div class="field">
+          <label class="check-label" for="rollover">
+            <input type="checkbox" id="rollover">
+            <span>Roll unspent into next month</span>
+          </label>
+          <p class="field-hint muted">Good for sinking funds like travel or gifts.</p>
+        </div>
+      </div>
       <button class="btn" type="submit" id="saveBtn">Save limit</button>
     </form>
   </div>
 
   <div class="card">
-    <h2>Categories</h2>
+    <h2>By bucket</h2>
     <div id="progress"><div class="empty">Loading…</div></div>
   </div>
 </div>
@@ -48,7 +63,14 @@
   monthInput.value = thisMonth();
   monthInput.max = thisMonth();
 
-  let categories = [], budgets = [];
+  let categories = [], rows = [];
+
+  const BUCKETS = [
+    { key: "fixed", label: "Fixed" },
+    { key: "flexible", label: "Flexible" },
+    { key: "non_monthly", label: "Non-monthly" },
+  ];
+  const bucketLabel = (k) => (BUCKETS.find((b) => b.key === k) || { label: k }).label;
 
   // Same month stepping as the dashboard.
   const shiftMonth = (ym, n) => {
@@ -85,104 +107,135 @@
   const PILL = { ok: ["ok", "On track"], warn: ["warn", "Watch it"], over: ["bad", "Over"] };
 
   function fillCategories() {
-    const limitOf = Object.fromEntries(budgets.map((b) => [b.category_id, b.monthly_limit]));
+    const row = Object.fromEntries(rows.map((r) => [r.category_id, r]));
     const keep = $("category").value;
     $("category").innerHTML = categories.map((c) =>
-      `<option value="${c.id}">${esc(c.name)}${limitOf[c.id] ? ` (now ${money(limitOf[c.id])})` : ""}</option>`).join("");
+      `<option value="${c.id}">${esc(c.name)}${row[c.id] ? ` (now ${money(row[c.id].monthly_limit)})` : ""}</option>`).join("");
     if (keep) $("category").value = keep;
-    syncSaveLabel();
+    syncForm();
   }
-  function syncSaveLabel() {
-    const has = budgets.some((b) => b.category_id === $("category").value);
-    $("saveBtn").textContent = has ? "Update limit" : "Save limit";
+  // Reflect the selected category's current bucket / rollover / save label.
+  function syncForm() {
+    const id = $("category").value;
+    const existing = rows.find((r) => r.category_id === id);
+    const cat = categories.find((c) => c.id === id);
+    $("saveBtn").textContent = existing ? "Update limit" : "Save limit";
+    if (existing) {
+      $("bucket").value = existing.bucket;
+      $("rollover").checked = !!existing.rollover;
+    } else if (cat) {
+      $("bucket").value = cat.bucket || "flexible";
+      $("rollover").checked = false;
+    }
   }
-  $("category").addEventListener("change", syncSaveLabel);
+  $("category").addEventListener("change", syncForm);
 
   async function loadCategories() {
     const { data, error } = await db.from("categories")
-      .select("id, name").eq("kind", "expense").order("name");
+      .select("id, name, bucket").eq("kind", "expense").order("name");
     if (error) return toast(error.message);
     categories = data;
   }
 
   async function loadProgress() {
     const month = monthInput.value || thisMonth();
-    // budget_status returns category name, limit, spent — but we need ids to edit/remove.
-    const [status, res] = await Promise.all([
-      db.rpc("budget_status", { p_month: month }),
-      db.from("budgets").select("id, monthly_limit, category_id, categories(name)"),
-    ]);
-    if (status.error) return toast(status.error.message);
-    if (res.error) return toast(res.error.message);
-    budgets = res.data;
+    const { data, error } = await db.rpc("category_rollovers", { p_month: month });
+    if (error) return toast(error.message);
+    rows = data.map((r) => ({
+      ...r,
+      monthly_limit: Number(r.monthly_limit),
+      spent: Number(r.spent),
+      carried: Number(r.carried) || 0,
+    }));
     fillCategories();
 
-    if (!budgets.length) {
+    if (!rows.length) {
       $("summary").hidden = true;
       $("progress").innerHTML = `<div class="empty">No budgets yet. Set your first limit to see what's left each month.</div>`;
       return;
     }
     const p = pace(month);
-    const spentByName = Object.fromEntries(status.data.map((s) => [s.category, Number(s.spent)]));
-    const rows = budgets.map((b) => {
-      const name = b.categories?.name || "—";
-      const limit = Number(b.monthly_limit);
-      const spent = spentByName[name] || 0;
-      return { ...b, name, limit, spent, used: spent / limit };
-    }).sort((a, b) => b.used - a.used || a.name.localeCompare(b.name));   // most urgent first
 
-    // Summary: left to spend across all budgeted categories.
-    const total = rows.reduce((s, r) => s + r.limit, 0);
-    const spent = rows.reduce((s, r) => s + r.spent, 0);
-    const left = total - spent;
-    const st = stateOf(spent / total, p);
-    $("summary").hidden = false;
-    $("summary").dataset.state = st;
-    $("sumLabel").textContent = left >= 0 ? "Left to spend" : "Over budget by";
-    $("sumLeft").textContent = money(Math.abs(left));
-    $("sumLeft").className = "budget-big " + (left < 0 ? "neg" : "");
-    $("sumBar").style.width = `${Math.min(100, (spent / total) * 100)}%`;
-    $("sumBar").className = st === "ok" ? "" : st;
-    $("sumOf").textContent = `${money(spent)} spent of ${money(total)}`;
-    $("sumPace").hidden = p === null;
-    if (p !== null) $("sumPace").style.left = `${p * 100}%`;
-    // Days left including today, so the last day still gets a daily figure.
-    const [yy, mm] = month.split("-").map(Number);
-    const daysLeft = p === null ? 0 : new Date(yy, mm, 0).getDate() - Number(today().slice(8, 10)) + 1;
-    $("sumHint").textContent = p === null
-      ? (left >= 0 ? "· stayed within budget" : "· went over budget")
-      : left > 0 && daysLeft > 0
-        ? `· about ${money(left / daysLeft)} a day for the ${daysLeft} day${daysLeft === 1 ? "" : "s"} left`
-        : "";
+    // Summary: left to spend across the FLEXIBLE bucket (the money you steer).
+    const flex = rows.filter((r) => r.bucket === "flexible");
+    const total = flex.reduce((s, r) => s + r.monthly_limit, 0);
+    const spent = flex.reduce((s, r) => s + r.spent, 0);
+    if (total > 0) {
+      const left = total - spent;
+      const st = stateOf(spent / total, p);
+      $("summary").hidden = false;
+      $("summary").dataset.state = st;
+      $("sumLabel").textContent = left >= 0 ? "Left to spend freely" : "Over your flexible budget by";
+      $("sumLeft").textContent = money(Math.abs(left));
+      $("sumLeft").className = "budget-big " + (left < 0 ? "neg" : "");
+      $("sumBar").style.width = `${Math.min(100, (spent / total) * 100)}%`;
+      $("sumBar").className = st === "ok" ? "" : st;
+      $("sumOf").textContent = `${money(spent)} spent of ${money(total)} flexible`;
+      $("sumPace").hidden = p === null;
+      if (p !== null) $("sumPace").style.left = `${p * 100}%`;
+      const [yy, mm] = month.split("-").map(Number);
+      const daysLeft = p === null ? 0 : new Date(yy, mm, 0).getDate() - Number(today().slice(8, 10)) + 1;
+      $("sumHint").textContent = p === null
+        ? (left >= 0 ? "· stayed within budget" : "· went over budget")
+        : left > 0 && daysLeft > 0
+          ? `· about ${money(left / daysLeft)} a day for the ${daysLeft} day${daysLeft === 1 ? "" : "s"} left`
+          : "";
+    } else {
+      $("summary").hidden = true;
+    }
 
-    $("progress").innerHTML = rows.map((r) => {
-      const s = stateOf(r.used, p);
-      const [pillCls, pillTxt] = PILL[s];
-      const leftTxt = r.spent <= r.limit
-        ? `<span>${money(r.limit - r.spent)} left</span>`
-        : `<span class="neg">${money(r.spent - r.limit)} over</span>`;
-      return `<div class="bar-row budget-row" data-state="${s}">
-          <div class="top">
-            <span class="budget-name">${esc(r.name)} <span class="pill ${pillCls}">${pillTxt}</span></span>
-            <span class="budget-left">${leftTxt}</span>
-          </div>
-          <div class="bar"><div class="${s === "ok" ? "" : s}" style="width:${Math.min(100, r.used * 100)}%"></div>${
-            p === null ? "" : `<span class="pace" style="left:${p * 100}%" title="Where you are in the month"></span>`}</div>
-          <div class="budget-foot">
-            <span class="muted">${money(r.spent)} of ${money(r.limit)}</span>
-            <span class="budget-actions">
-              <button class="icon-btn" title="Change limit" aria-label="Change ${esc(r.name)} limit" data-edit="${r.category_id}" data-limit="${r.limit}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
-              <button class="icon-btn" title="Remove limit" aria-label="Remove ${esc(r.name)} limit" data-del="${r.id}" data-name="${esc(r.name)}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-            </span>
-          </div>
-        </div>`;
+    // Grouped by bucket, most-urgent category first within each bucket.
+    const html = BUCKETS.map((b) => {
+      // Most urgent first: share of the available room (limit + rollover pot) used.
+      const share = (r) => r.spent / (r.monthly_limit + r.carried);
+      const group = rows.filter((r) => r.bucket === b.key)
+        .sort((a, c) => share(c) - share(a) || a.name.localeCompare(c.name));
+      if (!group.length) return "";
+      return `<div class="bucket-group"><div class="bucket-head">${b.label}</div>${
+        group.map((r) => rowHtml(r, p)).join("")}</div>`;
     }).join("");
+    $("progress").innerHTML = html;
+    wireRowActions();
+  }
 
+  function rowHtml(r, p) {
+    const available = r.monthly_limit + r.carried;          // rollover pot adds room
+    const used = r.spent / available;
+    const s = stateOf(used, p);
+    const [pillCls, pillTxt] = PILL[s];
+    const leftTxt = r.spent <= available
+      ? `<span>${money(available - r.spent)} left</span>`
+      : `<span class="neg">${money(r.spent - available)} over</span>`;
+    const carryTag = r.rollover && r.carried > 0
+      ? `<span class="pill ok carry">+${money(r.carried)} saved</span>` : "";
+    return `<div class="bar-row budget-row" data-state="${s}">
+        <div class="top">
+          <span class="budget-name">${esc(r.name)} <span class="pill ${pillCls}">${pillTxt}</span>${carryTag}</span>
+          <span class="budget-left">${leftTxt}</span>
+        </div>
+        <div class="bar"><div class="${s === "ok" ? "" : s}" style="width:${Math.min(100, used * 100)}%"></div>${
+          p === null ? "" : `<span class="pace" style="left:${p * 100}%" title="Where you are in the month"></span>`}</div>
+        <div class="budget-foot">
+          <span class="muted">${money(r.spent)} of ${money(r.monthly_limit)}${r.rollover && r.carried > 0 ? ` + ${money(r.carried)} rolled over` : ""}</span>
+          <span class="budget-actions">
+            <label class="roll-toggle" title="Roll unspent into next month">
+              <input type="checkbox" data-roll="${r.category_id}" ${r.rollover ? "checked" : ""} aria-label="Roll ${esc(r.name)} unspent into next month">
+              <span>Rollover</span>
+            </label>
+            <button class="icon-btn" title="Change limit" aria-label="Change ${esc(r.name)} limit" data-edit="${r.category_id}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+            <button class="icon-btn" title="Remove limit" aria-label="Remove ${esc(r.name)} limit" data-del="${r.category_id}" data-name="${esc(r.name)}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </span>
+        </div>
+      </div>`;
+  }
+
+  function wireRowActions() {
     $("progress").querySelectorAll("[data-edit]").forEach((btn) => {
       btn.onclick = () => {
+        const r = rows.find((x) => x.category_id === btn.dataset.edit);
         $("category").value = btn.dataset.edit;
-        $("limit").value = btn.dataset.limit;
-        syncSaveLabel();
+        $("limit").value = r ? r.monthly_limit : "";
+        syncForm();
         $("limit").focus();
         $("limit").select();
       };
@@ -190,8 +243,17 @@
     $("progress").querySelectorAll("[data-del]").forEach((btn) => {
       btn.onclick = async () => {
         if (!confirm(`Remove the ${btn.dataset.name} limit?`)) return;
-        const { error } = await db.from("budgets").delete().eq("id", btn.dataset.del);
+        const { error } = await db.from("budgets").delete().eq("category_id", btn.dataset.del);
         if (error) return toast(error.message);
+        loadProgress();
+      };
+    });
+    $("progress").querySelectorAll("[data-roll]").forEach((box) => {
+      box.onchange = async () => {
+        const { error } = await db.from("budgets")
+          .update({ rollover: box.checked }).eq("category_id", box.dataset.roll);
+        if (error) { box.checked = !box.checked; return toast(error.message); }
+        toast(box.checked ? "Rollover on." : "Rollover off.", "ok");
         loadProgress();
       };
     });
@@ -201,13 +263,17 @@
     e.preventDefault();
     const limit = parseFloat($("limit").value);
     if (!(limit > 0)) return toast("Limit must be greater than zero.");
-    // One budget per category: upsert on the (user_id, category_id) unique key.
+    const categoryId = $("category").value;
+    // Bucket lives on the category; the limit and rollover on the budget.
+    const catUpd = await db.from("categories").update({ bucket: $("bucket").value }).eq("id", categoryId);
+    if (catUpd.error) return toast(catUpd.error.message);
     const { error } = await db.from("budgets")
-      .upsert({ category_id: $("category").value, monthly_limit: limit },
+      .upsert({ category_id: categoryId, monthly_limit: limit, rollover: $("rollover").checked },
               { onConflict: "user_id,category_id" });
     if (error) return toast(error.message);
     $("limit").value = "";
     toast("Saved.", "ok");
+    await loadCategories();
     loadProgress();
   });
 

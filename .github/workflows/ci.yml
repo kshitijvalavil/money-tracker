@@ -117,6 +117,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint9_review_inbox_test.py
+      - name: Sprint 10 flex budget UI (buckets, rollovers, recap)
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint10_flex_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

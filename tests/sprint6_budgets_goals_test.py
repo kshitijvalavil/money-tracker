@@ -51,10 +51,13 @@ def main():
         rows = pg.locator("#progress .budget-row")
         n = rows.count()
         check(n >= 2, f"budget rows render ({n})")
-        check(all(rows.nth(i).locator(".pill").count() == 1 for i in range(n)), "every row has a status pill")
-        used = pg.evaluate("""() => [...document.querySelectorAll('#progress .budget-row')].map(r => {
-            const w = parseFloat(r.querySelector('.bar > div').style.width); return w; })""")
-        check(used == sorted(used, reverse=True), f"most-used category first ({used})")
+        check(all(rows.nth(i).locator(".pill:not(.carry)").count() == 1 for i in range(n)),
+              "every row has a status pill")
+        # Sprint 10: budgets are grouped by bucket; most-used first within each group.
+        groups = pg.evaluate("""() => [...document.querySelectorAll('#progress .bucket-group')]
+            .map(g => [...g.querySelectorAll('.budget-row .bar > div')].map(d => parseFloat(d.style.width)))""")
+        check(all(g == sorted(g, reverse=True) for g in groups),
+              f"most-used category first within each bucket ({groups})")
         check(pg.locator("#progress .pace").count() == n and pg.is_visible("#sumPace"),
               "pace marker on the current month")
         check(pg.is_disabled("#monthNext"), "next month disabled on the current month")

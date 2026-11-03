@@ -12,6 +12,18 @@
   </div>
 </div>
 
+<div class="card recap-card" id="recapCard" hidden>
+  <div class="card-head">
+    <h2 id="recapTitle">Monthly recap</h2>
+  </div>
+  <div class="recap-hero">
+    <div class="stat-label" id="recapLede">You saved</div>
+    <div class="recap-big" id="recapSaved">—</div>
+    <div class="recap-note muted" id="recapNote"></div>
+  </div>
+  <div class="recap-rows" id="recapRows"></div>
+</div>
+
 <div class="card">
   <h2>This month vs. last</h2>
   <div class="mom" id="mom"><div class="empty">Loading…</div></div>
@@ -65,6 +77,51 @@
     const txt = pct === null ? money(Math.abs(diff)) : `${Math.abs(pct)}%`;
     return `<span class="${good ? "pos" : "neg"}">${arrow} ${txt}</span>
             <span class="muted">vs ${money(prev)}</span>`;
+  }
+
+  const pct1 = (x) => (Math.round(x * 1000) / 10).toString() + "%";
+
+  // Monthly recap (Sprint 10): what you saved, the big movers, and what rolled
+  // over. Shown for any month with money in or out.
+  async function loadRecap() {
+    const month = $("month").value || thisMonth();
+    const { data, error } = await db.rpc("monthly_recap", { p_month: month });
+    if (error) return toast(error.message);
+    const r = data && data[0];
+    if (!r || (Number(r.income) === 0 && Number(r.expense) === 0)) { $("recapCard").hidden = true; return; }
+    const saved = Number(r.saved);
+    const [y, m] = month.split("-").map(Number);
+    const monthName = new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+    $("recapTitle").textContent = `${monthName} recap`;
+    $("recapLede").textContent = saved >= 0 ? "You saved" : "You overspent by";
+    $("recapSaved").textContent = money(Math.abs(saved));
+    $("recapSaved").className = "recap-big " + (saved >= 0 ? "pos" : "neg");
+
+    let note = "";
+    if (r.savings_rate !== null && r.savings_rate !== undefined) {
+      note = `${pct1(Number(r.savings_rate))} of what came in`;
+      if (r.prev_savings_rate !== null && r.prev_savings_rate !== undefined) {
+        const change = Math.round((Number(r.savings_rate) - Number(r.prev_savings_rate)) * 1000) / 10;
+        if (change !== 0) {
+          note += ` <span class="pill ${change > 0 ? "ok" : "bad"}">${change > 0 ? "+" : ""}${change}% vs last month</span>`;
+        }
+      }
+    }
+    $("recapNote").innerHTML = note;
+
+    const rows = [["Money in", money(r.income)], ["Money out", money(r.expense)]];
+    if (r.biggest_jump_cat && Number(r.biggest_jump_delta) > 0)
+      rows.push(["Biggest jump", `${esc(r.biggest_jump_cat)} +${money(r.biggest_jump_delta)}`]);
+    if (r.best_saver_cat && Number(r.best_saver_delta) < 0)
+      rows.push(["Best saver", `<span class="pos">${esc(r.best_saver_cat)} −${money(-r.best_saver_delta)}</span>`]);
+    if (Number(r.rolled_over) > 0)
+      rows.push(["Rolled into next month", money(r.rolled_over)]);
+    if (Number(r.flexible_left) !== 0)
+      rows.push(["Flexible left over", money(r.flexible_left)]);
+
+    $("recapRows").innerHTML = rows.map(([k, v]) =>
+      `<div class="recap-row"><span class="k muted">${k}</span><span class="v">${v}</span></div>`).join("");
+    $("recapCard").hidden = false;
   }
 
   async function loadMom() {
@@ -189,7 +246,7 @@
 
   // Month-scoped panels reload when the month changes; the 12-month bar chart
   // is independent of the selected month, so it loads once.
-  function loadMonthly() { loadMom(); loadPie(); loadMerchants(); loadLabels(); }
+  function loadMonthly() { loadRecap(); loadMom(); loadPie(); loadMerchants(); loadLabels(); }
   $("month").addEventListener("change", loadMonthly);
   $("export").addEventListener("click", exportCsv);
   if (db) { loadMonthly(); loadBars(); }

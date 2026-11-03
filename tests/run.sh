@@ -128,3 +128,9 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d rev \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/review_inbox_test.sql"
+
+# ---- Flex budget (0014): buckets, rollover pot, monthly recap, RLS ------------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres flex
+"${PSQL[@]}" -d flex \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/flex_budget_test.sql"

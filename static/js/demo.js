@@ -22,12 +22,17 @@ function seed() {
   ];
   const A = Object.fromEntries(accounts.map((a) => [a.name, a.id]));
 
+  // [name, kind, bucket] — buckets added in Sprint 10 (migration 0014).
   const cats = [
-    ["Salary", "income"], ["Freelance", "income"], ["Gift", "income"], ["Investment", "income"],
-    ["Food", "expense"], ["Rent", "expense"], ["Transport", "expense"], ["Bills", "expense"],
-    ["Shopping", "expense"], ["Health", "expense"], ["Entertainment", "expense"], ["Other", "expense"],
+    ["Salary", "income", "flexible"], ["Freelance", "income", "flexible"],
+    ["Gift", "income", "flexible"], ["Investment", "income", "flexible"],
+    ["Food", "expense", "flexible"], ["Rent", "expense", "fixed"],
+    ["Transport", "expense", "flexible"], ["Bills", "expense", "fixed"],
+    ["Shopping", "expense", "flexible"], ["Health", "expense", "flexible"],
+    ["Entertainment", "expense", "flexible"], ["Travel", "expense", "non_monthly"],
+    ["Other", "expense", "flexible"],
   ];
-  const categories = cats.map(([name, kind]) => ({ id: uid(), name, kind }));
+  const categories = cats.map(([name, kind, bucket]) => ({ id: uid(), name, kind, bucket }));
   const C = Object.fromEntries(categories.map((c) => [c.name, c.id]));
 
   const tx = (occurred_on, amount, type, account, extra = {}) => ({
@@ -45,15 +50,22 @@ function seed() {
     tx(day(thisMonth, 9), 3200, "expense", "HDFC Savings", { category_id: C["Shopping"], note: "Clothes" }),
     tx(day(thisMonth, 10), 5000, "transfer", "HDFC Savings", { to_account_id: A["Cash"], note: "ATM withdrawal" }),
     tx(day(thisMonth, 12), 1850, "expense", "Credit Card", { category_id: C["Bills"], note: "Electricity" }),
+    tx(day(thisMonth, 14), 1200, "expense", "Credit Card", { category_id: C["Travel"], note: "Train tickets" }),
     tx(day(lastMonth, 1), 85000, "income", "HDFC Savings", { category_id: C["Salary"] }),
     tx(day(lastMonth, 4), 18000, "expense", "HDFC Savings", { category_id: C["Rent"] }),
     tx(day(lastMonth, 15), 9000, "expense", "Credit Card", { category_id: C["Food"] }),
+    tx(day(lastMonth, 20), 1500, "expense", "Credit Card", { category_id: C["Travel"], note: "Weekend trip" }),
   ];
 
+  // rollover: unspent carries into next month (Sprint 10). Travel is a sinking
+  // fund, so it rolls over; the month-to-month budgets reset.
   const budgets = [
-    { id: uid(), category_id: C["Food"], monthly_limit: 10000 },
-    { id: uid(), category_id: C["Shopping"], monthly_limit: 3000 },
-    { id: uid(), category_id: C["Entertainment"], monthly_limit: 2000 },
+    { id: uid(), category_id: C["Rent"], monthly_limit: 18000, rollover: false },
+    { id: uid(), category_id: C["Bills"], monthly_limit: 2500, rollover: false },
+    { id: uid(), category_id: C["Food"], monthly_limit: 10000, rollover: false },
+    { id: uid(), category_id: C["Shopping"], monthly_limit: 3000, rollover: false },
+    { id: uid(), category_id: C["Entertainment"], monthly_limit: 2000, rollover: false },
+    { id: uid(), category_id: C["Travel"], monthly_limit: 4000, rollover: true },
   ];
 
   // Sample transactions "detected from email", awaiting review (demo only).
@@ -516,6 +528,99 @@ function rpc(s, name, params) {
     const spent = sum(s.transactions.filter(
       (t) => t.type === "expense" && inMonth(t, m) && budgetCats.has(t.category_id)));
     return [{ budgeted, spent, remaining: budgeted - spent }];
+  }
+
+  // ---- Sprint 10: flex budget, rollovers, recap (mirror migration 0014) ----
+  if (name === "flex_overview") {
+    if (!/^\d{4}-\d{2}$/.test(m || "")) fail("22023", `month must be YYYY-MM, got ${m}`);
+    const bucketOf = Object.fromEntries(s.categories.map((c) => [c.id, c.bucket]));
+    const budgetedCats = new Set(s.budgets.map((b) => b.category_id));
+    const budgeted = { fixed: 0, flexible: 0, non_monthly: 0 };
+    const spent = { fixed: 0, flexible: 0, non_monthly: 0 };
+    for (const b of s.budgets) {
+      const bk = bucketOf[b.category_id];
+      if (bk in budgeted) budgeted[bk] += Number(b.monthly_limit);
+    }
+    // Spent counts only budgeted categories, so the hero matches the Budgets page.
+    for (const t of s.transactions) {
+      if (t.type !== "expense" || !inMonth(t, m) || !budgetedCats.has(t.category_id)) continue;
+      const bk = bucketOf[t.category_id];
+      if (bk in spent) spent[bk] += Number(t.amount);
+    }
+    return ["fixed", "flexible", "non_monthly"].map((bucket) => ({
+      bucket, budgeted: budgeted[bucket], spent: spent[bucket],
+    }));
+  }
+  if (name === "category_rollovers") {
+    if (!/^\d{4}-\d{2}$/.test(m || "")) fail("22023", `month must be YYYY-MM, got ${m}`);
+    const catById = Object.fromEntries(s.categories.map((c) => [c.id, c]));
+    const [cy, cm] = m.split("-").map(Number);
+    // Prior 12 months that actually had a transaction (active months only).
+    const priorActive = [];
+    for (let g = 1; g <= 12; g++) {
+      const d = new Date(cy, cm - 1 - g, 1);
+      const key = localDate(d).slice(0, 7);
+      if (s.transactions.some((t) => inMonth(t, key))) priorActive.push(key);
+    }
+    const spentIn = (catId, mon) => sum(s.transactions.filter(
+      (t) => t.type === "expense" && t.category_id === catId && inMonth(t, mon)));
+    return s.budgets.map((b) => {
+      const c = catById[b.category_id];
+      const limit = Number(b.monthly_limit);
+      const carried = b.rollover
+        ? Math.max(0, priorActive.reduce((n, mon) => n + (limit - spentIn(b.category_id, mon)), 0))
+        : 0;
+      return {
+        category_id: b.category_id, name: c?.name || "—", bucket: c?.bucket || "flexible",
+        monthly_limit: limit, rollover: !!b.rollover, spent: spentIn(b.category_id, m), carried,
+      };
+    }).sort((a, b) => a.bucket.localeCompare(b.bucket) || a.name.localeCompare(b.name));
+  }
+  if (name === "monthly_recap") {
+    if (!/^\d{4}-\d{2}$/.test(m || "")) fail("22023", `month must be YYYY-MM, got ${m}`);
+    const [cy, cm] = m.split("-").map(Number);
+    const prev = localDate(new Date(cy, cm - 2, 1)).slice(0, 7);
+    const catById = Object.fromEntries(s.categories.map((c) => [c.id, c]));
+    const bucketOf = Object.fromEntries(s.categories.map((c) => [c.id, c.bucket]));
+    const tot = (mon, type) => sum(s.transactions.filter((t) => t.type === type && inMonth(t, mon)));
+    const income = tot(m, "income"), expense = tot(m, "expense");
+    const pinc = tot(prev, "income"), pexp = tot(prev, "expense");
+    const byCat = (mon) => {
+      const o = {};
+      for (const t of s.transactions.filter((t) => t.type === "expense" && inMonth(t, mon))) {
+        const nm = catById[t.category_id]?.name; if (!nm) continue;
+        o[nm] = (o[nm] || 0) + Number(t.amount);
+      }
+      return o;
+    };
+    const cur = byCat(m), prv = byCat(prev);
+    const diffs = [...new Set([...Object.keys(cur), ...Object.keys(prv)])]
+      .map((nm) => ({ name: nm, delta: (cur[nm] || 0) - (prv[nm] || 0) }));
+    // biggest jump: max delta; best saver: min delta; ties break on name asc.
+    let jump = null, saver = null;
+    for (const d of diffs) {
+      if (!jump || d.delta > jump.delta || (d.delta === jump.delta && d.name < jump.name)) jump = d;
+      if (!saver || d.delta < saver.delta || (d.delta === saver.delta && d.name < saver.name)) saver = d;
+    }
+    jump = jump || { name: null, delta: 0 };
+    saver = saver || { name: null, delta: 0 };
+    const rolled = s.budgets.filter((b) => b.rollover).reduce((n, b) =>
+      n + Math.max(0, Number(b.monthly_limit)
+        - sum(s.transactions.filter((t) => t.type === "expense" && t.category_id === b.category_id && inMonth(t, m)))), 0);
+    const budgetedCats = new Set(s.budgets.map((b) => b.category_id));
+    const flexBudget = s.budgets.filter((b) => bucketOf[b.category_id] === "flexible")
+      .reduce((n, b) => n + Number(b.monthly_limit), 0);
+    const flexSpent = sum(s.transactions.filter(
+      (t) => t.type === "expense" && inMonth(t, m) && bucketOf[t.category_id] === "flexible"
+        && budgetedCats.has(t.category_id)));
+    return [{
+      income, expense, saved: income - expense,
+      savings_rate: income > 0 ? Math.round((income - expense) / income * 10000) / 10000 : null,
+      prev_savings_rate: pinc > 0 ? Math.round((pinc - pexp) / pinc * 10000) / 10000 : null,
+      biggest_jump_cat: jump.name, biggest_jump_delta: jump.delta,
+      best_saver_cat: saver.name, best_saver_delta: saver.delta,
+      rolled_over: rolled, flexible_left: flexBudget - flexSpent,
+    }];
   }
   return [];
 }
