@@ -47,7 +47,7 @@
 
 {% block page_script %}
 <script type="module">
-  import { db, money, esc, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  import { db, money, moneyCompact, signedMoney, esc, toast } from "{{ url_for('static', filename='js/app.js') }}";
   const $ = (id) => document.getElementById(id);
   const css = getComputedStyle(document.documentElement);
   const C = (n) => css.getPropertyValue(n).trim();
@@ -80,10 +80,10 @@
       : `<div class="empty">Nothing owed. Nice.</div>`;
     const A = assets.reduce((n, r) => n + Number(r.amount), 0);
     const L = liabs.reduce((n, r) => n + Number(r.amount), 0);
-    $("nwAssets").textContent = money(A);
-    $("nwLiab").textContent = L > 0 ? "−" + money(L) : money(0);
+    $("nwAssets").textContent = moneyCompact(A); $("nwAssets").title = money(A);
+    $("nwLiab").textContent = L > 0 ? "−" + moneyCompact(L) : moneyCompact(0); $("nwLiab").title = money(L);
     const net = A - L;
-    $("nwValue").textContent = signed(net);
+    $("nwValue").textContent = signedMoney(net, moneyCompact); $("nwValue").title = money(net);
     $("nwValue").className = "budget-big" + (net < 0 ? " neg" : "");
   }
 
@@ -92,7 +92,8 @@
     const pts = (series || []).map((s) => ({ month: s.month, net: Number(s.net) }));
     const first = pts.length ? pts[0].net : 0, last = pts.length ? pts[pts.length - 1].net : 0;
     const diff = last - first;
-    $("nwChange").textContent = (diff >= 0 ? "+" : "−") + money(Math.abs(diff));
+    $("nwChange").textContent = (diff >= 0 ? "+" : "−") + moneyCompact(Math.abs(diff));
+    $("nwChange").title = money(diff);
     $("nwChange").className = "stat-value " + (diff >= 0 ? "pos" : "neg");
     $("nwChangeSub").textContent = pts.length > 1 ? `since ${fmtMonth(pts[0].month)}` : "building up";
     if (!pts.length || pts.every((p) => p.net === 0)) {

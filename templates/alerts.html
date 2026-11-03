@@ -1,0 +1,147 @@
+{% extends "_shell.html" %}
+{% block title %}Alerts — Money Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Alerts</h1>
+  <button class="btn ghost sm" id="markRead" hidden>Mark all read</button>
+</div>
+
+<p class="card-intro" style="margin-top:-8px">
+  Things worth knowing, worked out on your device from your own budgets, bills,
+  balances and goals. Turn each kind on or off below.
+</p>
+
+<div class="grid cols-2" style="align-items:start">
+  <div class="card">
+    <div class="card-head"><h2>Recent</h2><span class="card-link" id="alertCount" aria-live="polite"></span></div>
+    <div id="alertFeed"><div class="empty">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h2>Alert settings</h2><span class="card-link">In-app + email</span></div>
+    <div id="alertSettings"></div>
+  </div>
+</div>
+
+<p class="card-intro" style="margin-top:14px">
+  Nothing new is sent anywhere to produce these — they're computed from rows you
+  already have. The optional weekly digest reuses the email sync you set up.
+</p>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, esc, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  import { computeAlerts, ALERT_META, withDefaults, defaultAlertPrefs }
+    from "{{ url_for('static', filename='js/alerts.js') }}";
+
+  const $ = (id) => document.getElementById(id);
+  const t = new Date();
+  const month = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`;
+
+  let prefs = defaultAlertPrefs();
+  let alerts = [];
+
+  const SEEN_KEY = "alertsSeen";
+  const seen = () => { try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || "[]")); } catch (e) { return new Set(); } };
+  const setSeen = (ids) => { try { localStorage.setItem(SEEN_KEY, JSON.stringify([...ids])); } catch (e) {} };
+
+  function renderFeed() {
+    const feed = $("alertFeed");
+    if (!alerts.length) {
+      feed.innerHTML = `<div class="empty state"><div class="state-title">Nothing needs you</div>` +
+        `<div class="state-body">No budgets are over, no bills are due soon and your balances look fine. ` +
+        `We'll flag anything here as it comes up.</div></div>`;
+      $("alertCount").textContent = "";
+      $("markRead").hidden = true;
+      return;
+    }
+    const s = seen();
+    const unread = alerts.filter((a) => !s.has(a.id)).length;
+    $("alertCount").textContent = unread ? `${unread} new` : "all read";
+    $("markRead").hidden = unread === 0;
+    feed.innerHTML = alerts.map((a) => {
+      const neu = !s.has(a.id);
+      return `<div class="row-line alert-row">` +
+        `<span class="alert-av sev-${esc(a.pill.cls)}" aria-hidden="true">${esc(a.mark)}</span>` +
+        `<div class="row-main"><div class="row-name">${esc(a.title)}${neu ? ' <span class="alert-dot" title="New"></span>' : ""}</div>` +
+        `<div class="row-meta">${esc(a.detail)}</div></div>` +
+        `<span class="pill ${esc(pillClass(a.pill.cls))}">${esc(a.pill.text)}</span></div>`;
+    }).join("");
+  }
+  const pillClass = (c) => (c === "bad" ? "bad" : c === "warn" ? "warn" : c === "ok" ? "ok" : "channel");
+
+  function renderSettings() {
+    const order = ["budget_overspend", "unusual_txn", "upcoming_bill", "low_balance", "goal_milestone", "weekly_digest"];
+    $("alertSettings").innerHTML = order.map((key) => {
+      const meta = ALERT_META[key];
+      const on = !!prefs[key];
+      return `<div class="row-line"><div class="row-main"><div class="row-name">${esc(meta.label)}</div>` +
+        `<div class="row-meta">${esc(meta.hint)}</div></div>` +
+        `<label class="switch"><input type="checkbox" data-key="${esc(key)}" ${on ? "checked" : ""} ` +
+        `aria-label="${esc(meta.label)}"><span class="switch-ui" aria-hidden="true"></span></label></div>`;
+    }).join("");
+    $("alertSettings").querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.addEventListener("change", () => {
+        prefs[cb.dataset.key] = cb.checked;
+        recompute();
+        save();
+      });
+    });
+  }
+
+  let saveTimer = null;
+  function save() {
+    if (!db) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      try {
+        const { data: u } = await db.auth.getUser();
+        const uid = u?.user?.id;
+        const row = { alert_prefs: prefs, updated_at: new Date().toISOString() };
+        if (uid) row.user_id = uid;
+        await db.from("user_prefs").upsert(row, { onConflict: "user_id" });
+      } catch (e) { /* settings are a convenience; never shout */ }
+    }, 400);
+  }
+
+  function recompute() {
+    alerts = computeAlerts(data, prefs);
+    renderFeed();
+  }
+
+  let data = {};
+  async function load() {
+    const [bal, bud, bills, goals, tx, cats] = await Promise.all([
+      db.rpc("account_balances"),
+      db.rpc("budget_status"),
+      db.rpc("upcoming_recurring", { p_days: 30 }),
+      db.rpc("goal_progress"),
+      db.from("transactions").select("id, occurred_on, amount, type, category_id").gte("occurred_on", monthsAgo(3)),
+      db.from("categories").select("id, name, kind"),
+    ]);
+    if (bal.error) return toast(bal.error.message);
+    data = {
+      balances: bal.data || [], budgets: bud.data || [], bills: bills.data || [],
+      goals: goals.data || [], txns: tx.data || [], categories: cats.data || [], month,
+    };
+
+    // Load saved settings (falls back to defaults if the column/row is absent).
+    try {
+      const { data: pr } = await db.from("user_prefs").select("alert_prefs").limit(1);
+      if (pr && pr[0] && pr[0].alert_prefs) prefs = withDefaults(pr[0].alert_prefs);
+    } catch (e) {}
+
+    renderSettings();
+    recompute();
+
+    $("markRead").addEventListener("click", () => { setSeen(new Set(alerts.map((a) => a.id))); renderFeed(); });
+  }
+  function monthsAgo(n) {
+    const d = new Date(t.getFullYear(), t.getMonth() - n, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  }
+
+  if (db) load();
+</script>
+{% endblock %}

@@ -129,6 +129,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint12_ui_test.py
+      - name: Sprint 13 alerts + Ask your money UI and logic
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint13_ui_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

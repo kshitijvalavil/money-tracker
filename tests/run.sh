@@ -146,3 +146,9 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d prefs \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/sprint12_prefs_test.sql"
+
+# ---- Alert settings (0017): alert_prefs column, checks, RLS, grants ----------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres alerts
+"${PSQL[@]}" -d alerts \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/sprint13_prefs_test.sql"

@@ -198,6 +198,20 @@ def insights():
     return render_template("insights.html", page="insights")
 
 
+@app.route("/alerts")
+def alerts():
+    # Sprint 13: an Alerts centre — budget, bill, balance and goal warnings,
+    # computed in the browser from the user's own rows.
+    return render_template("alerts.html", page="alerts")
+
+
+@app.route("/ask")
+def ask():
+    # Sprint 13: "Ask your money" — a plain-language question box answered on
+    # the device from the user's own data (no AI service, no paid API).
+    return render_template("ask.html", page="ask")
+
+
 @app.route("/reports")
 def reports():
     # Reports merged into Insights (Sprint 6 IA). Keep the path as a redirect

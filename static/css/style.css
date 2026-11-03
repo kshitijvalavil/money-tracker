@@ -943,3 +943,51 @@ kbd { font: 600 0.7rem/1.4 inherit; border: 1px solid var(--line); border-bottom
 .flow-top-head { font-weight: 600; font-size: 0.85rem; margin-bottom: 8px; }
 .sp-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .sp-row:last-child { border-bottom: none; }
+
+/* ===================================================================== */
+/* Sprint 13 — alerts bell, Ask your money, empty-state polish           */
+/* ===================================================================== */
+.topbar-bell { margin-left: auto; position: relative; display: inline-flex; align-items: center;
+  justify-content: center; width: 40px; height: 40px; border-radius: 10px; color: var(--ink); }
+.topbar-bell.active { color: var(--brand); }
+.nav-badge.dot { min-width: 9px; width: 9px; height: 9px; padding: 0; border-radius: 50%;
+  position: absolute; top: 6px; right: 6px; }
+
+/* Alerts feed */
+.alert-row { align-items: center; }
+.alert-av { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid;
+  place-items: center; font-weight: 700; font-size: 0.85rem; line-height: 1; }
+.alert-av.sev-bad   { background: var(--neg-bg); color: var(--neg); }
+.alert-av.sev-warn  { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.alert-av.sev-ok    { background: var(--pos-bg); color: var(--pos); }
+.alert-av.sev-brand { background: var(--brand-soft); color: var(--brand); }
+.alert-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--brand); margin-left: 6px; vertical-align: middle; }
+
+.pill.brand { background: var(--brand-soft); color: var(--brand); }
+
+/* Ask your money */
+.ask-bar { display: flex; align-items: center; gap: 10px; padding: 12px 14px; margin-bottom: 16px; }
+.ask-q { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--brand-soft); color: var(--brand); font-weight: 700; }
+.ask-input { flex: 1; min-width: 0; border: 0; background: none; color: var(--ink);
+  font: inherit; font-size: 0.98rem; padding: 6px 2px; }
+.ask-input:focus { outline: none; }
+.ask-input::placeholder { color: var(--muted); }
+#askAnswer { margin-bottom: 16px; }
+.ask-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill.plain { text-transform: none; }
+.ask-chip { cursor: pointer; border: 0; font: inherit; font-size: 0.82rem; font-weight: 600;
+  padding: 8px 13px; border-radius: 999px; text-align: left; text-transform: none; }
+.ask-chip:hover { filter: brightness(0.97); }
+.ask-mini { margin-top: 14px; }
+.ask-spark { display: block; margin-top: 14px; max-width: 170px; }
+.ask-answer .hero-value { margin-top: 2px; }
+
+/* Richer empty state: a soft icon tile, a line and one clear action */
+.empty-state { text-align: center; padding: 34px 22px; }
+.empty-state .es-icon { width: 46px; height: 46px; margin: 0 auto 14px; border-radius: 14px;
+  background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; }
+.empty-state .es-icon svg { width: 24px; height: 24px; }
+.empty-state h3 { font-size: 1.02rem; margin: 0 0 6px; }
+.empty-state p { color: var(--muted); font-size: 0.9rem; max-width: 36ch; margin: 0 auto 16px; }
