@@ -1,0 +1,156 @@
+{% extends "_shell.html" %}
+{% block title %}Bills calendar — Money Tracker{% endblock %}
+{% block head %}
+<style>
+  .cal-head { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
+  .cal-head span { font-size: 0.72rem; font-weight: 600; color: var(--muted);
+                   text-transform: uppercase; letter-spacing: .02em; text-align: center; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .cal-cell { min-width: 0; min-height: 78px; border: 1px solid var(--line); border-radius: 10px;
+              padding: 6px; display: flex; flex-direction: column; gap: 3px; background: var(--surface); }
+  .cal-cell.pad { background: var(--bg); border-style: dashed; }
+  .cal-cell.today { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+  .cal-daynum { font-size: 0.75rem; font-weight: 700; color: var(--muted); }
+  .cal-cell.today .cal-daynum { color: var(--brand); }
+  .cal-bill { font-size: 0.66rem; line-height: 1.3; background: var(--brand-soft); color: var(--brand);
+              border-radius: 6px; padding: 2px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-bill.overdue { background: var(--neg-bg); color: var(--neg); }
+  .cal-more { font-size: 0.64rem; color: var(--muted); font-weight: 600; }
+  .cal-up { display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+            padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .cal-up:last-child { border-bottom: none; }
+  .cal-up-main { min-width: 0; }
+  .cal-up-name { font-weight: 600; overflow-wrap: anywhere; }
+  .cal-up-due { font-size: 0.8rem; margin-top: 2px; }
+  .cal-up-due.overdue { color: var(--neg); font-weight: 600; }
+  .cal-up-due.soon { color: var(--warn); font-weight: 600; }
+  .cal-up-amt { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  @media (max-width: 640px) {
+    .cal-cell { min-height: 58px; padding: 4px; }
+    .cal-bill { font-size: 0.6rem; padding: 1px 3px; }
+    .cal-daynum { font-size: 0.68rem; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Bills calendar</h1>
+  <div class="month-nav">
+    <button class="icon-btn month-step" type="button" id="monthPrev" aria-label="Previous month"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <input type="month" id="month" aria-label="Month shown">
+    <button class="icon-btn month-step" type="button" id="monthNext" aria-label="Next month"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+  <div class="card-head"><h2 id="calTitle">This month</h2>
+    <span class="muted" id="monthTotal" style="font-size:0.88rem"></span></div>
+  <div class="cal-head">
+    <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+  </div>
+  <div class="cal-grid" id="grid"></div>
+</div>
+
+<div class="card">
+  <h2>Due in the next 30 days</h2>
+  <div id="upcoming"><div class="empty">Loading…</div></div>
+</div>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, money, esc, toast, thisMonth, today } from "{{ url_for('static', filename='js/app.js') }}";
+  import { occurrence } from "{{ url_for('static', filename='js/recurring.js') }}";
+  const $ = (id) => document.getElementById(id);
+  const pad = (n) => String(n).padStart(2, "0");
+
+  const monthInput = $("month");
+  monthInput.value = thisMonth();
+  let bills = [];
+
+  const shiftMonth = (ym, n) => {
+    const [y, m] = ym.split("-").map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  };
+  const stepMonth = (n) => { monthInput.value = shiftMonth(monthInput.value || thisMonth(), n); render(); };
+  $("monthPrev").onclick = () => stepMonth(-1);
+  $("monthNext").onclick = () => stepMonth(1);
+  monthInput.addEventListener("change", render);
+
+  // Every occurrence of a bill that falls inside [ms, me] (inclusive).
+  function occurrencesIn(bill, ms, me) {
+    const out = [];
+    let n = 0, d = occurrence(bill.start_date, bill.frequency, 0), guard = 0;
+    while (d < ms && guard < 4000) { n++; d = occurrence(bill.start_date, bill.frequency, n); guard++; }
+    while (d <= me && guard < 4000) { out.push(d); n++; d = occurrence(bill.start_date, bill.frequency, n); guard++; }
+    return out;
+  }
+
+  function render() {
+    const ym = monthInput.value || thisMonth();
+    const [y, m] = ym.split("-").map(Number);
+    const days = new Date(y, m, 0).getDate();
+    const ms = `${ym}-01`, me = `${ym}-${pad(days)}`;
+    const td = today();
+    $("calTitle").textContent = new Date(y, m - 1, 1)
+      .toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+    // Map day-of-month -> bills due that day.
+    const byDay = {};
+    let total = 0, count = 0;
+    for (const b of bills) {
+      for (const d of occurrencesIn(b, ms, me)) {
+        const day = Number(d.slice(8, 10));
+        (byDay[day] = byDay[day] || []).push({ ...b, on: d });
+        total += Number(b.amount); count += 1;
+      }
+    }
+    $("monthTotal").textContent = count
+      ? `${money(total)} across ${count} bill${count === 1 ? "" : "s"}`
+      : "No bills due this month";
+
+    const lead = new Date(y, m - 1, 1).getDay();   // 0 = Sunday
+    let cells = "";
+    for (let i = 0; i < lead; i++) cells += `<div class="cal-cell pad"></div>`;
+    for (let d = 1; d <= days; d++) {
+      const iso = `${ym}-${pad(d)}`;
+      const list = byDay[d] || [];
+      const shown = list.slice(0, 3).map((b) => {
+        const overdue = b.type === "expense" && iso < td;
+        return `<span class="cal-bill ${overdue ? "overdue" : ""}" title="${esc(b.name)} · ${money(b.amount)}">${esc(b.name)}</span>`;
+      }).join("");
+      const more = list.length > 3 ? `<span class="cal-more">+${list.length - 3} more</span>` : "";
+      cells += `<div class="cal-cell ${iso === td ? "today" : ""}"><span class="cal-daynum">${d}</span>${shown}${more}</div>`;
+    }
+    $("grid").innerHTML = cells;
+  }
+
+  async function loadUpcoming() {
+    const { data, error } = await db.rpc("upcoming_recurring", { p_days: 30 });
+    if (error) { $("upcoming").innerHTML = `<div class="empty">${esc(error.message)}</div>`; return; }
+    if (!data.length) { $("upcoming").innerHTML = `<div class="empty">Nothing due in the next 30 days.</div>`; return; }
+    $("upcoming").innerHTML = data.map((r) => {
+      const cls = r.overdue ? "overdue" : r.days_left <= 3 ? "soon" : "";
+      const when = r.overdue
+        ? `Overdue by ${Math.abs(r.days_left)} day${Math.abs(r.days_left) === 1 ? "" : "s"}`
+        : r.days_left === 0 ? "Due today"
+        : `In ${r.days_left} day${r.days_left === 1 ? "" : "s"}`;
+      return `<div class="cal-up"><div class="cal-up-main"><div class="cal-up-name">${esc(r.name)}</div>
+        <div class="cal-up-due ${cls}">${when} · ${esc(r.next_due)}</div></div>
+        <span class="cal-up-amt">${money(r.amount)}</span></div>`;
+    }).join("");
+  }
+
+  async function load() {
+    const { data, error } = await db.from("recurring")
+      .select("id, name, amount, type, frequency, start_date, next_seq, active")
+      .eq("active", true);
+    if (error) return toast(error.message);
+    bills = data || [];
+    render();
+    loadUpcoming();
+  }
+  if (db) load();
+</script>
+{% endblock %}
