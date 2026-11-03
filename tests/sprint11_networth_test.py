@@ -89,7 +89,9 @@ def main():
         jtxt = japan.inner_text()
         check("Save ₹" in jtxt and "a month" in jtxt, "dated goal keeps its monthly plan line")
         check(japan.locator(".goal-forecast").count() == 1, "dated goal shows a forecast line")
-        check(("On track" in jtxt) or ("Behind" in jtxt), "forecast shows an On track / Behind pill")
+        # .pill is text-transform:capitalize, so innerText reads "On Track".
+        low = jtxt.lower()
+        check(("on track" in low) or ("behind" in low), "forecast shows an On track / Behind pill")
         check("Saving ₹" in jtxt, "forecast states the saving pace")
         check(pg.evaluate(EMOJI) is False, "no emojis on Goals")
         shot(pg, "s11-goals.png")
