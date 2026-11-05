@@ -152,3 +152,10 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d alerts \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/sprint13_prefs_test.sql"
+
+# ---- Multi-user isolation (every table): a new tester sees none of the owner's
+# data, and cannot read, change, delete, or plant rows in another user's account.
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres iso
+"${PSQL[@]}" -d iso \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/user_isolation_test.sql"
