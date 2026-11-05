@@ -60,12 +60,66 @@ def run():
     check(last.headers.get("Retry-After") is not None, "a Retry-After header is sent on 429")
 
     # ---- Auth required outside demo mode ---------------------------------
+    # A header that is merely PRESENT must not be enough: Supabase must vouch
+    # for the token. Stub the Supabase lookup so no network is needed.
     appmod.DEMO_MODE = False
+    real_fetch = appmod._fetch_supabase_user
+    calls = []
+
+    def fake_fetch(token):
+        calls.append(token)
+        return {"good-token-a": "user-a", "good-token-b": "user-b"}.get(token)
+
+    appmod._fetch_supabase_user = fake_fetch
+    appmod._AUTH_CACHE.clear()
+    appmod._RL_HITS.clear()
     try:
         r2 = client.post("/api/read-bill", json=payload)
         check(r2.status_code == 401, f"without a session the endpoint returns 401 (got {r2.status_code})")
+        r3 = client.post("/api/read-bill", json=payload, headers={"Authorization": "x"})
+        check(r3.status_code == 401, f"a made-up Authorization header is rejected (got {r3.status_code})")
+        r4 = client.post("/api/read-bill", json=payload, headers={"Authorization": "Bearer forged"})
+        check(r4.status_code == 401, f"a forged bearer token is rejected (got {r4.status_code})")
+        r5 = client.post("/api/read-bill", json=payload, headers={"Authorization": "Basic good-token-a"})
+        check(r5.status_code == 401, f"a non-Bearer scheme is rejected (got {r5.status_code})")
+        check("Basic good-token-a" not in calls, "non-Bearer headers never reach Supabase")
+
+        # The free parser needs a session as well.
+        t = {"text": "Electricity bill\nAmount due Rs 1,234.00\nDue date 15/12/2026"}
+        p1 = client.post("/api/parse-bill-text", json=t)
+        check(p1.status_code == 401, f"parse-bill-text without a session returns 401 (got {p1.status_code})")
+        p2 = client.post("/api/parse-bill-text", json=t, headers={"Authorization": "Bearer forged"})
+        check(p2.status_code == 401, f"parse-bill-text with a forged token returns 401 (got {p2.status_code})")
+        p3 = client.post("/api/parse-bill-text", json=t, headers={"Authorization": "Bearer good-token-a"})
+        check(p3.status_code == 200, f"parse-bill-text with a valid token works (got {p3.status_code})")
+
+        # Valid tokens are remembered briefly, not re-checked every request.
+        before = len(calls)
+        client.post("/api/parse-bill-text", json=t, headers={"Authorization": "Bearer good-token-a"})
+        check(len(calls) == before, "a verified token is cached (no repeat Supabase call)")
+
+        # Limits are per person: a spoofed X-Forwarded-For cannot dodge them,
+        # and one person's limit does not lock out another.
+        appmod._RL_HITS.clear()
+        codes = []
+        for i in range(7):
+            codes.append(client.post("/api/parse-bill-text", json=t, headers={
+                "Authorization": "Bearer good-token-a",
+                "X-Forwarded-For": f"203.0.113.{i}, 10.0.0.1"}).status_code)
+        check(codes[:5] == [200] * 5 and codes[5] == 429, f"user limit holds despite spoofed IPs (got {codes})")
+        other = client.post("/api/parse-bill-text", json=t, headers={
+            "Authorization": "Bearer good-token-b", "X-Forwarded-For": "198.51.100.9, 10.0.0.2"})
+        check(other.status_code == 200, f"another user is not locked out (got {other.status_code})")
     finally:
+        appmod._fetch_supabase_user = real_fetch
+        appmod._AUTH_CACHE.clear()
         appmod.DEMO_MODE = True
+
+    # ---- Client IP: trust the proxy-appended entry, not the client's ------
+    with appmod.app.test_request_context(headers={"X-Forwarded-For": "6.6.6.6, 203.0.113.7"}):
+        check(appmod._client_ip() == "203.0.113.7", "client IP is the proxy-appended entry, not a spoofed first one")
+    with appmod.app.test_request_context(headers={}, environ_base={"REMOTE_ADDR": "192.0.2.5"}):
+        check(appmod._client_ip() == "192.0.2.5", "with no forwarding header the peer address is used")
 
 
 def main():
