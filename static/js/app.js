@@ -3,6 +3,7 @@
 
 import { createDemoClient } from "./demo.js";
 import { computeAlerts, withDefaults } from "./alerts.js";
+import { startIdleLock, needsMfa, hasConsent, logEvent } from "./session.js";
 
 const CONFIG = window.__CONFIG || {};
 export const DEMO = !!CONFIG.demo;
@@ -90,6 +91,18 @@ export async function requireAuth() {
   if (!data.user) {
     window.location.href = "/login";
     return null;
+  }
+  if (!DEMO) {
+    // Two-step sign-in is on but this session only knows the password: finish it first.
+    if (await needsMfa(db)) { window.location.href = "/login"; return null; }
+    // Everyone accepts the current privacy notice before using the app.
+    if (!(await hasConsent(db, data.user.id))) { window.location.href = "/consent"; return null; }
+    // Sign out after 30 minutes of nobody touching the app.
+    startIdleLock(async () => {
+      await logEvent(db, "idle_lock");
+      try { await db.auth.signOut(); } catch (e) {}
+      window.location.href = "/login?locked=1";
+    });
   }
   return data.user;
 }

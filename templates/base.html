@@ -32,7 +32,8 @@
     window.__CONFIG = {
       url: {{ SUPABASE_URL | tojson }},
       key: {{ SUPABASE_ANON_KEY | tojson }},
-      demo: {{ DEMO_MODE | tojson }}
+      demo: {{ DEMO_MODE | tojson }},
+      noticeVersion: {{ NOTICE_VERSION | tojson }}
     };
   </script>
   <!-- Register the service worker for offline support and installability. -->

@@ -1,7 +1,7 @@
 -- Money Tracker — "delete my account" test (Sprint 14).
 --
 -- Proves public.delete_my_account():
---   * removes the caller's login AND every row they own, in ALL 15 data tables,
+--   * removes the caller's login AND every row they own, in ALL 17 data tables,
 --   * leaves every other user's data completely untouched,
 --   * refuses callers who are not signed in, and is not callable by anon,
 --   * only ever deletes the caller (it takes no user-id argument to abuse).
@@ -44,6 +44,7 @@ grant execute on function auth.uid() to public;
 \i migrations/0016_home_layout.sql
 \i migrations/0017_alert_prefs.sql
 \i migrations/0019_delete_my_account.sql
+\i migrations/0021_audit_and_consent.sql
 
 grant select, insert, update, delete on all tables in schema public to app_user;
 grant execute on all routines in schema public to app_user;
@@ -73,6 +74,8 @@ begin
     insert into public.pending_imports (source, direction, amount, occurred_on, note, source_message_id)
         values ('sbi_alert', 'expense', 999.00, current_date, 'import', 'msg-' || auth.uid());
     insert into public.net_worth_snapshots (as_of_month, assets, liabilities, net) values (date_trunc('month', current_date)::date, 100, 20, 80);
+    insert into public.audit_log (event) values ('sign_in');
+    insert into public.user_consents (notice_version) values ('2026-11-07');
 end $$;
 
 set role app_user;
@@ -80,12 +83,12 @@ set request.jwt.claim.sub = :'A';  select pg_temp.seed_everything();
 set request.jwt.claim.sub = :'B';  select pg_temp.seed_everything();
 reset role;
 
--- Helper: how many rows does a user own across ALL 15 tables? (run as superuser)
+-- Helper: how many rows does a user own across ALL 17 tables? (run as superuser)
 create or replace function pg_temp.rows_owned(p_user uuid) returns bigint language plpgsql as $$
 declare t text; n bigint; total bigint := 0;
     tbls text[] := array['accounts','budgets','categories','category_rules','goal_contributions',
         'goals','investments','labels','net_worth_snapshots','pending_imports','recurring',
-        'sync_status','transaction_labels','transactions','user_prefs'];
+        'sync_status','transaction_labels','transactions','user_prefs','audit_log','user_consents'];
 begin
     foreach t in array tbls loop
         execute format('select count(*) from public.%I where user_id = $1', t) into n using p_user;
@@ -99,7 +102,7 @@ do $$
 declare t text; n bigint;
     tbls text[] := array['accounts','budgets','categories','category_rules','goal_contributions',
         'goals','investments','labels','net_worth_snapshots','pending_imports','recurring',
-        'sync_status','transaction_labels','transactions','user_prefs'];
+        'sync_status','transaction_labels','transactions','user_prefs','audit_log','user_consents'];
 begin
     foreach t in array tbls loop
         execute format('select count(*) from public.%I where user_id = $1', t) into n using '22222222-2222-2222-2222-222222222222'::uuid;

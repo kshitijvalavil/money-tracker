@@ -5,7 +5,7 @@
 
 Checks, at iPhone and desktop size, in light and dark:
   * the Profile page has no sideways scroll and no page errors,
-  * "Download all my data" saves a JSON file that covers all 15 tables and
+  * "Download all my data" saves a JSON file that covers all 17 tables and
     holds the demo user's real records (accounts, transactions, ...),
   * the file is for download only: nothing is sent to the server,
   * "Delete my account" asks for the password and the word DELETE, does nothing
@@ -19,9 +19,9 @@ from playwright.sync_api import sync_playwright
 
 BASE = os.environ.get("BASE_URL", "http://127.0.0.1:8099")
 CHROME = os.environ.get("CHROME_PATH", "/opt/pw-browsers/chromium")
-TABLES = ["accounts", "budgets", "categories", "category_rules", "goal_contributions",
+TABLES = ["accounts", "audit_log", "budgets", "categories", "category_rules", "goal_contributions",
           "goals", "investments", "labels", "net_worth_snapshots", "pending_imports",
-          "recurring", "sync_status", "transaction_labels", "transactions", "user_prefs"]
+          "recurring", "sync_status", "transaction_labels", "transactions", "user_consents", "user_prefs"]
 results = []
 
 
@@ -58,7 +58,7 @@ def run(ctx, tag):
           f"{tag}: file is named money-tracker-export-DATE.json ({d.suggested_filename})")
     data = json.load(open(d.path()))
     check(data.get("app") == "Money Tracker" and data.get("exported_at"), f"{tag}: file says what it is and when")
-    check(sorted(data["tables"].keys()) == sorted(TABLES), f"{tag}: file covers all 15 tables")
+    check(sorted(data["tables"].keys()) == sorted(TABLES), f"{tag}: file covers all 17 tables")
     check(data["row_counts"]["transactions"] == len(data["tables"]["transactions"]) > 0,
           f"{tag}: transactions are in the file ({data['row_counts']['transactions']})")
     check(len(data["tables"]["accounts"]) > 0 and len(data["tables"]["goals"]) > 0,

@@ -4,6 +4,7 @@ This server only serves pages. The pages talk to Supabase directly from the
 browser (auth + data), protected by Row Level Security in the database, so this
 server never holds your database password or sees your data.
 """
+import datetime
 import hashlib
 import json
 import os
@@ -53,7 +54,12 @@ DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
 # Render and every page shows the friendly "we are updating" screen with a 503
 # until it is switched off again. /healthz stays up so Render keeps the service.
 MAINTENANCE = os.environ.get("MAINTENANCE_MODE", "").lower() in ("1", "true", "yes")
-_MAINTENANCE_OPEN = ("/healthz", "/api/status", "/deploying", "/offline", "/sw.js", "/static/")
+# Bump this date whenever templates/privacy.html changes in a way people should
+# re-accept. Everyone is asked to accept the current version before using the app.
+NOTICE_VERSION = "2026-11-07"
+# Optional: where people can send privacy questions and complaints (set on Render).
+PRIVACY_CONTACT = os.environ.get("PRIVACY_CONTACT_EMAIL", "").strip()
+_MAINTENANCE_OPEN = ("/healthz", "/privacy", "/.well-known/", "/api/status", "/deploying", "/offline", "/sw.js", "/static/")
 
 # Content-Security-Policy. The app loads only its own files; the one cross-origin
 # talker is Supabase (REST + realtime websocket). Inline <script>/<style> are used
@@ -210,6 +216,8 @@ def inject_config():
         "SUPABASE_URL": SUPABASE_URL,
         "SUPABASE_ANON_KEY": SUPABASE_ANON_KEY,
         "DEMO_MODE": DEMO_MODE,
+        "NOTICE_VERSION": NOTICE_VERSION,
+        "PRIVACY_CONTACT": PRIVACY_CONTACT,
         "config_ready": DEMO_MODE or bool(SUPABASE_URL and SUPABASE_ANON_KEY),
     }
 
@@ -312,6 +320,34 @@ def imports():
 @app.route("/profile")
 def profile():
     return render_template("profile.html", page="profile")
+
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html", page="privacy")
+
+
+@app.route("/consent")
+def consent():
+    return render_template("consent.html", page="consent")
+
+
+@app.route("/.well-known/security.txt")
+def security_txt():
+    # Where to report a security problem (RFC 9116). The GitHub link is private
+    # vulnerability reporting for this repository.
+    expires = (datetime.date.today() + datetime.timedelta(days=180)).isoformat() + "T00:00:00.000Z"
+    lines = []
+    if PRIVACY_CONTACT:
+        lines.append("Contact: mailto:" + PRIVACY_CONTACT)
+    lines += [
+        "Contact: https://github.com/kshitijvalavil/money-tracker/security/advisories/new",
+        "Expires: " + expires,
+        "Preferred-Languages: en",
+        "Canonical: " + request.url_root.rstrip("/") + "/.well-known/security.txt",
+        "Policy: " + request.url_root.rstrip("/") + "/privacy",
+    ]
+    return app.response_class("\n".join(lines) + "\n", mimetype="text/plain")
 
 
 @app.route("/deploying")
