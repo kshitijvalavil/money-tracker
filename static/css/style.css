@@ -993,3 +993,15 @@ kbd { font: 600 0.7rem/1.4 inherit; border: 1px solid var(--line); border-bottom
 .empty-state .es-icon svg { width: 24px; height: 24px; }
 .empty-state h3 { font-size: 1.02rem; margin: 0 0 6px; }
 .empty-state p { color: var(--muted); font-size: 0.9rem; max-width: 36ch; margin: 0 auto 16px; }
+
+/* Privacy notice, consent and sign-in extras (Sprint 14) */
+.doc { max-width: 640px; text-align: left; }
+.doc h2 { font-size: 1.05rem; margin: 20px 0 6px; }
+.doc p, .doc li { line-height: 1.55; }
+.doc-title { font-size: 1.5rem; margin: 8px 0 6px; }
+.doc-list { padding-left: 1.2rem; margin: 6px 0 12px; }
+.doc-list li { margin: 4px 0; }
+.check { display: flex; gap: 10px; align-items: flex-start; margin: 14px 0; line-height: 1.4; }
+.check input { margin-top: 3px; width: 20px; height: 20px; flex: none; }
+.auth-foot { text-align: center; margin: 14px 0 0; font-size: 0.85rem; }
+.small { font-size: 0.82rem; color: var(--muted); }

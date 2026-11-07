@@ -5,9 +5,9 @@
 
 // Every table that stores a user's data. Keep in step with supabase/migrations.
 export const EXPORT_TABLES = [
-  "accounts", "budgets", "categories", "category_rules", "goal_contributions",
+  "accounts", "audit_log", "budgets", "categories", "category_rules", "goal_contributions",
   "goals", "investments", "labels", "net_worth_snapshots", "pending_imports",
-  "recurring", "sync_status", "transaction_labels", "transactions", "user_prefs",
+  "recurring", "sync_status", "transaction_labels", "transactions", "user_consents", "user_prefs",
 ];
 
 const PAGE = 1000;   // Supabase returns at most 1000 rows per request
@@ -15,6 +15,7 @@ const PAGE = 1000;   // Supabase returns at most 1000 rows per request
 // Paging needs a stable order. Most tables are keyed by id; these are not.
 const ORDER_BY = {
   transaction_labels: ["transaction_id", "label_id"],
+  user_consents: ["user_id"],
   sync_status: ["user_id"],
   user_prefs: ["user_id"],
 };

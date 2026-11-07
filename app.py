@@ -4,16 +4,18 @@ This server only serves pages. The pages talk to Supabase directly from the
 browser (auth + data), protected by Row Level Security in the database, so this
 server never holds your database password or sees your data.
 """
+import datetime
 import hashlib
 import json
 import os
+import secrets
 import threading
 import time
 import urllib.error
 import urllib.request
 from collections import defaultdict, deque
 
-from flask import Flask, jsonify, redirect, render_template, request
+from flask import Flask, g, jsonify, redirect, render_template, request
 
 from billreader import BillReadError, parse_bill_text, read_bill
 
@@ -53,35 +55,45 @@ DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
 # Render and every page shows the friendly "we are updating" screen with a 503
 # until it is switched off again. /healthz stays up so Render keeps the service.
 MAINTENANCE = os.environ.get("MAINTENANCE_MODE", "").lower() in ("1", "true", "yes")
-_MAINTENANCE_OPEN = ("/healthz", "/api/status", "/deploying", "/offline", "/sw.js", "/static/")
+# Bump this date whenever templates/privacy.html changes in a way people should
+# re-accept. Everyone is asked to accept the current version before using the app.
+NOTICE_VERSION = "2026-11-07"
+# Optional: where people can send privacy questions and complaints (set on Render).
+PRIVACY_CONTACT = os.environ.get("PRIVACY_CONTACT_EMAIL", "").strip()
+_MAINTENANCE_OPEN = ("/healthz", "/privacy", "/.well-known/", "/api/status", "/deploying", "/offline", "/sw.js", "/static/")
 
 # Content-Security-Policy. The app loads only its own files; the one cross-origin
-# talker is Supabase (REST + realtime websocket). Inline <script>/<style> are used
-# for the pre-paint theme and config bootstrap, so they are allowed; everything
-# external is blocked. frame-ancestors 'none' also stops click-jacking.
+# talker is Supabase (REST + realtime websocket). Everything else outside is
+# blocked. frame-ancestors 'none' also stops click-jacking.
 _SUPABASE_HOST = (SUPABASE_URL or "").rstrip("/")
-# Open-source OCR (Tesseract.js) for the free Snap-a-bill path loads its script,
-# worker and language data from these CDNs in the browser.
-_OCR_CDNS = "https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com"
+# Scripts: only our own files, plus inline scripts that carry this request's secret
+# nonce (so an injected script, which cannot know it, will not run). No outside
+# hosts at all: the OCR library is served from /static/vendor/tesseract.
+# 'wasm-unsafe-eval' lets the browser compile the OCR engine's WebAssembly; it does
+# not allow eval() of text. Styles still allow inline because the pages use style
+# attributes; styles cannot run code.
 _CONNECT = " ".join(x for x in ["'self'", _SUPABASE_HOST, "https://*.supabase.co",
-                                "wss://*.supabase.co", _OCR_CDNS] if x)
-_CSP = (
-    "default-src 'self'; "
-    f"script-src 'self' 'unsafe-inline' blob: {_OCR_CDNS}; "
-    "style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data: blob:; "
-    "font-src 'self'; "
-    f"connect-src {_CONNECT}; "
-    "worker-src 'self' blob:; "
-    "manifest-src 'self'; "
-    "object-src 'none'; "
-    "base-uri 'self'; "
-    "form-action 'self'; "
-    "frame-ancestors 'none'"
-)
+                                "wss://*.supabase.co"] if x)
+
+
+def _build_csp(nonce):
+    return (
+        "default-src 'self'; "
+        f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self'; "
+        f"connect-src {_CONNECT}; "
+        "worker-src 'self' blob:; "
+        "manifest-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+
 
 _SECURITY_HEADERS = {
-    "Content-Security-Policy": _CSP,
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -90,6 +102,11 @@ _SECURITY_HEADERS = {
     # Tell browsers to stick to HTTPS for a year (Render serves the app over TLS).
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 }
+
+
+@app.before_request
+def make_csp_nonce():
+    g.csp_nonce = secrets.token_urlsafe(18)
 
 
 @app.before_request
@@ -103,6 +120,7 @@ def maintenance_gate():
 
 @app.after_request
 def set_security_headers(resp):
+    resp.headers["Content-Security-Policy"] = _build_csp(getattr(g, "csp_nonce", ""))
     for name, value in _SECURITY_HEADERS.items():
         resp.headers.setdefault(name, value)
     return resp
@@ -207,9 +225,12 @@ def _rate_limited(key, max_hits=None, window=None):
 @app.context_processor
 def inject_config():
     return {
+        "csp_nonce": getattr(g, "csp_nonce", ""),
         "SUPABASE_URL": SUPABASE_URL,
         "SUPABASE_ANON_KEY": SUPABASE_ANON_KEY,
         "DEMO_MODE": DEMO_MODE,
+        "NOTICE_VERSION": NOTICE_VERSION,
+        "PRIVACY_CONTACT": PRIVACY_CONTACT,
         "config_ready": DEMO_MODE or bool(SUPABASE_URL and SUPABASE_ANON_KEY),
     }
 
@@ -312,6 +333,34 @@ def imports():
 @app.route("/profile")
 def profile():
     return render_template("profile.html", page="profile")
+
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html", page="privacy")
+
+
+@app.route("/consent")
+def consent():
+    return render_template("consent.html", page="consent")
+
+
+@app.route("/.well-known/security.txt")
+def security_txt():
+    # Where to report a security problem (RFC 9116). The GitHub link is private
+    # vulnerability reporting for this repository.
+    expires = (datetime.date.today() + datetime.timedelta(days=180)).isoformat() + "T00:00:00.000Z"
+    lines = []
+    if PRIVACY_CONTACT:
+        lines.append("Contact: mailto:" + PRIVACY_CONTACT)
+    lines += [
+        "Contact: https://github.com/kshitijvalavil/money-tracker/security/advisories/new",
+        "Expires: " + expires,
+        "Preferred-Languages: en",
+        "Canonical: " + request.url_root.rstrip("/") + "/.well-known/security.txt",
+        "Policy: " + request.url_root.rstrip("/") + "/privacy",
+    ]
+    return app.response_class("\n".join(lines) + "\n", mimetype="text/plain")
 
 
 @app.route("/deploying")

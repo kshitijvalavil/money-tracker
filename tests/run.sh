@@ -166,3 +166,9 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d delacct \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/delete_account_test.sql"
+
+# ---- Sprint 14: audit log (append-only, 12-month prune) + consent record.
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres auditdb
+"${PSQL[@]}" -d auditdb \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/audit_consent_test.sql"

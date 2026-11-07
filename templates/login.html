@@ -4,7 +4,8 @@
 <div class="auth-wrap">
   <div class="card auth-card">
     <div class="brand">Money<span>Tracker</span></div>
-    <p class="auth-sub">Sign in to track your money</p>
+    <p class="auth-sub" id="authSub">Sign in to track your money</p>
+    <p class="notice" id="lockedNote" role="status" hidden>You were signed out after 30 minutes of inactivity. Sign in again to continue.</p>
     <form id="loginForm">
       <div class="field">
         <label for="email">Email</label>
@@ -16,32 +17,74 @@
       </div>
       <button class="btn" type="submit" id="submit">Sign in</button>
     </form>
+    <form id="mfaForm" hidden>
+      <div class="field">
+        <label for="mfaCode">6-digit code from your authenticator app</label>
+        <input id="mfaCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
+      </div>
+      <button class="btn" type="submit" id="mfaSubmit">Verify and sign in</button>
+      <button class="btn ghost" type="button" id="mfaCancel">Cancel</button>
+    </form>
+    <p class="auth-foot"><a href="/privacy">Privacy notice</a></p>
   </div>
 </div>
-<script type="module">
-  import { db, toast } from "{{ url_for('static', filename='js/app.js') }}";
+<script type="module" nonce="{{ csp_nonce }}">
+  import { db, toast, DEMO } from "{{ url_for('static', filename='js/app.js') }}";
+  import { needsMfa, totpFactors, verifyCode, logEvent } from "{{ url_for('static', filename='js/session.js') }}";
+  const $ = (id) => document.getElementById(id);
 
-  // Already signed in? Go to the dashboard.
+  if (new URLSearchParams(location.search).get("locked")) $("lockedNote").hidden = false;
+
+  const finish = async () => { await logEvent(db, "sign_in"); window.location.href = "/"; };
+  const showMfa = () => {
+    $("loginForm").hidden = true; $("mfaForm").hidden = false;
+    $("authSub").textContent = "Two-step sign-in";
+    $("mfaCode").focus();
+  };
+
+  // Already signed in? Go to the dashboard (after the second step if it is on).
   if (db) {
     const { data } = await db.auth.getUser();
-    if (data.user) window.location.href = "/";
+    if (data.user) {
+      if (!DEMO && await needsMfa(db)) showMfa(); else window.location.href = "/";
+    }
   }
 
-  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  $("loginForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!db) { toast("Supabase isn't configured yet."); return; }
-    const btn = document.getElementById("submit");
+    const btn = $("submit");
     btn.disabled = true; btn.textContent = "Signing in…";
     const { error } = await db.auth.signInWithPassword({
-      email: document.getElementById("email").value.trim(),
-      password: document.getElementById("password").value,
+      email: $("email").value.trim(),
+      password: $("password").value,
     });
     if (error) {
       toast(error.message);
       btn.disabled = false; btn.textContent = "Sign in";
+    } else if (!DEMO && await needsMfa(db)) {
+      showMfa();
     } else {
-      window.location.href = "/";
+      await finish();
     }
+  });
+
+  $("mfaForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = $("mfaSubmit");
+    btn.disabled = true; btn.textContent = "Checking…";
+    try {
+      const factors = await totpFactors(db);
+      if (!factors.length) { toast("No authenticator is set up on this account."); return; }
+      const { error } = await verifyCode(db, factors[0].id, $("mfaCode").value);
+      if (error) { toast("That code didn't work. Wait for a new one and try again."); $("mfaCode").value = ""; return; }
+      await finish();
+    } finally { btn.disabled = false; btn.textContent = "Verify and sign in"; }
+  });
+
+  $("mfaCancel").addEventListener("click", async () => {
+    try { await db.auth.signOut(); } catch (e) {}
+    window.location.reload();
   });
 </script>
 {% endblock %}

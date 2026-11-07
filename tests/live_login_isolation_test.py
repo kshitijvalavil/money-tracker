@@ -32,9 +32,9 @@ PASSWORD = os.environ.get("MT_TESTER_PASSWORD", "")
 OWNER_ID = os.environ.get("MT_OWNER_USER_ID", "")  # optional
 
 # Every table the app stores user data in (all have a user_id column).
-TABLES = ["accounts", "budgets", "categories", "category_rules", "goal_contributions",
+TABLES = ["accounts", "audit_log", "budgets", "categories", "category_rules", "goal_contributions",
           "goals", "investments", "labels", "net_worth_snapshots", "pending_imports", "recurring",
-          "sync_status", "transaction_labels", "transactions", "user_prefs"]
+          "sync_status", "transaction_labels", "transactions", "user_consents", "user_prefs"]
 
 if not (URL and ANON and EMAIL and PASSWORD):
     sys.exit("Set SUPABASE_URL, SUPABASE_ANON_KEY, MT_TESTER_EMAIL and MT_TESTER_PASSWORD.")

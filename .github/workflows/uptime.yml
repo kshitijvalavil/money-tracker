@@ -1,0 +1,39 @@
+name: Live site check
+
+# Every 30 minutes, ask the live site the questions that matter. If any answer is
+# wrong the run fails and GitHub emails the repository owner.
+# (Render's free plan sleeps when idle, so the first request may be slow: it retries.)
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check the live site
+        env:
+          SITE: https://money-tracker-iabp.onrender.com
+        run: |
+          set -u
+          fail=0
+          ok()  { echo "ok:   $1"; }
+          bad() { echo "FAIL: $1"; fail=1; }
+          code() { curl -sS -o /dev/null -w "%{http_code}" --retry 5 --retry-delay 15 --retry-all-errors --max-time 90 "$@" || echo 000; }
+
+          [ "$(code $SITE/healthz)" = "200" ] && ok "/healthz is 200" || bad "/healthz is not 200"
+          status=$(curl -sS --retry 3 --retry-delay 10 --max-time 60 $SITE/api/status || true)
+          echo "$status" | grep -q '"deploying":false' && ok "not in maintenance mode" || bad "api/status says: $status"
+          [ "$(code -X POST -H 'content-type: application/json' -d '{"text":"x"}' $SITE/api/parse-bill-text)" = "401" ] \
+            && ok "bill endpoint refuses unsigned callers (401)" || bad "bill endpoint did not return 401 without sign-in"
+          headers=$(curl -sS -D - -o /dev/null --max-time 60 $SITE/ | tr 'A-Z' 'a-z')
+          for h in content-security-policy strict-transport-security x-frame-options x-content-type-options referrer-policy permissions-policy cross-origin-opener-policy; do
+            echo "$headers" | grep -q "^$h:" && ok "header $h" || bad "missing header $h"
+          done
+          echo "$headers" | grep "^content-security-policy:" | grep -q "unsafe-inline.*script-src\|script-src[^;]*unsafe-inline" \
+            && bad "CSP allows inline scripts again" || ok "CSP has no inline-script allowance"
+          [ "$fail" = "0" ]

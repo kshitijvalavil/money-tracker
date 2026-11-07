@@ -48,7 +48,7 @@
 {% endblock %}
 
 {% block page_script %}
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, money, esc, today, thisMonth, toast } from "{{ url_for('static', filename='js/app.js') }}";
   import { addDays, daysBetween } from "{{ url_for('static', filename='js/recurring.js') }}";
   import { expandScheduled, estimateDailySpend, actualPath, projectForward,

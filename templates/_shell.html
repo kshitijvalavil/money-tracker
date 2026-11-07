@@ -48,7 +48,7 @@
     <a href="/profile"      class="{{ 'active' if page=='profile' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></span><span class="lbl">Profile</span></a>
   </nav>
 </div>
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { requireAuth, signOut, initThemeToggle, refreshImportsBadge, refreshAlertsBadge, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
   document.querySelector(".nav a.active")?.setAttribute("aria-current", "page");
   document.querySelector(".tabbar a.active")?.setAttribute("aria-current", "page");

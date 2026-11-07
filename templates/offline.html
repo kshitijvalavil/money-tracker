@@ -28,7 +28,8 @@
     <h1>You're offline</h1>
     <p>Money Tracker needs a connection to load your latest numbers. Check your
        network and try again — your data is safe.</p>
-    <button type="button" onclick="location.reload()">Try again</button>
+    <button type="button" id="retry">Try again</button>
   </div>
+  <script nonce="{{ csp_nonce }}">document.getElementById("retry").addEventListener("click", function () { location.reload(); });</script>
 </body>
 </html>

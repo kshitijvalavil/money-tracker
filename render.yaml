@@ -20,6 +20,10 @@ services:
       # For "Snap a bill": the server reads a bill photo with Claude's vision
       # model. Set this in the Render UI; until then the feature returns a
       # friendly "not switched on yet" message. BILL_MODEL is optional.
+      # Where people can send privacy questions and complaints. Shown on the privacy
+      # notice and in security.txt. Leave unset to show no email address.
+      - key: PRIVACY_CONTACT_EMAIL
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: BILL_MODEL

@@ -20,6 +20,14 @@ jobs:
         run: pip install -r requirements.txt
       - name: Install PostgreSQL
         run: sudo apt-get update && sudo apt-get install -y postgresql
+      - name: Dependency audit (known vulnerabilities)
+        run: pip install pip-audit && pip-audit -r requirements.txt
+      - name: Secret scan (code and full git history)
+        run: python3 tests/secret_scan.py
+      - name: No unescaped user text in HTML strings
+        run: python3 tests/innerhtml_lint.py
+      - name: Card numbers are masked
+        run: python3 tests/test_card_masking.py
       - name: Parser tests
         run: python3 tests/test_parsers.py
       - name: Scanner tests
@@ -137,6 +145,14 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint14_privacy_ui_test.py
+      - name: Sprint 14 session UI (two-step set-up, activity log, privacy notice, idle lock)
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint14_session_ui_test.py
+      - name: Sprint 14 CSP (zero violations on every page, OCR under the policy, injection blocked)
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint14_csp_test.py
       - name: Sprint 14 updating page (deploy message, real server restart)
         run: python tests/sprint14_deploying_test.py
       - name: Server log

@@ -118,7 +118,7 @@
 {% endblock %}
 
 {% block page_script %}
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, money, esc, toast, today, postDueBills, DEMO, authHeaders } from "{{ url_for('static', filename='js/app.js') }}";
   import { occurrence, firstSeqOnOrAfter, addDays, perMonth, dueLabel, shortDate, FREQ_LABEL, normaliseName,
     tidyName, MIN_SUGGEST_CONFIDENCE }
@@ -697,7 +697,7 @@
     _ocrLib = new Promise((resolve, reject) => {
       if (window.Tesseract) return resolve(window.Tesseract);
       const s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+      s.src = "{{ url_for('static', filename='vendor/tesseract/tesseract.min.js') }}";
       s.async = true;
       s.onload = () => window.Tesseract ? resolve(window.Tesseract) : reject(new Error("ocr unavailable"));
       s.onerror = () => reject(new Error("ocr unavailable"));
@@ -709,7 +709,13 @@
   // Read the bill's text on the device — free, and the photo never leaves it.
   async function ocrText(image) {
     const T = await loadOcr();
+    // Everything comes from our own origin (no outside script or data hosts).
+    // Blob workers need absolute URLs.
+    const base = location.origin + "{{ url_for('static', filename='vendor/tesseract') }}";
     const worker = await T.createWorker("eng", 1, {
+      workerPath: base + "/worker.min.js",
+      corePath: base,
+      langPath: base + "/lang",
       logger: (m) => {
         if (m.status === "recognizing text") {
           setCaptureStatus(`Reading the bill… ${Math.round((m.progress || 0) * 100)}%`);

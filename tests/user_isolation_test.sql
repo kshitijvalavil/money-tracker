@@ -54,6 +54,7 @@ grant execute on function auth.uid() to public;
 \i migrations/0015_net_worth.sql
 \i migrations/0016_home_layout.sql
 \i migrations/0017_alert_prefs.sql
+\i migrations/0021_audit_and_consent.sql
 
 grant select, insert, update, delete on all tables in schema public to app_user;
 grant execute on all routines in schema public to app_user;
@@ -97,6 +98,8 @@ begin
     insert into public.sync_status (last_found, last_added) values (5, 2);
     insert into public.net_worth_snapshots (as_of_month, assets, liabilities, net)
         values (date_trunc('month', current_date)::date, 100, 20, 80);
+    insert into public.audit_log (event) values ('sign_in');
+    insert into public.user_consents (notice_version) values ('2026-11-07');
     insert into public.user_prefs (home_layout, alert_prefs)
         values ('[{"id":"forecast","show":true}]'::jsonb, '{"low_balance":true,"low_floor":10000}'::jsonb);
     insert into public.pending_imports (source, direction, amount, occurred_on, note, source_message_id)
@@ -135,7 +138,7 @@ declare
     tbls text[] := array[
         'accounts','budgets','categories','category_rules','goal_contributions',
         'goals','investments','labels','net_worth_snapshots','pending_imports','recurring','sync_status',
-        'transaction_labels','transactions','user_prefs'];
+        'transaction_labels','transactions','user_prefs','audit_log','user_consents'];
 begin
     foreach t in array tbls loop
         execute format('select count(*) from public.%I where user_id = $1', t) into n using owner;
@@ -161,6 +164,8 @@ do $$ begin
     assert (select count(*) from public.sync_status) = 0, 'tester can see sync status that is not theirs';
     assert (select count(*) from public.user_prefs) = 0, 'tester can see prefs/alert settings that are not theirs';
     assert (select count(*) from public.net_worth_snapshots) = 0, 'tester can see net-worth history that is not theirs';
+    assert (select count(*) from public.audit_log) = 0, 'tester can see security activity that is not theirs';
+    assert (select count(*) from public.user_consents) = 0, 'tester can see consent records that are not theirs';
 end $$;
 
 -- 3) B cannot CHANGE or DELETE the owner's rows (RLS hides them from writes too).
