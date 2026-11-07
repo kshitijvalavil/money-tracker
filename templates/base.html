@@ -13,6 +13,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="MoneyTracker">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+  <!-- Every form on every page is handled by that page's script. If someone submits before the
+       script has loaded, a plain browser submit would reload the page with all the fields in
+       the address bar (a password included). Block it; the click is simply ignored until the
+       page is ready, and the page's own handlers still run. -->
+  <script nonce="{{ csp_nonce }}">document.addEventListener("submit", function (e) { e.preventDefault(); }, true);</script>
   <!-- Apply the saved/OS theme before first paint to avoid a flash. -->
   <script nonce="{{ csp_nonce }}">
     (function () {

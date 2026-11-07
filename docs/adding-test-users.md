@@ -152,3 +152,11 @@ Note: Supabase checks that a two-step challenge and its answer come from the sam
 address. Some networks send each request from a different address; the test retries for
 that. A real phone or browser keeps one address, so people are not affected.
 
+### Browser version
+
+`tests/live_ui_e2e_test.py` does the same through a real Chromium on the live site: sign in,
+the consent screen, every page with zero policy violations, two-step set-up with a real code,
+download, sign out, the code step, OCR, and "Delete my account". It needs the same temporary
+login (`E2E_EMAIL`, `E2E_PASSWORD`) and `SITE_URL`. It found the "form submitted before the page
+was ready" bug fixed in Sprint 14.
+
