@@ -33,7 +33,7 @@ OWNER_ID = os.environ.get("MT_OWNER_USER_ID", "")  # optional
 
 # Every table the app stores user data in (all have a user_id column).
 TABLES = ["accounts", "budgets", "categories", "category_rules", "goal_contributions",
-          "goals", "investments", "labels", "pending_imports", "recurring",
+          "goals", "investments", "labels", "net_worth_snapshots", "pending_imports", "recurring",
           "sync_status", "transaction_labels", "transactions", "user_prefs"]
 
 if not (URL and ANON and EMAIL and PASSWORD):

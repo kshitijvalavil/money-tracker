@@ -22,3 +22,17 @@ live board's log ("Before deploy" and "After deploy" entries for that sprint).
 - [ ] This sprint's new screens are live and look like the approved design
 - [ ] Sign-in pages redirect correctly when signed out
 - [ ] Live link posted on the board under Captain Shipit, sprint marked Released
+
+## Planned maintenance (database changes, risky releases)
+
+Normal deploys need nothing: if the server restarts, people who have the app
+installed see the "Captain Shipit is landing a fresh build" page and are taken
+back in automatically when it is up. (First visit ever during a restart is
+answered by Render, not by us.)
+
+For planned work where the app should be closed on purpose:
+
+- [ ] Render > money-tracker > Environment: set `MAINTENANCE_MODE=1` and save. Every page now shows the friendly updating screen with a 503; `/healthz` stays up so Render keeps the service
+- [ ] Do the work (migration, checks)
+- [ ] Set `MAINTENANCE_MODE` back to empty (or delete it) and save. Waiting users land back in the app by themselves within seconds
+- [ ] Open the live site and confirm it is back

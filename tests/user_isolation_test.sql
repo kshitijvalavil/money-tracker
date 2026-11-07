@@ -95,6 +95,8 @@ begin
     insert into public.recurring (name, type, amount, account_id, category_id, frequency, start_date, next_due)
         values ('Owner Rent', 'expense', 30000, v_acct, v_food, 'monthly', current_date, current_date);
     insert into public.sync_status (last_found, last_added) values (5, 2);
+    insert into public.net_worth_snapshots (as_of_month, assets, liabilities, net)
+        values (date_trunc('month', current_date)::date, 100, 20, 80);
     insert into public.user_prefs (home_layout, alert_prefs)
         values ('[{"id":"forecast","show":true}]'::jsonb, '{"low_balance":true,"low_floor":10000}'::jsonb);
     insert into public.pending_imports (source, direction, amount, occurred_on, note, source_message_id)
@@ -132,7 +134,7 @@ declare
     owner uuid := '11111111-1111-1111-1111-111111111111';
     tbls text[] := array[
         'accounts','budgets','categories','category_rules','goal_contributions',
-        'goals','investments','labels','pending_imports','recurring','sync_status',
+        'goals','investments','labels','net_worth_snapshots','pending_imports','recurring','sync_status',
         'transaction_labels','transactions','user_prefs'];
 begin
     foreach t in array tbls loop
@@ -158,6 +160,7 @@ do $$ begin
     assert (select count(*) from public.pending_imports) = 0, 'tester can see email imports that are not theirs';
     assert (select count(*) from public.sync_status) = 0, 'tester can see sync status that is not theirs';
     assert (select count(*) from public.user_prefs) = 0, 'tester can see prefs/alert settings that are not theirs';
+    assert (select count(*) from public.net_worth_snapshots) = 0, 'tester can see net-worth history that is not theirs';
 end $$;
 
 -- 3) B cannot CHANGE or DELETE the owner's rows (RLS hides them from writes too).

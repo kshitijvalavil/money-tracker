@@ -767,6 +767,7 @@ function makeBuilder(store, table) {
     },
     order(c, o) { this._orders.push([c, o?.ascending !== false]); return this; },
     limit(n) { this._limit = n; return this; },
+    range(a, b) { this._range = [a, b]; return this; },
     _match(r) { return this._filters.every((f) => f(r)); },
     _run() {
       const s = store.data;
@@ -822,6 +823,7 @@ function makeBuilder(store, table) {
         }
         const count = this._count ? out.length : null;
         if (this._limit != null) out = out.slice(0, this._limit);
+        if (this._range) out = out.slice(this._range[0], this._range[1] + 1);
         return { data: this._head ? null : out, error: null, count };
       } catch (e) {
         return { data: null, error: { message: e.message || String(e), code: e.code || null } };

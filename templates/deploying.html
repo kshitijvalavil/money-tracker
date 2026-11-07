@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Updating, back in a moment: Money Tracker</title>
+  <link rel="stylesheet" href="/static/css/deploying.css">
+</head>
+<body>
+  <main class="card" id="card" data-state="deploying">
+    <div class="sky" aria-hidden="true">
+      <svg class="plane" viewBox="0 0 64 32" width="64" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 18l22-3 20-11 4 2-9 11 12 1 4 3-4 3-12-1 6 10-4 1-12-10-17 2z"/>
+      </svg>
+      <div class="track"><i class="bar"></i></div>
+    </div>
+
+    <p class="kicker" id="kicker">Update in progress</p>
+    <h1 id="title">Captain Shipit is landing a fresh build</h1>
+    <p class="lead" id="lead">Hang tight, this usually takes a minute or two. This page opens the app for you the moment it is ready.</p>
+
+    <p class="chatter" id="chatter" role="status" aria-live="polite">Sherlock Bugs is inspecting every handoff with a very large magnifying glass.</p>
+
+    <a class="open" id="open" href="/" hidden>Open Money Tracker</a>
+    <p class="small" id="small">Your money data stays safe during an update. Nothing is moved or deleted.</p>
+  </main>
+  <script src="/static/js/deploying.js"></script>
+</body>
+</html>
