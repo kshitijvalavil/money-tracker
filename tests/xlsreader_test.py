@@ -46,19 +46,27 @@ check(raises(lambda: read_xls(MAGIC + b"\x00" * (12 * 1024 * 1024)), 413), "over
 os.environ["DEMO_MODE"] = ""
 import app as appmod  # noqa: E402
 
+# Verify sign-in server-side (Sprint 14): stub the Supabase lookup so a known
+# token maps to a user and anything else is rejected. A valid session sends
+# "Bearer good-token".
 appmod.DEMO_MODE = False
+appmod._fetch_supabase_user = lambda token: "user-xls" if token == "good-token" else None
+appmod._AUTH_CACHE.clear()
+AUTH = {"Authorization": "Bearer good-token"}
 c = appmod.app.test_client()
 r = c.post("/api/read-xls", data=data, content_type="application/octet-stream")
 check(r.status_code == 401, "signed out: 401")
-r = c.post("/api/read-xls", data=data, content_type="application/octet-stream", headers={"Authorization": "Bearer x"})
+r = c.post("/api/read-xls", data=data, content_type="application/octet-stream", headers={"Authorization": "Bearer forged"})
+check(r.status_code == 401, "a forged token is rejected (verified server-side)")
+r = c.post("/api/read-xls", data=data, content_type="application/octet-stream", headers=AUTH)
 check(r.status_code == 200 and r.get_json()["sheets"][0]["rows"], "signed in: rows back")
 check("Content-Security-Policy" in r.headers, "security headers on the API response")
-r = c.post("/api/read-xls", data=b"hello", headers={"Authorization": "Bearer x"})
+r = c.post("/api/read-xls", data=b"hello", headers=AUTH)
 check(r.status_code == 415 and "error" in r.get_json(), "wrong file: friendly error")
-r = c.post("/api/read-xls", data=b"x" * (13 * 1024 * 1024), headers={"Authorization": "Bearer x"})
+r = c.post("/api/read-xls", data=b"x" * (13 * 1024 * 1024), headers=AUTH)
 check(r.status_code == 413, "request over the server cap: 413")
 appmod._RL_HITS.clear()
-codes = [c.post("/api/read-xls", data=b"hello", headers={"Authorization": "Bearer x", "X-Forwarded-For": "9.9.9.9"}).status_code
+codes = [c.post("/api/read-xls", data=b"hello", headers={**AUTH, "X-Forwarded-For": "9.9.9.9"}).status_code
          for _ in range(32)]
 check(codes.count(429) >= 2, "rate limited after 30 per minute")
 appmod._RL_HITS.clear()

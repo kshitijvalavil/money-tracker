@@ -468,28 +468,16 @@ def api_parse_bill_text():
     return jsonify(parse_bill_text(text[:20000]))
 
 
-def _signed_in_or_demo():
-    """Paid or server-side file reading needs a signed-in session (demo mode is open)."""
-    return DEMO_MODE or bool(request.headers.get("Authorization"))
-
-
-def _too_many(key, max_hits, msg):
-    if _rate_limited(key, max_hits=max_hits):
-        resp = jsonify({"error": msg})
-        resp.headers["Retry-After"] = str(_RL_WINDOW)
-        return resp, 429
-    return None
-
-
 @app.route("/api/read-xls", methods=["POST"])
 def api_read_xls():
     # Old binary Excel (.xls) only: parsed in memory with xlrd and thrown away.
-    # The browser reads every other format itself.
-    if not _signed_in_or_demo():
+    # The browser reads every other format itself. Verified sign-in (like the
+    # bill endpoints, Sprint 14), counted per person and per address.
+    uid = _signed_in_user()
+    if not uid:
         return jsonify({"error": "Please sign in and try again."}), 401
-    limited = _too_many("xls:" + _client_ip(), 30, "Too many files just now. Please wait a moment and try again.")
-    if limited:
-        return limited
+    if _rate_limited("xls:user:" + uid, max_hits=30) or _rate_limited("xls:" + _client_ip(), max_hits=30):
+        return _too_many(_RL_WINDOW)
     try:
         return jsonify(read_xls(request.get_data(cache=False)))
     except XlsReadError as e:
@@ -500,11 +488,11 @@ def api_read_xls():
 def api_read_statement():
     # Claude fallback for a scanned or messy statement, only after the person
     # agrees in the browser. Nothing is stored. Demo mode returns a fixed sample.
-    if not _signed_in_or_demo():
+    uid = _signed_in_user()
+    if not uid:
         return jsonify({"error": "Please sign in and try again."}), 401
-    limited = _too_many("stmt:" + _client_ip(), 6, "Too many statement reads just now. Please wait a minute and try again.")
-    if limited:
-        return limited
+    if _rate_limited("stmt:user:" + uid, max_hits=6) or _rate_limited("stmt:" + _client_ip(), max_hits=6):
+        return _too_many(_RL_WINDOW)
     try:
         out = read_statement(
             request.get_json(silent=True),

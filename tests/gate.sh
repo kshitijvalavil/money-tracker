@@ -74,7 +74,8 @@ if [ "$WHAT" = all ] || [ "$WHAT" = ui ]; then
              tests/sprint6_email_ui_test.py tests/sprint6_hotfix_test.py tests/phone_layout_test.py \
              tests/sprint9_review_inbox_test.py tests/sprint10_flex_test.py \
              tests/sprint11_networth_test.py tests/sprint12_ui_test.py tests/sprint13_ui_test.py \
-             tests/sprint15_import_ui_test.py tests/sprint16_voice_ui_test.py; do
+             tests/sprint14_privacy_ui_test.py tests/sprint14_session_ui_test.py tests/sprint14_csp_test.py \
+             tests/sprint14_deploying_test.py tests/sprint15_import_ui_test.py tests/sprint16_voice_ui_test.py; do
         [ -f "$f" ] && run "ui: $f" python3 "$f"
     done
 fi
