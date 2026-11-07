@@ -76,6 +76,24 @@ def run(ctx, tag):
     page.close()
 
 
+def early_submit(ctx, tag):
+    """A form submitted before the page's script is ready must not do a plain browser submit
+    (that reloads the page with every field, even a password, in the URL)."""
+    page = ctx.new_page()
+    page.goto(BASE + "/login", wait_until="domcontentloaded")
+    before = page.url
+    page.evaluate("""() => {
+      const f = document.createElement('form');
+      f.innerHTML = '<input name="password" value="hunter2-secret"><input name="email" value="a@b.c">';
+      document.body.appendChild(f);
+      f.requestSubmit();
+    }""")
+    page.wait_for_timeout(700)
+    check(page.url == before and "hunter2" not in page.url and "?" not in page.url.split("/login")[-1],
+          f"{tag}: an early plain form submit does not navigate or put fields in the URL (now {page.url})")
+    page.close()
+
+
 def idle_logic(ctx):
     page = ctx.new_page()
     page.goto(BASE + "/profile", wait_until="networkidle")
@@ -123,7 +141,7 @@ def main():
             c = b.new_context(viewport={"width": 1440, "height": 900}, color_scheme=scheme, service_workers="block")
             run(c, f"desktop {scheme}"); c.close()
         c = b.new_context(viewport={"width": 1000, "height": 800}, service_workers="block")
-        idle_logic(c); c.close()
+        idle_logic(c); early_submit(c, "desktop"); c.close()
         b.close()
     passed = sum(1 for s, _ in results if s == "PASS")
     print(f"\nsprint14_session_ui_test: {passed}/{len(results)} checks passed")
