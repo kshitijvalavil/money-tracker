@@ -49,6 +49,12 @@ SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 # DEMO_MODE=1. Never enable it for real use — it stores nothing.
 DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
 
+# Planned maintenance (for example a database change). Set MAINTENANCE_MODE=1 in
+# Render and every page shows the friendly "we are updating" screen with a 503
+# until it is switched off again. /healthz stays up so Render keeps the service.
+MAINTENANCE = os.environ.get("MAINTENANCE_MODE", "").lower() in ("1", "true", "yes")
+_MAINTENANCE_OPEN = ("/healthz", "/api/status", "/deploying", "/offline", "/sw.js", "/static/")
+
 # Content-Security-Policy. The app loads only its own files; the one cross-origin
 # talker is Supabase (REST + realtime websocket). Inline <script>/<style> are used
 # for the pre-paint theme and config bootstrap, so they are allowed; everything
@@ -84,6 +90,15 @@ _SECURITY_HEADERS = {
     # Tell browsers to stick to HTTPS for a year (Render serves the app over TLS).
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 }
+
+
+@app.before_request
+def maintenance_gate():
+    if MAINTENANCE and not request.path.startswith(_MAINTENANCE_OPEN):
+        resp = app.make_response((render_template("deploying.html"), 503))
+        resp.headers["Retry-After"] = "30"
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
 
 
 @app.after_request
@@ -297,6 +312,21 @@ def imports():
 @app.route("/profile")
 def profile():
     return render_template("profile.html", page="profile")
+
+
+@app.route("/deploying")
+def deploying():
+    # The friendly "we are updating" page. Precached by the service worker so it
+    # can be shown even while the server itself is restarting during a deploy.
+    return render_template("deploying.html")
+
+
+@app.route("/api/status")
+def api_status():
+    # The updating page asks this every few seconds: ready yet?
+    resp = jsonify({"ok": True, "deploying": MAINTENANCE})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/offline")

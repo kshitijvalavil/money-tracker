@@ -137,6 +137,8 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint14_privacy_ui_test.py
+      - name: Sprint 14 updating page (deploy message, real server restart)
+        run: python tests/sprint14_deploying_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

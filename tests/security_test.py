@@ -115,6 +115,27 @@ def run():
         appmod._AUTH_CACHE.clear()
         appmod.DEMO_MODE = True
 
+    # ---- Maintenance mode: friendly 503 page, but health + status stay up ----
+    appmod.MAINTENANCE = True
+    try:
+        for path in ("/", "/transactions", "/profile"):
+            m = client.get(path)
+            check(m.status_code == 503, f"maintenance: {path} answers 503 (got {m.status_code})")
+        m = client.get("/")
+        check(m.headers.get("Retry-After") is not None, "maintenance: Retry-After is sent")
+        check("Captain Shipit" in m.get_data(as_text=True), "maintenance: the friendly updating page is shown")
+        check(client.get("/healthz").status_code == 200, "maintenance: /healthz stays up so Render keeps the service")
+        st = client.get("/api/status")
+        check(st.status_code == 200 and st.get_json() == {"ok": True, "deploying": True}, "maintenance: /api/status says deploying")
+        check(client.get("/static/css/deploying.css").status_code == 200, "maintenance: the page's own CSS still loads")
+        check(client.get("/sw.js").status_code == 200, "maintenance: the service worker still loads")
+        check(client.get("/deploying").status_code == 200, "maintenance: /deploying itself is a normal 200 (so it can be cached)")
+        check("max-age" not in (client.get("/api/status").headers.get("Cache-Control") or ""), "maintenance: status is never cached")
+    finally:
+        appmod.MAINTENANCE = False
+    check(client.get("/").status_code == 200, "normal mode: pages load again")
+    check(client.get("/api/status").get_json() == {"ok": True, "deploying": False}, "normal mode: /api/status says not deploying")
+
     # ---- Client IP: trust the proxy-appended entry, not the client's ------
     with appmod.app.test_request_context(headers={"X-Forwarded-For": "6.6.6.6, 203.0.113.7"}):
         check(appmod._client_ip() == "203.0.113.7", "client IP is the proxy-appended entry, not a spoofed first one")
