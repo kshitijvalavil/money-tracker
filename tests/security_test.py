@@ -50,7 +50,7 @@ def run():
     import re as _re
     n1 = _re.search(r"'nonce-([^']+)'", csp).group(1)
     body = r.get_data(as_text=True)
-    inline = _re.findall(r"<script(?![^>]*\bsrc=)([^>]*)>", body)
+    inline = _re.findall(r"<script(?![^>]*\bsrc=)([^>]*)>", body, flags=_re.I)
     check(len(inline) >= 2 and all(('nonce="%s"' % n1) in a for a in inline), f"every inline script on a page carries that request's nonce ({len(inline)} scripts)")
     n2 = _re.search(r"'nonce-([^']+)'", client.get("/").headers["Content-Security-Policy"]).group(1)
     check(n1 != n2 and len(n1) >= 16, "the nonce is different on every response")
