@@ -15,6 +15,7 @@ from flask import Flask, jsonify, redirect, render_template, request
 from billreader import BillReadError, parse_bill_text, read_bill
 from statementreader import read_statement
 from xlsreader import XlsReadError, read_xls
+from voiceparse import parse_voice
 
 
 def _load_dotenv(path=".env"):
@@ -231,6 +232,11 @@ def import_file():
     return render_template("import.html", page="imports")
 
 
+@app.route("/voice")
+def voice():
+    return render_template("voice.html", page="transactions")
+
+
 @app.route("/profile")
 def profile():
     return render_template("profile.html", page="profile")
@@ -365,6 +371,23 @@ def api_read_statement():
     except BillReadError as e:
         return jsonify({"error": e.message}), e.status
     return jsonify(out)
+
+
+@app.route("/api/parse-voice", methods=["POST"])
+def api_parse_voice():
+    # FREE path: turn a spoken sentence into draft transactions with local rules,
+    # no API call. The browser does this on-device too; this is a server twin
+    # the UI can ask for a second opinion. Signed-in + rate limited; never stores.
+    if not _signed_in_or_demo():
+        return jsonify({"error": "Please sign in and try again."}), 401
+    limited = _too_many("voice:" + _client_ip(), 40, "Too many voice notes just now. Please wait a moment and try again.")
+    if limited:
+        return limited
+    data = request.get_json(silent=True) or {}
+    text = data.get("text")
+    if not isinstance(text, str):
+        text = ""
+    return jsonify(parse_voice(text[:2000]))
 
 
 @app.route("/healthz")

@@ -42,7 +42,7 @@ if [ "$WHAT" = all ] || [ "$WHAT" = unit ]; then
     for f in tests/test_parsers.py tests/test_scanner.py tests/test_scanner_adversarial.py \
              tests/test_channel_parsers.py tests/test_recurring.py tests/billreader_test.py \
              tests/billtext_test.py tests/security_test.py tests/test_review.py \
-             tests/statementreader_test.py tests/xlsreader_test.py tests/voiceparse_api_test.py; do
+             tests/statementreader_test.py tests/xlsreader_test.py tests/voiceparse_test.py; do
         [ -f "$f" ] && run "unit: $f" python3 "$f"
     done
     run "unit: scanner dry run" python3 -m bot.scanner --from-dir tests/fixtures

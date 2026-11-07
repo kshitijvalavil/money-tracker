@@ -46,6 +46,10 @@ jobs:
         run: python3 tests/statementreader_test.py
       - name: Import column mapper tests (Node, Sprint 15)
         run: node tests/importmap_test.mjs
+      - name: Voice parser tests (Node, Sprint 16)
+        run: node tests/voiceparse_test.mjs
+      - name: Voice parser tests (Python twin + parity, Sprint 16)
+        run: python3 tests/voiceparse_test.py
       - name: Scanner dry run on fixtures
         run: python3 -m bot.scanner --from-dir tests/fixtures
       - name: Database tests (schema, RLS, money math)
@@ -147,6 +151,10 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:8099
         run: python tests/sprint15_import_ui_test.py
+      - name: Sprint 16 voice note UI tests
+        env:
+          BASE_URL: http://127.0.0.1:8099
+        run: python tests/sprint16_voice_ui_test.py
       - name: Server log
         if: always()
         run: cat gunicorn.log || true

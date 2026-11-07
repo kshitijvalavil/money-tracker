@@ -1,0 +1,244 @@
+{% extends "_shell.html" %}
+{% block title %}Add by voice — Money Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Add by voice</h1>
+  <div class="head-actions"><a class="btn ghost" href="/transactions">Back</a></div>
+</div>
+{% include "_txn_tabs.html" %}
+
+<section class="card vo-card">
+  <p class="card-intro">Say what you spent, like <em>"paid 450 to Starbucks on UPI"</em> or
+    <em>"electricity bill 1840 due on the 15th monthly"</em>. We turn it into a card you check before anything is saved.
+    Your voice is never stored, and the sentence stays on your device unless you ask Claude to help.</p>
+
+  <div class="vo-mic-wrap">
+    <button type="button" class="vo-mic" id="mic" aria-pressed="false" aria-label="Start listening">
+      <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 00-3 3v6a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M5 10v1a7 7 0 0014 0v-1M12 18v3"/></svg>
+    </button>
+    <p class="vo-mic-hint" id="micHint">Tap to speak</p>
+    <div class="vo-lang" id="langWrap">
+      <label for="lang" class="sr-only">Language</label>
+      <select id="lang"><option value="en-IN">English (India)</option><option value="hi-IN">Hindi</option><option value="en-US">English (US)</option></select>
+    </div>
+  </div>
+
+  <div class="vo-type">
+    <label for="typed">Or type it</label>
+    <div class="vo-type-row">
+      <input type="text" id="typed" placeholder='e.g. chai 20 and auto 80 cash' autocomplete="off" enterkeyhint="done">
+      <button type="button" class="btn" id="go">Read it</button>
+    </div>
+    <div class="vo-samples" id="samples" aria-label="Example phrases"></div>
+  </div>
+  <p class="vo-status" id="status" role="status" aria-live="polite"></p>
+</section>
+
+<section class="card vo-results" id="results" hidden aria-labelledby="resTitle">
+  <h2 id="resTitle" tabindex="-1">Check before saving</h2>
+  <p class="vo-heard">Heard: <q id="heard"></q> <button type="button" class="card-link" id="redo">change</button></p>
+  <div id="cards"></div>
+</section>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, DEMO, esc, money, toast, today, authHeaders, refreshImportsBadge } from "{{ url_for('static', filename='js/app.js') }}";
+  import { parseVoice } from "{{ url_for('static', filename='js/voiceparse.js') }}";
+  const $ = (id) => document.getElementById(id);
+
+  const SAMPLES = ["paid 450 to Starbucks on UPI", "swiped HDFC card at Reliance Fresh 1230", "chai 20 and auto 80 cash",
+    "got my salary 85000", "electricity bill 1840 due on the 15th monthly", "received 5000 from Neha for the trip"];
+  const FREQS = ["weekly", "monthly", "quarterly", "yearly"];
+  let accounts = [], categories = [], rules = [], lastText = "";
+
+  async function loadLists() {
+    if (!db) return;
+    const [a, c, r] = await Promise.all([db.from("accounts").select("id, name").order("name"),
+      db.from("categories").select("id, name, kind").order("name"), db.from("category_rules").select("match_text, category_id")]);
+    accounts = a.data || []; categories = c.data || []; rules = r.error ? [] : r.data || [];
+  }
+
+  // ---- category suggestion (same spirit as the import page) --------------------------
+  function catId(row) {
+    const mine = categories.filter((c) => c.kind === row.direction);
+    const by = (n) => n && mine.find((c) => c.name.toLowerCase() === String(n).toLowerCase());
+    const text = `${row.merchant || ""} ${row.category_guess || ""}`.toLowerCase();
+    const rule = rules.find((x) => text.includes(String(x.match_text).toLowerCase()));
+    return (by(row.category_guess)?.id) || (rule && mine.some((c) => c.id === rule.category_id) ? rule.category_id : null) || mine[0]?.id || "";
+  }
+  function accId(row) {
+    const h = (row.account_hint || "").toLowerCase();
+    if (h) { const hit = accounts.find((a) => a.name.toLowerCase().includes(h.split(" ")[0])); if (hit) return hit.id; }
+    return accounts[0]?.id || "";
+  }
+  function dateFor(row) {
+    const t = new Date();
+    if (row.date_word === "yesterday") t.setDate(t.getDate() - 1);
+    else if (row.day_of_month) { t.setDate(row.day_of_month); if (t > new Date()) t.setMonth(t.getMonth() - 1); }
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+  }
+
+  // ---- render the confirm cards ------------------------------------------------------
+  function heard(text, res) {
+    lastText = text;
+    $("heard").textContent = text;
+    if (res.error) {
+      const msg = res.error === "empty" ? "I didn't catch anything. Try again."
+        : res.error === "too_big" ? "That amount looks too large. Try saying it again."
+        : "I couldn't find an amount. Try 'paid 200 for lunch'.";
+      $("status").textContent = msg; $("status").classList.add("err");
+      $("results").hidden = true;
+      return;
+    }
+    $("status").textContent = ""; $("status").classList.remove("err");
+    $("cards").innerHTML = res.rows.map((r, i) => cardHtml(r, i)).join("");
+    res.rows.forEach((r, i) => wireCard(r, i));
+    $("results").hidden = false;
+    $("resTitle").focus();
+  }
+
+  function cardHtml(r, i) {
+    const mine = (dir) => categories.filter((c) => c.kind === dir);
+    const low = r.confidence < 0.6;
+    const cat = catId(r), acc = accId(r);
+    const catOpts = (dir, sel) => mine(dir).map((c) => `<option value="${c.id}"${c.id === sel ? " selected" : ""}>${esc(c.name)}</option>`).join("") || `<option value="">Add a category first</option>`;
+    return `<div class="vo-item" data-i="${i}">
+      <div class="vo-amt-row">
+        <div class="vo-dir toggle" role="group" aria-label="Money in or out">
+          <button type="button" data-dir="expense" class="${r.direction === "expense" ? "active" : ""}">Expense</button>
+          <button type="button" data-dir="income" class="${r.direction === "income" ? "active" : ""}">Income</button>
+        </div>
+        <div class="vo-amt"><span aria-hidden="true">₹</span><input type="number" step="0.01" min="0.01" class="vo-f-amt" value="${r.amount}" aria-label="Amount"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Description</label><input type="text" class="vo-f-note" maxlength="200" value="${esc(r.merchant || "")}"></div>
+        <div class="field"><label>Date</label><input type="date" class="vo-f-date" value="${dateFor(r)}"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Account</label><select class="vo-f-acc">${accounts.map((a) => `<option value="${a.id}"${a.id === acc ? " selected" : ""}>${esc(a.name)}</option>`).join("")}</select></div>
+        <div class="field vo-cat-field"><label>Category</label><select class="vo-f-cat">${catOpts(r.direction, cat)}</select></div>
+        <div class="field vo-freq-field"${r.is_bill ? "" : " hidden"}><label>Repeats</label><select class="vo-f-freq">${FREQS.map((f) => `<option value="${f}"${f === r.frequency_guess ? " selected" : ""}>${f}</option>`).join("")}</select></div>
+      </div>
+      ${r.channel ? `<p class="vo-chip-row"><span class="pill">${esc(r.channel)}</span>${low ? ` <span class="pill vo-low">please check</span>` : ""}</p>` : (low ? `<p class="vo-chip-row"><span class="pill vo-low">please check</span></p>` : "")}
+      <div class="vo-actions">
+        <button type="button" class="btn vo-save" data-mode="tx">Add</button>
+        <button type="button" class="btn ghost vo-save" data-mode="bill"${r.is_bill ? "" : " hidden"}>Add as bill</button>
+        <button type="button" class="btn ghost vo-save" data-mode="review">Send to review</button>
+        <button type="button" class="btn ghost vo-dismiss">Discard</button>
+        <span class="vo-msg" role="status"></span>
+      </div></div>`;
+  }
+
+  function wireCard(r, i) {
+    const el = $("cards").querySelector(`.vo-item[data-i="${i}"]`);
+    const dir = () => el.querySelector(".vo-dir .active").dataset.dir;
+    const refreshCats = () => {
+      const sel = el.querySelector(".vo-f-cat");
+      sel.innerHTML = categories.filter((c) => c.kind === dir()).map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join("") || `<option value="">Add a category first</option>`;
+    };
+    el.querySelectorAll(".vo-dir button").forEach((b) => b.addEventListener("click", () => {
+      el.querySelectorAll(".vo-dir button").forEach((x) => x.classList.toggle("active", x === b));
+      refreshCats();
+    }));
+    el.querySelectorAll(".vo-save").forEach((b) => b.addEventListener("click", () => save(el, b.dataset.mode)));
+    el.querySelector(".vo-dismiss").addEventListener("click", () => { el.remove(); if (!$("cards").children.length) { $("results").hidden = true; $("mic").focus(); } });
+  }
+
+  async function save(el, mode) {
+    const amount = Number(el.querySelector(".vo-f-amt").value);
+    if (!(amount > 0)) return setMsg(el, "Amount must be more than zero.", true);
+    const direction = el.querySelector(".vo-dir .active").dataset.dir;
+    const note = el.querySelector(".vo-f-note").value.trim();
+    const occurred_on = el.querySelector(".vo-f-date").value || today();
+    const account_id = el.querySelector(".vo-f-acc").value;
+    const category_id = el.querySelector(".vo-f-cat").value;
+    if (!account_id) return setMsg(el, "Add an account first.", true);
+    if (!category_id) return setMsg(el, "Pick a category.", true);
+    el.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    try {
+      if (mode === "tx") {
+        const { error } = await db.from("transactions").insert({ amount, type: direction, occurred_on, account_id,
+          category_id, to_account_id: null, note, source: "voice" });
+        if (error) throw error;
+        done(el, "Added.");
+      } else if (mode === "bill") {
+        const frequency = el.querySelector(".vo-f-freq").value || "monthly";
+        const { error } = await db.from("recurring").insert({ name: (note || "Bill").slice(0, 80), type: direction, amount,
+          account_id, category_id, frequency, start_date: occurred_on, auto_post: false, next_seq: 0, source: "voice" });
+        if (error) throw error;
+        done(el, "Saved as a bill.");
+      } else {
+        const { error } = await db.from("pending_imports").insert({ source: "voice", direction, amount, occurred_on,
+          note, merchant: note ? note.slice(0, 80) : null, suggested_category_id: category_id, account_hint: el.querySelector(".vo-f-acc").selectedOptions[0].text });
+        if (error) throw error;
+        refreshImportsBadge();
+        done(el, "Sent to review.");
+      }
+    } catch (e) {
+      el.querySelectorAll("button").forEach((b) => (b.disabled = false));
+      setMsg(el, e?.code === "42501" ? "You've been signed out. Sign in again." : "Couldn't save. Try again.", true);
+    }
+  }
+  const setMsg = (el, m, err) => { const s = el.querySelector(".vo-msg"); s.textContent = m; s.classList.toggle("err", !!err); };
+  function done(el, m) {
+    toast(m, "ok");
+    el.classList.add("vo-done"); el.querySelector(".vo-actions").innerHTML = `<span class="vo-msg ok">${esc(m)}</span>`;
+    if ([...$("cards").children].every((c) => c.classList.contains("vo-done"))) {
+      setTimeout(() => { if ([...$("cards").children].every((c) => c.classList.contains("vo-done"))) { $("results").hidden = true; $("status").textContent = "All done. Say another, or go to Transactions."; $("mic").focus(); } }, 900);
+    }
+  }
+
+  // ---- parse (local first; the server twin is a fallback) --------------------------------
+  async function readText(text) {
+    text = (text || "").trim();
+    if (!text) { heard("", { error: "empty" }); return; }
+    const res = parseVoice(text);
+    heard(text, res);
+  }
+  $("go").onclick = () => readText($("typed").value);
+  $("typed").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); readText($("typed").value); } });
+  $("redo").onclick = () => { $("results").hidden = true; $("typed").value = lastText; $("typed").focus(); };
+
+  // ---- samples --------------------------------------------------------------------------
+  $("samples").innerHTML = SAMPLES.map((s) => `<button type="button" class="vo-sample">${esc(s)}</button>`).join("");
+  $("samples").querySelectorAll(".vo-sample").forEach((b) => b.addEventListener("click", () => { $("typed").value = b.textContent; readText(b.textContent); }));
+
+  // ---- speech recognition (optional; typed fallback always works) ------------------------
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, listening = false;
+  if (!SR) {
+    $("mic").disabled = true; $("micHint").textContent = "Voice input isn't available in this browser — type below or use your keyboard's mic.";
+    $("langWrap").hidden = true;
+  } else {
+    $("mic").addEventListener("click", () => (listening ? stop() : start()));
+  }
+  function start() {
+    rec = new SR();
+    rec.lang = $("lang").value; rec.interimResults = true; rec.maxAlternatives = 1; rec.continuous = false;
+    let finalText = "";
+    rec.onstart = () => { listening = true; $("mic").classList.add("live"); $("mic").setAttribute("aria-pressed", "true"); $("mic").setAttribute("aria-label", "Stop listening"); $("micHint").textContent = "Listening… tap to stop"; $("status").textContent = ""; };
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) { const t = e.results[i][0].transcript; if (e.results[i].isFinal) finalText += t; else interim += t; }
+      $("typed").value = (finalText + interim).trim();
+    };
+    let hadError = false;
+    rec.onerror = (e) => {
+      hadError = true;
+      const map = { "not-allowed": "Microphone permission was blocked. Allow it in your browser, or type below.",
+        "service-not-allowed": "Microphone permission was blocked. Allow it, or type below.",
+        "no-speech": "I didn't hear anything. Tap and try again.", "audio-capture": "No microphone found. Type below instead.",
+        "network": "Speech needs a connection right now. Type below instead." };
+      $("status").textContent = map[e.error] || "Couldn't listen just now. Type below instead."; $("status").classList.add("err");
+    };
+    rec.onend = () => { listening = false; $("mic").classList.remove("live"); $("mic").setAttribute("aria-pressed", "false"); $("mic").setAttribute("aria-label", "Start listening"); $("micHint").textContent = "Tap to speak"; const t = $("typed").value.trim(); if (t && !hadError) readText(t); };
+    try { rec.start(); } catch (e) { $("status").textContent = "Couldn't start the microphone. Type below instead."; $("status").classList.add("err"); }
+  }
+  function stop() { try { rec && rec.stop(); } catch (e) {} }
+
+  if (!db) { $("status").textContent = "Sign in first to add by voice."; $("status").classList.add("err"); $("mic").disabled = true; }
+  loadLists();
+  window.__voicePage = { readText, parseVoice };            // for browser tests
+</script>
+{% endblock %}

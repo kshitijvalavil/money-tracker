@@ -3,8 +3,9 @@
 A personal money tracker: accounts, income & expenses, transfers between your
 own accounts, monthly budgets, recurring bills, savings goals, labels and
 reports and insights — all in Indian Rupees (₹). You can add spending one at a
-time, snap a photo of a bill, let it read your email, or **import a whole file**
-(Excel, CSV, PDF statement or Word table) and review the rows in one go.
+time, snap a photo of a bill, let it read your email, **import a whole file** (Excel, CSV, PDF statement or
+Word table), or **say it out loud** ("paid 450 to Starbucks on UPI") — and
+review everything before it's saved.
 
 **One-click deploy** (opens Render pre-configured from `render.yaml` — you just
 paste your two Supabase values and click Apply):
@@ -41,7 +42,7 @@ tests/                     a SQL test of the schema, security rules and money lo
    `0009_goals_labels.sql`, `0010_investments.sql`, `0011_import_channel.sql`, `0012_security_hardening.sql`,
    `0013_review_inbox.sql`, `0014_flex_budget.sql`, `0015_net_worth.sql`, `0016_home_layout.sql`,
    `0017_alert_prefs.sql`, `0018_fix_login_null_tokens.sql`, `0019_auto_fix_login_null_tokens.sql`,
-   `0020_file_import.sql`.
+   `0020_file_import.sql`, `0021_voice.sql`.
    (Paste the contents of each, run, then the next.)
 3. Create your own account: **Authentication → Users → Add user** (set an email
    and password). The seed trigger gives you starter categories and a Cash

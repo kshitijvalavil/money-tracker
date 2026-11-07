@@ -153,6 +153,12 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/sprint13_prefs_test.sql"
 
+# ---- Voice source (0021): recurring/transaction/import can be 'voice' ---------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres voice
+"${PSQL[@]}" -d voice \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/voice_source_test.sql"
+
 # ---- Bulk file import (0020): batches, staging de-dupe, undo import, RLS ------
 "$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres fileimp
 "${PSQL[@]}" -d fileimp \

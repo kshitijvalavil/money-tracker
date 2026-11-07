@@ -1,0 +1,47 @@
+{
+  "_comment": "Shared fixtures for the voice parser (Sprint 16). The JS parser (static/js/voiceparse.js) and the Python parser (voiceparse.py) are both tested against this one file so they cannot drift. Each case: say = what the user said; want = the fields the parser must produce (null = not set, parser guesses/leaves blank). amount is a positive number; direction is expense|income; channel is a short label or null. 'try' marks phrases good to demo by voice. 'multi' expects several items.",
+  "cases": [
+    { "try": true, "say": "Paid 450 rupees to Starbucks on UPI", "want": { "amount": 450, "direction": "expense", "merchant": "Starbucks", "channel": "UPI" } },
+    { "try": true, "say": "Swiped HDFC card at Reliance Fresh 1230", "want": { "amount": 1230, "direction": "expense", "merchant": "Reliance Fresh", "channel": "Card", "account_hint": "HDFC" } },
+    { "try": true, "say": "Spent 20 rupees on chai", "want": { "amount": 20, "direction": "expense", "merchant": "chai" } },
+    { "try": true, "say": "Received 5000 from Neha for the trip", "want": { "amount": 5000, "direction": "income", "merchant": "Neha" } },
+    { "try": true, "say": "Got my salary 85000", "want": { "amount": 85000, "direction": "income", "category_guess": "Salary" } },
+    { "try": true, "say": "Electricity bill 1840 due on the 15th monthly", "want": { "amount": 1840, "direction": "expense", "category_guess": "Bills", "frequency_guess": "monthly", "is_bill": true } },
+    { "try": true, "say": "Paid 1200 to Swiggy", "want": { "amount": 1200, "direction": "expense", "merchant": "Swiggy", "category_guess": "Food" } },
+    { "try": true, "say": "Uber ride 286 on Paytm", "want": { "amount": 286, "direction": "expense", "merchant": "Uber", "channel": "Paytm", "category_guess": "Transport" } },
+    { "try": true, "say": "Bought groceries for 2340 rupees 50 paise at DMart", "want": { "amount": 2340.5, "direction": "expense", "merchant": "DMart", "category_guess": "Food" } },
+    { "try": true, "say": "Cash 80 for auto", "want": { "amount": 80, "direction": "expense", "merchant": "auto", "channel": "Cash", "category_guess": "Transport" } },
+
+    { "say": "four fifty for coffee", "want": { "amount": 450, "direction": "expense", "merchant": "coffee" } },
+    { "say": "twelve hundred to the gym", "want": { "amount": 1200, "direction": "expense", "merchant": "the gym", "category_guess": "Health" } },
+    { "say": "spent 4.5k on flights", "want": { "amount": 4500, "direction": "expense", "merchant": "flights", "category_guess": "Transport" } },
+    { "say": "paid 1.2 lakh for the deposit", "want": { "amount": 120000, "direction": "expense", "merchant": "the deposit" } },
+    { "say": "rent 18000", "want": { "amount": 18000, "direction": "expense", "category_guess": "Rent" } },
+    { "say": "paanch sau for vegetables", "want": { "amount": 500, "direction": "expense", "merchant": "vegetables" } },
+    { "say": "do hazaar to mummy", "want": { "amount": 2000, "direction": "expense", "merchant": "mummy" } },
+    { "say": "₹299 Netflix subscription monthly", "want": { "amount": 299, "direction": "expense", "merchant": "Netflix", "category_guess": "Bills", "frequency_guess": "monthly" } },
+    { "say": "Rs 60 soft drinks", "want": { "amount": 60, "direction": "expense", "merchant": "soft drinks", "category_guess": "Food" } },
+    { "say": "transferred 10000 to savings", "want": { "amount": 10000, "direction": "expense", "merchant": "savings" } },
+
+    { "say": "credited 2500 refund from Amazon", "want": { "amount": 2500, "direction": "income", "merchant": "Amazon" } },
+    { "say": "bought a book 399 on my credit card", "want": { "amount": 399, "direction": "expense", "merchant": "a book", "channel": "Card" } },
+    { "say": "phonepe 150 to the milk guy", "want": { "amount": 150, "direction": "expense", "merchant": "the milk guy", "channel": "PhonePe" } },
+    { "say": "net banking 45000 for the car", "want": { "amount": 45000, "direction": "expense", "merchant": "the car", "channel": "Net banking" } },
+    { "say": "medicine from Apollo 249", "want": { "amount": 249, "direction": "expense", "merchant": "Apollo", "category_guess": "Health" } },
+    { "say": "movie tickets 600 yesterday", "want": { "amount": 600, "direction": "expense", "merchant": "movie tickets", "category_guess": "Entertainment", "date_word": "yesterday" } },
+    { "say": "paid 320 for kitchen stuff today", "want": { "amount": 320, "direction": "expense", "merchant": "kitchen stuff", "date_word": "today" } },
+    { "say": "internet bill 999 due on the 5th", "want": { "amount": 999, "direction": "expense", "category_guess": "Bills", "is_bill": true, "day_of_month": 5 } },
+
+    { "multi": true, "say": "chai 20 and auto 80 cash", "want_rows": [ { "amount": 20, "merchant": "chai", "channel": "Cash" }, { "amount": 80, "merchant": "auto", "channel": "Cash" } ] },
+    { "multi": true, "say": "paid 450 to Swiggy and 299 to Zomato", "want_rows": [ { "amount": 450, "merchant": "Swiggy" }, { "amount": 299, "merchant": "Zomato" } ] },
+
+    { "say": "", "want": { "error": "empty" } },
+    { "say": "umm so like I think", "want": { "error": "no_amount" } },
+    { "say": "call me on 9876543210 about the invoice", "want": { "error": "no_amount", "note": "a phone number is not an amount" } },
+    { "say": "paid for lunch", "want": { "error": "no_amount" } },
+    { "say": "spent a lot of money", "want": { "error": "no_amount" } },
+    { "say": "paid 99999999999999 rupees", "want": { "error": "too_big" } },
+    { "say": "got 0 rupees", "want": { "error": "no_amount" } },
+    { "say": "paid 450 to <script>alert(1)</script>", "want": { "amount": 450, "direction": "expense", "merchant_safe": true } }
+  ]
+}
