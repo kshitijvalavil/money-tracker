@@ -991,3 +991,64 @@ kbd { font: 600 0.7rem/1.4 inherit; border: 1px solid var(--line); border-bottom
 .empty-state .es-icon svg { width: 24px; height: 24px; }
 .empty-state h3 { font-size: 1.02rem; margin: 0 0 6px; }
 .empty-state p { color: var(--muted); font-size: 0.9rem; max-width: 36ch; margin: 0 auto 16px; }
+
+/* Bulk import from a file (Sprint 15) ---------------------------------------
+   Desktop: drop zone + column grid + preview table. Phone: picker button,
+   stacked column cards, preview rows as cards. Both themes via tokens. */
+.imp-step { margin-bottom: 16px; }
+.imp-step h2:focus, .imp-consent:focus { outline: none; }
+.imp-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  min-height: 150px; padding: 24px 16px; border: 2px dashed var(--line); border-radius: 14px;
+  background: var(--bg); color: var(--muted); text-align: center; cursor: pointer; font-weight: 400;
+  margin: 0 0 12px; transition: border-color .15s, background .15s; }
+.imp-drop:hover, .imp-drop.over, .imp-drop:focus-visible { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); outline: none; }
+.imp-drop-title { font-size: 1rem; font-weight: 600; color: var(--ink); }
+.imp-drop-title u { color: var(--brand); text-underline-offset: 3px; }
+.imp-drop-sub { font-size: 0.82rem; }
+.imp-status { min-height: 1.2em; font-size: 0.9rem; color: var(--muted); margin: 0 0 8px; }
+.imp-status.err { color: var(--neg); font-weight: 600; }
+.imp-inline { display: flex; gap: 8px; }
+.imp-inline input { flex: 1; min-width: 0; }
+.imp-pw { margin-bottom: 12px; max-width: 420px; }
+.imp-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+.imp-actions .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.imp-file { font-weight: 600; margin: -6px 0 10px; overflow-wrap: anywhere; }
+.imp-warn { margin: 0 0 12px; padding: 0; list-style: none; display: grid; gap: 6px; }
+.imp-warn li { background: var(--brand-soft); color: var(--ink); border-radius: 10px; padding: 8px 12px; font-size: 0.88rem; }
+.imp-warn:empty { display: none; }
+.imp-error { margin-bottom: 12px; }
+.imp-cols { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
+.imp-cols summary { cursor: pointer; font-weight: 600; min-height: 28px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.imp-cols summary .muted { font-weight: 400; font-size: 0.85rem; overflow-wrap: anywhere; }
+.imp-colgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 12px 0; }
+.imp-col { display: grid; gap: 6px; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); font-weight: 400; color: var(--ink); min-width: 0; }
+.imp-col-h { display: grid; min-width: 0; }
+.imp-col-h b, .imp-col-h .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imp-col-h .muted { font-size: 0.8rem; }
+.imp-col select { min-height: 44px; }
+.imp-summary { font-size: 0.95rem; margin: 4px 0; }
+.imp-summary:empty { display: none; }
+.imp-preview td { overflow-wrap: anywhere; }
+.imp-recent-list { list-style: none; margin: 0; padding: 0; }
+.imp-recent-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.imp-recent-list li:last-child { border-bottom: none; }
+.imp-recent-list li > span { min-width: 0; overflow-wrap: anywhere; }
+.imp-recent-list .btn { min-height: 44px; flex: none; }
+@media (max-width: 640px) {
+  .imp-desk-only { display: none; }
+  .imp-drop { min-height: 120px; }
+  .imp-actions .btn { flex: 1 1 100%; }
+  .imp-colgrid { grid-template-columns: 1fr; }
+  .imp-preview, .imp-preview tbody, .imp-preview tr, .imp-preview td { display: block; }
+  .imp-preview thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+  .imp-preview tr { padding: 10px 0; border-bottom: 1px solid var(--line); display: grid;
+    grid-template-columns: 1fr auto; gap: 2px 12px; }
+  .imp-preview td { padding: 0; border: none; font-size: 0.88rem; }
+  .imp-preview td[data-label="Description"] { grid-column: 1; grid-row: 1; font-weight: 600; }
+  .imp-preview td[data-label="Amount"] { grid-column: 2; grid-row: 1; }
+  .imp-preview td[data-label="Date"], .imp-preview td[data-label="Account"], .imp-preview td[data-label="Category"] { color: var(--muted); grid-column: 1 / -1; }
+  .imp-preview td[data-label="Account"]::before { content: "Account: "; }
+  .imp-preview td[data-label="Category"]::before { content: "Category: "; }
+}

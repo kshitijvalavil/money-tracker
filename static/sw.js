@@ -15,6 +15,8 @@ const SHELL = [
   "/static/js/recurring.js",
   "/static/js/alerts.js",
   "/static/js/ask.js",
+  "/static/js/importmap.js",
+  "/static/js/fileimport.js",
   "/static/vendor/supabase.js",
   "/static/manifest.webmanifest",
   "/static/icons/icon-192.png",

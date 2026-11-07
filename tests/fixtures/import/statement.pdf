@@ -1,0 +1,43 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 7 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 777 >>
+stream
+BT /F1 9 Tf 1 0 0 1 40 800 Tm (SAMPLE BANK - ACCOUNT STATEMENT) Tj 1 0 0 1 40 785 Tm (Page 1 of 2) Tj 1 0 0 1 40 760 Tm (Date) Tj 1 0 0 1 110 760 Tm (Narration) Tj 1 0 0 1 380 760 Tm (Withdrawal) Tj 1 0 0 1 470 760 Tm (Deposit) Tj 1 0 0 1 40 740 Tm (01/10/2026) Tj 1 0 0 1 110 740 Tm (UPI-SWIGGY ORDER 8812) Tj 1 0 0 1 380 740 Tm (450.00) Tj 1 0 0 1 40 722 Tm (02/10/2026) Tj 1 0 0 1 110 722 Tm (NEFT CR SALARY ACME) Tj 1 0 0 1 470 722 Tm (85,000.00) Tj 1 0 0 1 40 704 Tm (03/10/2026) Tj 1 0 0 1 110 704 Tm (POS AMAZON RETAIL) Tj 1 0 0 1 380 704 Tm (1,299.00) Tj 1 0 0 1 40 686 Tm (05/10/2026) Tj 1 0 0 1 110 686 Tm (ATM WDL MG ROAD) Tj 1 0 0 1 380 686 Tm (5,000.00) Tj 1 0 0 1 40 668 Tm (07/10/2026) Tj 1 0 0 1 110 668 Tm (UPI-ZOMATO 1123) Tj 1 0 0 1 380 668 Tm (299.00) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 6 0 R /Resources << /Font << /F1 7 0 R >> >> >>
+endobj
+6 0 obj
+<< /Length 773 >>
+stream
+BT /F1 9 Tf 1 0 0 1 40 800 Tm (SAMPLE BANK - ACCOUNT STATEMENT) Tj 1 0 0 1 40 785 Tm (Page 2 of 2) Tj 1 0 0 1 40 760 Tm (Date) Tj 1 0 0 1 110 760 Tm (Narration) Tj 1 0 0 1 380 760 Tm (Withdrawal) Tj 1 0 0 1 470 760 Tm (Deposit) Tj 1 0 0 1 40 740 Tm (09/10/2026) Tj 1 0 0 1 110 740 Tm (ACH D LIC PREMIUM) Tj 1 0 0 1 380 740 Tm (2,150.00) Tj 1 0 0 1 40 722 Tm (12/10/2026) Tj 1 0 0 1 110 722 Tm (UPI-RAVI KUMAR REFUND) Tj 1 0 0 1 470 722 Tm (1,200.00) Tj 1 0 0 1 40 704 Tm (15/10/2026) Tj 1 0 0 1 110 704 Tm (BIL ELECTRICITY BESCOM) Tj 1 0 0 1 380 704 Tm (1,840.00) Tj 1 0 0 1 40 686 Tm (18/10/2026) Tj 1 0 0 1 110 686 Tm (UPI-UBER TRIP) Tj 1 0 0 1 380 686 Tm (186.00) Tj 1 0 0 1 40 668 Tm (21/10/2026) Tj 1 0 0 1 110 668 Tm (POS DMART) Tj 1 0 0 1 380 668 Tm (2,340.50) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000001075 00000 n 
+0000001201 00000 n 
+0000002025 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+2095
+%%EOF

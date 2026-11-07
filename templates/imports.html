@@ -7,6 +7,7 @@
     <span class="sync-line" id="syncLine" role="status" aria-live="polite"></span>
     <button class="btn ghost sm rv-desk" id="ignoreSel" hidden>Ignore selected</button>
     <button class="btn sm rv-desk" id="acceptSel" hidden>Accept selected</button>
+    <a class="btn ghost sm" href="/import" id="importFileLink">Import a file</a>
   </div>
 </div>
 {% include "_txn_tabs.html" %}
@@ -14,7 +15,7 @@
 <div class="card rv-card">
   <p class="card-intro rv-intro">
     <span class="rv-phone-only">Swipe right to accept, or swipe left to fix the category.</span>
-    <span class="rv-desk-only">New spending from your email waits here. Accept it, fix the category, or ignore it. Nothing is counted until you accept.</span>
+    <span class="rv-desk-only">New spending from your email, or from a file you import, waits here. Accept it, fix the category, or ignore it. Nothing is counted until you accept.</span>
   </p>
   <div class="notice" id="noAccounts" hidden>
     You need an account before you can accept anything.
@@ -86,6 +87,7 @@
     const parts = [];
     if (p.merged_sources?.length) parts.push(...p.merged_sources);
     else if (p.channel) parts.push(p.channel);
+    else if (p.source === "file") parts.push("From a file" + (p.category_hint ? " · " + p.category_hint : ""));
     else parts.push(String(p.source || "email").replace(/^([a-z]{2,5})_alert$/i, (_, b) => b.toUpperCase()).replace(/_/g, " "));
     return parts.join(" · ");
   };

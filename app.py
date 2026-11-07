@@ -13,6 +13,8 @@ from collections import defaultdict, deque
 from flask import Flask, jsonify, redirect, render_template, request
 
 from billreader import BillReadError, parse_bill_text, read_bill
+from statementreader import read_statement
+from xlsreader import XlsReadError, read_xls
 
 
 def _load_dotenv(path=".env"):
@@ -224,6 +226,11 @@ def imports():
     return render_template("imports.html", page="imports")
 
 
+@app.route("/import")
+def import_file():
+    return render_template("import.html", page="imports")
+
+
 @app.route("/profile")
 def profile():
     return render_template("profile.html", page="profile")
@@ -309,6 +316,55 @@ def api_parse_bill_text():
         return jsonify({"error": "No text was read from the photo. Try a clearer, straight-on shot."}), 400
     # The form only needs a little text; ignore anything huge.
     return jsonify(parse_bill_text(text[:20000]))
+
+
+def _signed_in_or_demo():
+    """Paid or server-side file reading needs a signed-in session (demo mode is open)."""
+    return DEMO_MODE or bool(request.headers.get("Authorization"))
+
+
+def _too_many(key, max_hits, msg):
+    if _rate_limited(key, max_hits=max_hits):
+        resp = jsonify({"error": msg})
+        resp.headers["Retry-After"] = str(_RL_WINDOW)
+        return resp, 429
+    return None
+
+
+@app.route("/api/read-xls", methods=["POST"])
+def api_read_xls():
+    # Old binary Excel (.xls) only: parsed in memory with xlrd and thrown away.
+    # The browser reads every other format itself.
+    if not _signed_in_or_demo():
+        return jsonify({"error": "Please sign in and try again."}), 401
+    limited = _too_many("xls:" + _client_ip(), 30, "Too many files just now. Please wait a moment and try again.")
+    if limited:
+        return limited
+    try:
+        return jsonify(read_xls(request.get_data(cache=False)))
+    except XlsReadError as e:
+        return jsonify({"error": e.message}), e.status
+
+
+@app.route("/api/read-statement", methods=["POST"])
+def api_read_statement():
+    # Claude fallback for a scanned or messy statement, only after the person
+    # agrees in the browser. Nothing is stored. Demo mode returns a fixed sample.
+    if not _signed_in_or_demo():
+        return jsonify({"error": "Please sign in and try again."}), 401
+    limited = _too_many("stmt:" + _client_ip(), 6, "Too many statement reads just now. Please wait a minute and try again.")
+    if limited:
+        return limited
+    try:
+        out = read_statement(
+            request.get_json(silent=True),
+            demo=DEMO_MODE,
+            api_key=os.environ.get("ANTHROPIC_API_KEY"),
+            model=os.environ.get("STATEMENT_MODEL"),
+        )
+    except BillReadError as e:
+        return jsonify({"error": e.message}), e.status
+    return jsonify(out)
 
 
 @app.route("/healthz")

@@ -1,0 +1,384 @@
+{% extends "_shell.html" %}
+{% block title %}Import from a file — Money Tracker{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Import from a file</h1>
+  <div class="head-actions">
+    <a class="btn ghost" href="/imports">Back to review</a>
+  </div>
+</div>
+{% include "_txn_tabs.html" %}
+
+<!-- Step 1: pick a file -------------------------------------------------- -->
+<section class="card imp-step" id="stepPick" aria-labelledby="pickTitle">
+  <h2 id="pickTitle">Add many expenses at once</h2>
+  <p class="card-intro">Drop an Excel, CSV, PDF statement or Word table. Any layout works: we find the columns for you and
+    show a preview. Nothing is added until you accept it in <a class="card-link" href="/imports">To review</a>.</p>
+  <label class="imp-drop" id="drop" for="file">
+    <input type="file" id="file" class="sr-only"
+      accept=".xlsx,.xlsm,.xls,.csv,.tsv,.txt,.pdf,.docx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>
+    <span class="imp-drop-title"><span class="imp-desk-only">Drop a file here, or </span><u>choose a file</u></span>
+    <span class="imp-drop-sub">Excel (.xlsx, .xls), CSV, PDF or Word (.docx). Up to 12 MB.</span>
+  </label>
+  <p class="imp-status" id="pickStatus" role="status" aria-live="polite"></p>
+  <div class="imp-pw" id="pwBox" hidden>
+    <label for="pdfPw">PDF password</label>
+    <div class="imp-inline"><input type="password" id="pdfPw" autocomplete="off"><button type="button" class="btn" id="pwGo">Open</button></div>
+  </div>
+  <p class="field-help">The file is read on this device. Old .xls files and scanned PDFs can be read on our server only if you agree; nothing is kept.
+    <a class="card-link" href="#" id="tplLink">Download a template</a> if you'd like one.</p>
+</section>
+
+<!-- Consent ------------------------------------------------------------- -->
+<section class="card imp-step imp-consent" id="stepConsent" hidden aria-labelledby="consentTitle" tabindex="-1">
+  <h2 id="consentTitle"></h2>
+  <p id="consentBody" class="card-intro"></p>
+  <div class="imp-actions">
+    <button type="button" class="btn" id="consentYes"></button>
+    <button type="button" class="btn ghost" id="consentNo">No thanks, choose another file</button>
+  </div>
+</section>
+
+<!-- Step 2: check the columns and preview ------------------------------------ -->
+<section class="card imp-step" id="stepMap" hidden aria-labelledby="mapTitle">
+  <div class="card-head"><h2 id="mapTitle" tabindex="-1">Check before adding</h2>
+    <button type="button" class="btn ghost sm" id="another">Choose another file</button></div>
+  <p class="imp-file" id="fileLine"></p>
+  <div class="field" id="sheetField" hidden><label for="sheet">Sheet</label><select id="sheet"></select></div>
+  <ul class="imp-warn" id="warnings"></ul>
+  <div class="notice imp-error" id="mapError" role="alert" hidden></div>
+  <button type="button" class="btn ghost sm" id="askClaude" hidden>Ask Claude to read it</button>
+
+  <details class="imp-cols" id="colsBox">
+    <summary>Columns we found <span class="muted" id="colsSummary"></span></summary>
+    <div class="imp-colgrid" id="cols"></div>
+    <div class="row">
+      <div class="field"><label for="dateOrder">Dates are written</label>
+        <select id="dateOrder"><option value="">Work it out</option><option value="dmy">Day first (30/10/2026)</option><option value="mdy">Month first (10/30/2026)</option></select></div>
+      <div class="field" id="signField"><label for="signRule">Plain amounts are</label>
+        <select id="signRule"><option value="out">Money out (expenses)</option><option value="in">Money in (income)</option></select></div>
+    </div>
+  </details>
+
+  <div class="imp-summary" id="summary" aria-live="polite"></div>
+  <div class="imp-actions">
+    <button type="button" class="btn" id="stage" disabled>Add to review</button>
+  </div>
+  <div class="table-wrap imp-preview-wrap">
+    <table class="tx-table imp-preview" id="preview">
+      <caption class="sr-only">First rows of the file, as they will be added</caption>
+      <thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Category in file</th><th style="text-align:right">Amount</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="field-help" id="moreRows"></p>
+</section>
+
+<!-- Step 3: done --------------------------------------------------------------- -->
+<section class="card imp-step" id="stepDone" hidden aria-labelledby="doneTitle">
+  <h2 id="doneTitle" tabindex="-1">Added to review</h2>
+  <p class="card-intro" id="doneBody"></p>
+  <div class="imp-actions">
+    <a class="btn" href="/imports" id="reviewNow">Review now</a>
+    <button type="button" class="btn ghost" id="undoThis">Undo this import</button>
+    <button type="button" class="btn ghost" id="again">Import another file</button>
+  </div>
+</section>
+
+<section class="card imp-recent" aria-labelledby="recentTitle">
+  <h2 id="recentTitle">Recent imports</h2>
+  <div id="recent"><p class="empty">No imports yet.</p></div>
+</section>
+{% endblock %}
+
+{% block page_script %}
+<script type="module">
+  import { db, DEMO, esc, money, toast, authHeaders, refreshImportsBadge } from "{{ url_for('static', filename='js/app.js') }}";
+  import { mapGrid, headerFingerprint } from "{{ url_for('static', filename='js/importmap.js') }}";
+  import { readFile, bestSheet, pdfPageImages, ImportError } from "{{ url_for('static', filename='js/fileimport.js') }}";
+  const $ = (id) => document.getElementById(id);
+
+  const ROLES = [["", "Ignore"], ["date", "Date"], ["amount", "Amount"], ["debit", "Money out (debit)"], ["credit", "Money in (credit)"],
+    ["type", "Income / expense"], ["note", "Description"], ["account", "Account"], ["category", "Category"],
+    ["subcategory", "Subcategory"], ["currency", "Currency"], ["balance", "Balance (ignored)"], ["ref", "Reference (ignored)"],
+    ["altamount", "Second amount (compare only)"]];
+  const MAP_KEY = "mt.importMappings";
+  let file = null, read = null, sheetIdx = 0, result = null, manual = null, usedClaude = false, lastBatch = null;
+  let accounts = [], categories = [], rules = [];
+
+  // ---- small helpers --------------------------------------------------------
+  function show(step) {
+    for (const id of ["stepPick", "stepConsent", "stepMap", "stepDone"]) $(id).hidden = id !== step && !(step === "stepConsent" && id === "stepPick");
+  }
+  const status = (msg, err) => { $("pickStatus").textContent = msg || ""; $("pickStatus").classList.toggle("err", !!err); };
+  const loadMaps = () => { try { return JSON.parse(localStorage.getItem(MAP_KEY) || "{}"); } catch { return {}; } };
+  const saveMap = (fp, v) => { try { const m = loadMaps(); m[fp] = v; localStorage.setItem(MAP_KEY, JSON.stringify(m)); } catch {} };
+  const kindOf = (name, k) => (["xlsx", "xls", "csv", "pdf", "docx"].includes(k) ? k : "other");
+  const shortDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  // 64-bit-ish key from two 32-bit hashes (no crypto.subtle: it's missing on plain-http phone tests).
+  function hashKey(s) {
+    let a = 0x811c9dc5, b = 5381;
+    for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); a = Math.imul(a ^ c, 16777619) >>> 0; b = ((b * 33) ^ c) >>> 0; }
+    return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
+  }
+
+  // ---- category suggestion ----------------------------------------------------
+  const SYN = [
+    [/eat|food|dinner|lunch|breakfast|restaurant|cafe|beverage|swiggy|zomato|grocer|kitchen|snack/i, "Food"],
+    [/transport|cab|uber|ola|auto|metro|fuel|petrol|flight|train|bus|travel/i, "Transport"],
+    [/health|medic|pharma|doctor|hospital|clinic/i, "Health"],
+    [/rent\b/i, "Rent"],
+    [/bill|electric|water|gas|phone|mobile|internet|broadband|subscription|recharge/i, "Bills"],
+    [/shop|apparel|cloth|amazon|flipkart|laundry/i, "Shopping"],
+    [/fun|movie|social|entertain|netflix|party|game/i, "Entertainment"],
+    [/salary|payroll|wage/i, "Salary"], [/freelance|invoice/i, "Freelance"], [/gift/i, "Gift"], [/invest|mutual|sip|stock|ipo/i, "Investment"],
+  ];
+  function suggestCategory(r) {
+    const mine = categories.filter((c) => c.kind === r.direction);
+    const by = (n) => mine.find((c) => c.name.toLowerCase() === String(n).toLowerCase().trim());
+    const hit = (r.subcategory && by(r.subcategory)) || (r.category && by(r.category));
+    if (hit) return hit.id;
+    const text = `${r.note} ${r.category} ${r.subcategory}`.toLowerCase();
+    const rule = rules.find((x) => text.includes(String(x.match_text).toLowerCase()));
+    if (rule && mine.some((c) => c.id === rule.category_id)) return rule.category_id;
+    for (const [re, name] of SYN) if (re.test(text) && by(name)) return by(name).id;
+    return null;
+  }
+
+  // ---- step 1: read ---------------------------------------------------------------
+  async function pick(f, opts = {}) {
+    file = f; usedClaude = false; manual = null; status("Reading " + f.name + "…");
+    $("pwBox").hidden = true;
+    try {
+      read = await readFile(f, opts);
+    } catch (e) {
+      if (e instanceof ImportError && e.code === "encrypted" && /pdf$/i.test(f.name)) {
+        $("pwBox").hidden = false; $("pdfPw").focus();
+      }
+      return status(e instanceof ImportError ? e.message : "Couldn't read that file. Try saving it as .xlsx or CSV.", true);
+    }
+    if (read.needsServer === "xls") {
+      return consent("This is an old Excel file (.xls)",
+        "Old .xls files can't be opened safely in the browser. If you agree, the file is sent to our server, read in memory and thrown away straight after. Nothing is kept. Or open it in Excel or Google Sheets and save it as .xlsx or CSV.",
+        "Read it on the server", readXlsOnServer);
+    }
+    if (read.kind === "pdf" && (read.textChars || 0) < 30) {
+      return consent("This PDF looks like a scan",
+        "There's no text in it to read on this device. If you agree, images of the first 5 pages are sent to Claude (Anthropic) to read the transactions. They're used for this one read and not kept by us.",
+        "Ask Claude to read it", () => askClaude("images"));
+    }
+    status("");
+    sheetIdx = read.sheets.length > 1 ? bestSheet(read.sheets, mapGrid) : 0;
+    remap(true);
+  }
+
+  function consent(title, body, yes, fn) {
+    $("consentTitle").textContent = title; $("consentBody").textContent = body; $("consentYes").textContent = yes;
+    $("consentYes").onclick = async () => { $("consentYes").disabled = true; try { await fn(); } finally { $("consentYes").disabled = false; } };
+    status(""); show("stepConsent"); $("stepConsent").focus();
+  }
+  $("consentNo").onclick = () => { $("stepConsent").hidden = true; $("file").value = ""; show("stepPick"); $("drop").focus(); };
+
+  async function readXlsOnServer() {
+    status("Reading the file on the server…");
+    try {
+      const res = await fetch("/api/read-xls", { method: "POST", headers: { "Content-Type": "application/octet-stream", ...(await authHeaders()) }, body: read.bytes });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "Couldn't read that file.");
+      read = { kind: "xls", sheets: j.sheets };
+      $("stepConsent").hidden = true; status("");
+      sheetIdx = read.sheets.length > 1 ? bestSheet(read.sheets, mapGrid) : 0;
+      remap(true);
+    } catch (e) { $("stepConsent").hidden = true; show("stepPick"); status(e.message || "Couldn't read that file.", true); }
+  }
+
+  async function askClaude(how) {
+    status("Claude is reading the file. This can take up to a minute…");
+    $("askClaude").disabled = true;
+    try {
+      let payload;
+      if (how === "images") payload = { images: await pdfPageImages(read.pdfDoc, 5) };
+      else payload = { text: (read.sheets[sheetIdx]?.rows || []).map((r) => r.map((c) => (c instanceof Date ? c.toISOString().slice(0, 10) : c ?? "")).join(" | ")).join("\n").slice(0, 60000) };
+      const res = await fetch("/api/read-statement", { method: "POST", headers: { "Content-Type": "application/json", ...(await authHeaders()) }, body: JSON.stringify(payload) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || "Claude couldn't read that file.");
+      if (!j.rows?.length) throw new Error("Claude couldn't find any transactions in that file.");
+      usedClaude = true;
+      read = { kind: read.kind, sheets: [{ name: "Read by Claude", rows: [["Date", "Description", "Amount", "Income/Expense", "Category"],
+        ...j.rows.map((r) => [r.date, r.description, r.amount, r.direction === "income" ? "Income" : "Expense", r.category_guess])] }] };
+      sheetIdx = 0; manual = null; $("stepConsent").hidden = true; status("");
+      remap(true);
+    } catch (e) {
+      $("stepConsent").hidden = true; show(result ? "stepMap" : "stepPick");
+      status(e.message, true); if (result) toast(e.message);
+    } finally { $("askClaude").disabled = false; }
+  }
+  $("askClaude").onclick = () => consent("Ask Claude to read this file?",
+    "The text of this file is sent to Claude (Anthropic) to work out the transactions. It's used for this one read and not kept by us.",
+    "Send it to Claude", () => askClaude("text"));
+
+  // ---- step 2: map and preview -------------------------------------------------------
+  function remap(fresh) {
+    const grid = read.sheets[sheetIdx]?.rows || [];
+    let opts = {};
+    if (fresh) {
+      const probe = mapGrid(grid);
+      const saved = probe.header && loadMaps()[headerFingerprint(probe.header)];
+      if (saved) { manual = saved.mapping; $("dateOrder").value = saved.dateOrder || ""; $("signRule").value = saved.sign || "out"; }
+      else { manual = null; $("dateOrder").value = ""; $("signRule").value = "out"; }
+    }
+    opts = { mapping: manual || undefined, dateOrder: $("dateOrder").value || undefined, positiveIsIncome: $("signRule").value === "in" };
+    result = mapGrid(grid, opts);
+    render();
+  }
+
+  function render() {
+    show("stepMap");
+    const r = result;
+    $("fileLine").textContent = `${file.name}${usedClaude ? " (read by Claude)" : ""}`;
+    $("sheetField").hidden = read.sheets.length < 2;
+    $("sheet").innerHTML = read.sheets.map((s, i) => `<option value="${i}"${i === sheetIdx ? " selected" : ""}>${esc(s.name)}</option>`).join("");
+    $("warnings").innerHTML = (r.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    $("mapError").hidden = r.ok; $("mapError").textContent = r.ok ? "" : (r.message || "Couldn't find any transactions.");
+    $("askClaude").hidden = r.ok && !r.needsReview || usedClaude;
+    const cols = r.columns || [];
+    $("colsBox").open = !r.ok || !!r.needsReview;
+    const named = cols.filter((c) => c.role && !["balance", "ref", "altamount"].includes(c.role));
+    $("colsSummary").textContent = named.length ? "· " + named.map((c) => ROLES.find((x) => x[0] === c.role)?.[1]).join(", ") : "";
+    $("cols").innerHTML = cols.map((c) => {
+      const sample = (read.sheets[sheetIdx].rows.slice(r.headerRow + 1).find((x) => x[c.index] != null && x[c.index] !== "") || [])[c.index];
+      const shown = sample instanceof Date ? sample.toLocaleDateString("en-IN") : sample ?? "";
+      return `<label class="imp-col"><span class="imp-col-h"><b>${esc(c.header || "Column " + (c.index + 1))}</b>
+          <span class="muted">${esc(String(shown).slice(0, 40))}</span></span>
+        <select data-col="${c.index}" aria-label="What is the column ${esc(c.header || "Column " + (c.index + 1))}?">${ROLES.map(([v, l]) =>
+          `<option value="${v}"${(c.role || "") === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>`;
+    }).join("");
+    $("cols").querySelectorAll("select").forEach((s) => s.addEventListener("change", () => {
+      manual = Object.fromEntries([...$("cols").querySelectorAll("select")].map((x) => [x.dataset.col, x.value || null]));
+      remap(false);
+    }));
+    const hasSign = cols.some((c) => ["type", "debit", "credit"].includes(c.role));
+    $("signField").hidden = hasSign;
+    const rows = r.rows || [];
+    const out = rows.filter((x) => x.direction === "expense").reduce((s, x) => s + x.amount, 0);
+    const inn = rows.filter((x) => x.direction === "income").reduce((s, x) => s + x.amount, 0);
+    $("summary").innerHTML = rows.length
+      ? `<b>${rows.length}</b> ${rows.length === 1 ? "row" : "rows"} ready · <span class="neg">${money(out)} out</span> · <span class="pos">${money(inn)} in</span>`
+      : "";
+    $("stage").disabled = !rows.length || !db;
+    $("stage").textContent = rows.length ? `Add ${rows.length} to review` : "Add to review";
+    const body = $("preview").tBodies[0];
+    body.innerHTML = rows.slice(0, 10).map((x) => `<tr>
+      <td data-label="Date">${esc(shortDate(x.date))}</td>
+      <td data-label="Description">${esc(x.note || "—")}</td>
+      <td data-label="Account">${esc(x.account || "—")}</td>
+      <td data-label="Category">${esc([x.category, x.subcategory].filter(Boolean).join(" / ") || "—")}</td>
+      <td data-label="Amount" class="amt ${x.direction === "income" ? "pos" : ""}" style="text-align:right">${x.direction === "income" ? "+" : "−"}${money(x.amount)}</td></tr>`).join("");
+    $("preview").hidden = !rows.length;
+    $("moreRows").textContent = rows.length > 10 ? `…and ${rows.length - 10} more.` : "";
+    $("mapTitle").focus({ preventScroll: true });
+  }
+  $("sheet").onchange = () => { sheetIdx = +$("sheet").value; remap(true); };
+  $("dateOrder").onchange = () => remap(false);
+  $("signRule").onchange = () => remap(false);
+  $("another").onclick = $("again").onclick = () => { $("file").value = ""; result = null; show("stepPick"); status(""); $("drop").focus(); };
+
+  // ---- step 3: stage into pending_imports ---------------------------------------------
+  async function stage() {
+    const rows = result.rows;
+    $("stage").disabled = true; $("stage").textContent = "Adding…";
+    const fp = headerFingerprint(result.header || []);
+    if (result.columns) saveMap(fp, { mapping: Object.fromEntries(result.columns.map((c) => [c.index, c.role])), dateOrder: $("dateOrder").value, sign: $("signRule").value });
+    try {
+      const [a, c, ru] = await Promise.all([db.from("accounts").select("id, name"), db.from("categories").select("id, name, kind"),
+        db.from("category_rules").select("match_text, category_id")]);
+      accounts = a.data || []; categories = c.data || []; rules = ru.error ? [] : ru.data || [];
+      const batchId = crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (d) => (d ^ (Math.random() * 16) >> (d / 4)).toString(16));
+      const kind = kindOf(file.name, read.kind);
+      const ins = await db.from("import_batches").insert({ id: batchId, file_name: file.name.slice(0, 120) || "file", file_kind: kind,
+        row_count: rows.length, used_claude: usedClaude });
+      if (ins.error) throw ins.error;
+      const payload = rows.map((x) => {
+        const cat = [x.category, x.subcategory].filter(Boolean).join(" / ").slice(0, 80);
+        const note = (x.note || [x.category, x.subcategory].filter(Boolean).join(" - ")).slice(0, 200);
+        return {
+          source: "file", direction: x.direction, amount: x.amount, occurred_on: x.date, note,
+          merchant: note.trim() ? note.trim().slice(0, 80) : null,
+          account_hint: x.account ? x.account.slice(0, 80) : null, category_hint: cat || null,
+          suggested_category_id: suggestCategory(x), import_batch_id: batchId,
+          source_message_id: "file:" + hashKey(x.dedupe),
+        };
+      });
+      // Which of these are already in (from an earlier import of the same rows)?
+      const ids = payload.map((p) => p.source_message_id);
+      const seen = new Set();
+      for (let i = 0; i < ids.length; i += 150) {
+        const q = await db.from("pending_imports").select("source_message_id").in("source_message_id", ids.slice(i, i + 150));
+        if (q.error) throw q.error;
+        (q.data || []).forEach((r) => seen.add(r.source_message_id));
+      }
+      const fresh = payload.filter((p) => !seen.has(p.source_message_id));
+      for (let i = 0; i < fresh.length; i += 200) {
+        const up = await db.from("pending_imports").upsert(fresh.slice(i, i + 200), { onConflict: "user_id,source_message_id", ignoreDuplicates: true });
+        if (up.error) throw up.error;
+      }
+      await db.from("import_batches").update({ added: fresh.length, skipped: rows.length - fresh.length }).eq("id", batchId);
+      lastBatch = batchId;
+      const dup = rows.length - fresh.length;
+      $("doneTitle").textContent = fresh.length ? `Added ${fresh.length} to review` : "Nothing new to add";
+      $("doneBody").textContent = (fresh.length ? `${fresh.length} ${fresh.length === 1 ? "row is" : "rows are"} waiting in To review. Nothing is counted until you accept it.` : "")
+        + (dup ? ` ${dup} ${dup === 1 ? "row was" : "rows were"} already imported before, so ${dup === 1 ? "it was" : "they were"} skipped.` : "");
+      $("undoThis").hidden = !fresh.length;
+      show("stepDone"); $("doneTitle").focus();
+      refreshImportsBadge(); loadRecent();
+    } catch (e) {
+      toast(e?.code === "42501" ? "You've been signed out. Sign in again to continue." : "Couldn't add the rows. Check your connection and try again.");
+      $("stage").disabled = false; $("stage").textContent = `Add ${rows.length} to review`;
+    }
+  }
+  $("stage").onclick = stage;
+
+  async function undoBatch(id) {
+    const { data, error } = await db.rpc("undo_import_batch", { p_batch_id: id });
+    if (error) return toast("Couldn't undo that import. Try again.");
+    toast(`Removed ${data} ${data === 1 ? "row" : "rows"} from review.` + (data === 0 ? " Accepted rows stay; delete them from History if needed." : ""), "ok");
+    refreshImportsBadge(); loadRecent();
+    if (id === lastBatch) { $("undoThis").hidden = true; $("doneTitle").textContent = "Import undone"; $("doneBody").textContent = "Those rows were taken out of To review."; }
+  }
+  $("undoThis").onclick = () => lastBatch && undoBatch(lastBatch);
+
+  async function loadRecent() {
+    if (!db) return;
+    const { data, error } = await db.from("import_batches").select("*").order("created_at", { ascending: false }).limit(5);
+    if (error || !data?.length) { $("recent").innerHTML = `<p class="empty">No imports yet.</p>`; return; }
+    $("recent").innerHTML = `<ul class="imp-recent-list">${data.map((b) => `<li>
+      <span><b>${esc(b.file_name)}</b><span class="muted"> · ${esc(new Date(b.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" }))} · ${b.added} added${b.skipped ? `, ${b.skipped} skipped` : ""}${b.used_claude ? " · read by Claude" : ""}</span></span>
+      ${b.undone_at ? `<span class="pill">Undone</span>` : `<button type="button" class="btn ghost sm" data-undo="${esc(b.id)}">Undo</button>`}</li>`).join("")}</ul>`;
+    $("recent").querySelectorAll("[data-undo]").forEach((btn) => btn.addEventListener("click", () => undoBatch(btn.dataset.undo)));
+  }
+
+  // ---- file input, drag and drop, password, template --------------------------------------
+  $("file").addEventListener("change", () => { const f = $("file").files?.[0]; if (f) pick(f); });
+  const drop = $("drop");
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => { const f = e.dataTransfer?.files?.[0]; if (f) pick(f); });
+  drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } });
+  drop.tabIndex = 0;
+  $("pwGo").onclick = () => file && pick(file, { password: $("pdfPw").value });
+  $("pdfPw").addEventListener("keydown", (e) => { if (e.key === "Enter") $("pwGo").click(); });
+  $("tplLink").onclick = (e) => {
+    e.preventDefault();
+    const csv = "Date,Amount,Type,Account,Category,Note\r\n2026-11-01,450,Expense,Cash,Food,Lunch\r\n2026-11-01,85000,Income,HDFC Savings,Salary,November salary\r\n";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv" }));
+    a.download = "money-tracker-import-template.csv"; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+
+  if (!db) status("Sign in first to import a file.", true);
+  loadRecent();
+  window.__importPage = { pick, get result() { return result; } };      // for browser tests
+</script>
+{% endblock %}

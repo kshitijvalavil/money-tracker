@@ -201,6 +201,13 @@ export function mapColumns(header, dataRows) {
     }
     list.slice(1).forEach((c) => { c.role = role === "amount" ? "altamount" : null; c.confidence = 0; });
   }
+  // A demoted or unnamed column that is all numbers (like a second "Account"
+  // column holding converted amounts) is a second amount: compare, don't use.
+  for (const c of cols) {
+    if (c.role) continue;
+    const vals = colValues(dataRows, c.index);
+    if (vals.length && share(vals, (v) => typeof v === "number") >= 0.9 && headerRole(c.header) === "account") c.role = "altamount";
+  }
   for (const c of cols) if (c.role && c.role !== "altamount") taken.add(c.role);
 
   // 3. Value-shape fallbacks for anything left unmapped.
@@ -260,7 +267,7 @@ export function mapGrid(grid, opts = {}) {
   else if (dord.ambiguous) warnings.push("Dates like 03/04/2026 could be 3 April or 4 March. We read them as day/month (India). Change this if wrong.");
 
   const out = []; let skipped = 0, badDate = 0, disagree = 0;
-  const alt = col("altamount");
+  const alts = cols.filter((c) => c.role === "altamount");
   const seen = new Map();
   body.forEach((r, i) => {
     const rowIndex = h + 1 + i;
@@ -283,10 +290,7 @@ export function mapGrid(grid, opts = {}) {
     if (amount === null || amount === 0) { skipped++; return; }          // totals, blanks, zero rows
     if (!date) { if (r.some((c) => !isBlank(c))) badDate++; skipped++; return; }
     if (!direction) direction = opts.defaultDirection || (typeC || debC ? "expense" : (amtC && parseAmount(r[amtC.index]).value < 0 ? "expense" : (opts.positiveIsIncome ? "income" : "expense")));
-    if (alt) {
-      const b = parseAmount(r[alt.index]);
-      if (b && Math.abs(Math.abs(b.value) - amount) > 0.01) disagree++;
-    }
+    if (alts.some((alt) => { const b = parseAmount(r[alt.index]); return b && Math.abs(Math.abs(b.value) - amount) > 0.01; })) disagree++;
     const cell = (role) => { const c = col(role); const v = c ? r[c.index] : null; return isBlank(v) ? "" : String(v).trim(); };
     const note = cell("note");
     const base = `${date}|${amount.toFixed(2)}|${note.toLowerCase()}|${cell("account").toLowerCase()}`;
