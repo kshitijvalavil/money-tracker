@@ -27,19 +27,27 @@ Written during Sprint 14 (November 2026). It answers "what does a bank-grade set
 - **Retention.** Data stays until the person deletes it or their account. The security log keeps 12 months (automatic). There is no scheduler, so nothing else is purged automatically; rejected import rows stay until the person deletes them.
 - **Pinning GitHub Actions to commit SHAs.** Not done. Dependabot keeps the action versions current; SHA pinning would need the SHAs looked up outside this repository. Do it when convenient.
 
-## Needs the owner (cannot be done from code)
+## Owner's settings: status (2026-11-07)
 
-These are settings in other people's dashboards. Each is a card on the live board.
+| What | Status |
+|---|---|
+| Supabase sign-in settings (12-character passwords, two-step sign-in switched on, confirm email) | Done by the owner |
+| Privacy contact email on Render (`PRIVACY_CONTACT_EMAIL`) | Done: shown on the privacy notice and in security.txt |
+| GitHub private vulnerability reporting | Done by the owner |
+| Privacy notice wording reviewed | Done: owner confirmed the wording is fine |
+| Upgrade Supabase to Pro | **Declined by the owner.** See accepted risks below |
+| WAF / bot protection (for example Cloudflare in front) and a separate staging Supabase project | Not needed while sign-up is invite-only. Revisit before public sign-up |
+| External penetration test | Before opening sign-up to the public |
 
-| What | Why it matters | Where |
-|---|---|---|
-| Upgrade Supabase to Pro | Leaked-password check (HaveIBeenPwned), daily backups with restore, session time-boxing | Supabase > Billing |
-| Privacy contact email on Render | Put your email in `PRIVACY_CONTACT_EMAIL` so the privacy notice and security.txt show who to write to (no email is published today) | Render > Environment |
-| Turn on GitHub private vulnerability reporting | The security.txt link points to it | GitHub > Settings > Code security |
-| Review the privacy notice wording | It makes promises in your name | `templates/privacy.html` |
-| Test a restore once you have backups | A backup you have not restored is a hope | Supabase > Database > Backups |
-| WAF / bot protection (for example Cloudflare in front) and a separate staging Supabase project | Real tools for a public launch; not needed while invite-only | Later |
-| External penetration test | Before opening sign-up to the public | Later |
+## Accepted risks (owner's decision, 2026-11-07)
+
+Staying on the Supabase free plan means:
+
+- **No leaked-password check.** Supabase's check against known-breached passwords is a paid-plan setting. Mitigation: passwords must be 12 or more characters and two-step sign-in is available to everyone.
+- **No automated backups, and no way to restore a deleted database.** A bad migration, a Supabase incident or an accidental deletion could lose data for good. Mitigations: every person can use "Download all my data" at any time; before any risky database change the owner or a bot takes a manual `pg_dump` and keeps it somewhere safe; migrations are add-only by rule and tested against a throwaway database in CI first.
+- **Free projects can be paused after a week of inactivity.** Keep the app in regular use or upgrade if that ever matters.
+
+Revisit this the day sign-up opens to the public, or when other people's data matters more than the monthly cost.
 
 ## Every sprint
 
