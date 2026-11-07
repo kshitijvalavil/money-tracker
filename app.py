@@ -4,13 +4,18 @@ This server only serves pages. The pages talk to Supabase directly from the
 browser (auth + data), protected by Row Level Security in the database, so this
 server never holds your database password or sees your data.
 """
+import datetime
 import hashlib
+import json
 import os
+import secrets
 import threading
 import time
+import urllib.error
+import urllib.request
 from collections import defaultdict, deque
 
-from flask import Flask, jsonify, redirect, render_template, request
+from flask import Flask, g, jsonify, redirect, render_template, request
 
 from billreader import BillReadError, parse_bill_text, read_bill
 from statementreader import read_statement
@@ -48,33 +53,49 @@ SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 # DEMO_MODE=1. Never enable it for real use — it stores nothing.
 DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
 
+# Planned maintenance (for example a database change). Set MAINTENANCE_MODE=1 in
+# Render and every page shows the friendly "we are updating" screen with a 503
+# until it is switched off again. /healthz stays up so Render keeps the service.
+MAINTENANCE = os.environ.get("MAINTENANCE_MODE", "").lower() in ("1", "true", "yes")
+# Bump this date whenever templates/privacy.html changes in a way people should
+# re-accept. Everyone is asked to accept the current version before using the app.
+NOTICE_VERSION = "2026-11-07"
+# Optional: where people can send privacy questions and complaints (set on Render).
+PRIVACY_CONTACT = os.environ.get("PRIVACY_CONTACT_EMAIL", "").strip()
+_MAINTENANCE_OPEN = ("/healthz", "/privacy", "/.well-known/", "/api/status", "/deploying", "/offline", "/sw.js", "/static/")
+
 # Content-Security-Policy. The app loads only its own files; the one cross-origin
-# talker is Supabase (REST + realtime websocket). Inline <script>/<style> are used
-# for the pre-paint theme and config bootstrap, so they are allowed; everything
-# external is blocked. frame-ancestors 'none' also stops click-jacking.
+# talker is Supabase (REST + realtime websocket). Everything else outside is
+# blocked. frame-ancestors 'none' also stops click-jacking.
 _SUPABASE_HOST = (SUPABASE_URL or "").rstrip("/")
-# Open-source OCR (Tesseract.js) for the free Snap-a-bill path loads its script,
-# worker and language data from these CDNs in the browser.
-_OCR_CDNS = "https://cdn.jsdelivr.net https://unpkg.com https://tessdata.projectnaptha.com"
+# Scripts: only our own files, plus inline scripts that carry this request's secret
+# nonce (so an injected script, which cannot know it, will not run). No outside
+# hosts at all: the OCR library is served from /static/vendor/tesseract.
+# 'wasm-unsafe-eval' lets the browser compile the OCR engine's WebAssembly; it does
+# not allow eval() of text. Styles still allow inline because the pages use style
+# attributes; styles cannot run code.
 _CONNECT = " ".join(x for x in ["'self'", _SUPABASE_HOST, "https://*.supabase.co",
-                                "wss://*.supabase.co", _OCR_CDNS] if x)
-_CSP = (
-    "default-src 'self'; "
-    f"script-src 'self' 'unsafe-inline' blob: {_OCR_CDNS}; "
-    "style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data: blob:; "
-    "font-src 'self'; "
-    f"connect-src {_CONNECT}; "
-    "worker-src 'self' blob:; "
-    "manifest-src 'self'; "
-    "object-src 'none'; "
-    "base-uri 'self'; "
-    "form-action 'self'; "
-    "frame-ancestors 'none'"
-)
+                                "wss://*.supabase.co"] if x)
+
+
+def _build_csp(nonce):
+    return (
+        "default-src 'self'; "
+        f"script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self'; "
+        f"connect-src {_CONNECT}; "
+        "worker-src 'self' blob:; "
+        "manifest-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'"
+    )
+
 
 _SECURITY_HEADERS = {
-    "Content-Security-Policy": _CSP,
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -85,8 +106,23 @@ _SECURITY_HEADERS = {
 }
 
 
+@app.before_request
+def make_csp_nonce():
+    g.csp_nonce = secrets.token_urlsafe(18)
+
+
+@app.before_request
+def maintenance_gate():
+    if MAINTENANCE and not request.path.startswith(_MAINTENANCE_OPEN):
+        resp = app.make_response((render_template("deploying.html"), 503))
+        resp.headers["Retry-After"] = "30"
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+
+
 @app.after_request
 def set_security_headers(resp):
+    resp.headers["Content-Security-Policy"] = _build_csp(getattr(g, "csp_nonce", ""))
     for name, value in _SECURITY_HEADERS.items():
         resp.headers.setdefault(name, value)
     return resp
@@ -101,10 +137,77 @@ _RL_MAX = int(os.environ.get("READ_BILL_RATE_MAX", "20"))   # requests...
 _RL_WINDOW = int(os.environ.get("READ_BILL_RATE_WINDOW", "60"))  # ...per this many seconds
 
 
+# How many reverse proxies sit in front of the app and append to X-Forwarded-For.
+# Each one adds the address of the peer it saw, so the real client is the entry
+# that many places from the END. The left-most entry is whatever the client chose
+# to send, so it must never be trusted. Over-counting only makes limits stricter.
+_TRUSTED_PROXIES = max(1, int(os.environ.get("TRUSTED_PROXIES", "1")))
+
+
 def _client_ip():
-    # Render puts the real client first in X-Forwarded-For; fall back to the peer.
-    fwd = request.headers.get("X-Forwarded-For", "")
-    return fwd.split(",")[0].strip() if fwd else (request.remote_addr or "unknown")
+    parts = [p.strip() for p in request.headers.get("X-Forwarded-For", "").split(",") if p.strip()]
+    if parts:
+        return parts[max(0, len(parts) - _TRUSTED_PROXIES)]
+    return request.remote_addr or "unknown"
+
+
+# --- Who is calling? ---------------------------------------------------------
+# The browser sends its Supabase access token. A header merely being present
+# proves nothing, so ask Supabase Auth whether the token is real and unexpired.
+# Good answers are cached for a short time so we do not call Supabase on every
+# request. Any failure (bad token, Supabase unreachable) means "not signed in".
+_AUTH_TTL = 60
+_AUTH_CACHE_MAX = 1000
+_AUTH_LOCK = threading.Lock()
+_AUTH_CACHE = {}  # sha256(token) -> (user_id, expires_at)
+
+
+def _fetch_supabase_user(token):
+    """Ask Supabase Auth who owns this token. Returns the user id or None."""
+    if not (SUPABASE_URL and SUPABASE_ANON_KEY):
+        return None
+    req = urllib.request.Request(
+        SUPABASE_URL.rstrip("/") + "/auth/v1/user",
+        headers={"apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + token},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status != 200:
+                return None
+            uid = json.loads(resp.read().decode("utf-8")).get("id")
+            return uid if isinstance(uid, str) and uid else None
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
+def _signed_in_user():
+    """The signed-in user's id for this request, or None. Demo mode is open."""
+    if DEMO_MODE:
+        return "demo"
+    header = request.headers.get("Authorization", "")
+    scheme, _, token = header.partition(" ")
+    token = token.strip()
+    if scheme.lower() != "bearer" or not token or len(token) > 4096:
+        return None
+    key = hashlib.sha256(token.encode()).hexdigest()
+    now = time.monotonic()
+    with _AUTH_LOCK:
+        hit = _AUTH_CACHE.get(key)
+        if hit and hit[1] > now:
+            return hit[0]
+    uid = _fetch_supabase_user(token)
+    if uid:
+        with _AUTH_LOCK:
+            if len(_AUTH_CACHE) >= _AUTH_CACHE_MAX:
+                _AUTH_CACHE.clear()
+            _AUTH_CACHE[key] = (uid, now + _AUTH_TTL)
+    return uid
+
+
+def _too_many(window):
+    resp = jsonify({"error": "Too many reads just now. Please wait a moment and try again."})
+    resp.headers["Retry-After"] = str(window)
+    return resp, 429
 
 
 def _rate_limited(key, max_hits=None, window=None):
@@ -124,9 +227,12 @@ def _rate_limited(key, max_hits=None, window=None):
 @app.context_processor
 def inject_config():
     return {
+        "csp_nonce": getattr(g, "csp_nonce", ""),
         "SUPABASE_URL": SUPABASE_URL,
         "SUPABASE_ANON_KEY": SUPABASE_ANON_KEY,
         "DEMO_MODE": DEMO_MODE,
+        "NOTICE_VERSION": NOTICE_VERSION,
+        "PRIVACY_CONTACT": PRIVACY_CONTACT,
         "config_ready": DEMO_MODE or bool(SUPABASE_URL and SUPABASE_ANON_KEY),
     }
 
@@ -236,6 +342,49 @@ def profile():
     return render_template("profile.html", page="profile")
 
 
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html", page="privacy")
+
+
+@app.route("/consent")
+def consent():
+    return render_template("consent.html", page="consent")
+
+
+@app.route("/.well-known/security.txt")
+def security_txt():
+    # Where to report a security problem (RFC 9116). The GitHub link is private
+    # vulnerability reporting for this repository.
+    expires = (datetime.date.today() + datetime.timedelta(days=180)).isoformat() + "T00:00:00.000Z"
+    lines = []
+    if PRIVACY_CONTACT:
+        lines.append("Contact: mailto:" + PRIVACY_CONTACT)
+    lines += [
+        "Contact: https://github.com/kshitijvalavil/money-tracker/security/advisories/new",
+        "Expires: " + expires,
+        "Preferred-Languages: en",
+        "Canonical: " + request.url_root.rstrip("/") + "/.well-known/security.txt",
+        "Policy: " + request.url_root.rstrip("/") + "/privacy",
+    ]
+    return app.response_class("\n".join(lines) + "\n", mimetype="text/plain")
+
+
+@app.route("/deploying")
+def deploying():
+    # The friendly "we are updating" page. Precached by the service worker so it
+    # can be shown even while the server itself is restarting during a deploy.
+    return render_template("deploying.html")
+
+
+@app.route("/api/status")
+def api_status():
+    # The updating page asks this every few seconds: ready yet?
+    resp = jsonify({"ok": True, "deploying": MAINTENANCE})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.route("/offline")
 def offline():
     # Precached by the service worker and shown when a navigation fails offline.
@@ -280,14 +429,14 @@ def api_read_bill():
     # Reads a bill photo into form fields. The image is used for this one call
     # and never stored. Demo mode returns a fixed sample and needs no key.
     data = request.get_json(silent=True) or {}
-    # Guard the paid vision call behind a signed-in session (the browser sends
-    # its Supabase access token); demo mode is open so the demo works with no login.
-    if not DEMO_MODE and not request.headers.get("Authorization"):
+    # Guard the paid vision call behind a verified session. Demo mode is open so
+    # the demo works with no login.
+    uid = _signed_in_user()
+    if not uid:
         return jsonify({"error": "Please sign in and try again."}), 401
-    if _rate_limited(_client_ip()):
-        resp = jsonify({"error": "Too many bill reads just now. Please wait a moment and try again."})
-        resp.headers["Retry-After"] = str(_RL_WINDOW)
-        return resp, 429
+    # Count per person (a spoofed IP cannot dodge this) and per address.
+    if _rate_limited("user:" + uid) or _rate_limited(_client_ip()):
+        return _too_many(_RL_WINDOW)
     try:
         fields = read_bill(
             data.get("image") or "",
@@ -304,12 +453,13 @@ def api_read_bill():
 @app.route("/api/parse-bill-text", methods=["POST"])
 def api_parse_bill_text():
     # The FREE path: the browser does open-source OCR on the photo and sends the
-    # text here; we extract the fields with no API call and no cost. Light rate
-    # limit to stop abuse; no key needed because nothing paid happens here.
-    if _rate_limited("parse:" + _client_ip()):
-        resp = jsonify({"error": "Too many reads just now. Please wait a moment and try again."})
-        resp.headers["Retry-After"] = str(_RL_WINDOW)
-        return resp, 429
+    # text here; we extract the fields with no API call and no cost. Needs a
+    # verified session and is rate limited per person and per address.
+    uid = _signed_in_user()
+    if not uid:
+        return jsonify({"error": "Please sign in and try again."}), 401
+    if _rate_limited("parse:user:" + uid) or _rate_limited("parse:" + _client_ip()):
+        return _too_many(_RL_WINDOW)
     data = request.get_json(silent=True) or {}
     text = data.get("text") or ""
     if not isinstance(text, str) or not text.strip():

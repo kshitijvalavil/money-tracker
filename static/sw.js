@@ -9,6 +9,9 @@ const CACHE = "money-tracker-v1";
 // navigations go to the network first and fall back to /offline.
 const SHELL = [
   "/offline",
+  "/deploying",
+  "/static/css/deploying.css",
+  "/static/js/deploying.js",
   "/static/css/style.css",
   "/static/js/app.js",
   "/static/js/demo.js",
@@ -43,11 +46,19 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;        // let Supabase etc. pass through
 
-  // Page navigations: network first (so data is fresh), offline -> /offline.
+  // Page navigations: network first (so data is fresh). If the server is
+  // restarting for a deploy (it answers 502/503/504, or does not answer while the
+  // device is online) show the friendly "updating" page, which opens the app by
+  // itself when it is ready. Truly offline devices get the offline page.
   if (req.mode === "navigate") {
+    const updating = () => caches.match("/deploying", { ignoreSearch: true })
+      .then((r) => r || new Response("Updating, back in a moment.", { status: 503, headers: { "Content-Type": "text/plain" } }));
+    const offline = () => caches.match("/offline", { ignoreSearch: true })
+      .then((r) => r || new Response("Offline", { status: 503, headers: { "Content-Type": "text/plain" } }));
     event.respondWith(
-      fetch(req).catch(() => caches.match("/offline", { ignoreSearch: true })
-        .then((r) => r || new Response("Offline", { status: 503, headers: { "Content-Type": "text/plain" } })))
+      fetch(req)
+        .then((res) => ([502, 503, 504].includes(res.status) ? updating() : res))
+        .catch(() => (self.navigator.onLine === false ? offline() : updating()))
     );
     return;
   }

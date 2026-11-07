@@ -58,7 +58,7 @@
 {% endblock %}
 
 {% block page_script %}
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, money, esc, toast, thisMonth, today } from "{{ url_for('static', filename='js/app.js') }}";
   import { occurrence } from "{{ url_for('static', filename='js/recurring.js') }}";
   const $ = (id) => document.getElementById(id);

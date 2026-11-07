@@ -126,3 +126,37 @@ Isolation is verified two ways:
 
 Supabase → Authentication → Users → the user → **Delete user**. Their data is
 removed with them and no one else is affected.
+
+## Live security test (Sprint 14)
+
+`tests/live_e2e_security_test.py` signs in as a TEMPORARY test login against the real
+Supabase and runs the whole security story end to end: sign-in, the activity log
+(append-only), consent, two-step sign-in (enrol, a fresh password-only session stays
+at assurance level aal1 until the code is entered, a mistyped code then the right one),
+export of all 17 tables, sign out of all devices, the live site's bill endpoint (real
+token accepted, forged or missing refused), and finally `delete_my_account()`. It deletes
+its own user, so a pass also proves deletion.
+
+1. Create the temporary login (Option B SQL above, with the extra empty token columns the
+   sign-in service expects, an address like `e2e-xxxx@example.com`, a random password).
+2. Run it:
+
+```sh
+export SUPABASE_URL=https://<ref>.supabase.co SUPABASE_ANON_KEY=<publishable key>
+export E2E_EMAIL=e2e-xxxx@example.com E2E_PASSWORD=<its password>
+export SITE_URL=https://money-tracker-iabp.onrender.com
+python3 tests/live_e2e_security_test.py
+```
+
+Note: Supabase checks that a two-step challenge and its answer come from the same IP
+address. Some networks send each request from a different address; the test retries for
+that. A real phone or browser keeps one address, so people are not affected.
+
+### Browser version
+
+`tests/live_ui_e2e_test.py` does the same through a real Chromium on the live site: sign in,
+the consent screen, every page with zero policy violations, two-step set-up with a real code,
+download, sign out, the code step, OCR, and "Delete my account". It needs the same temporary
+login (`E2E_EMAIL`, `E2E_PASSWORD`) and `SITE_URL`. It found the "form submitted before the page
+was ready" bug fixed in Sprint 14.
+
