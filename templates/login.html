@@ -28,7 +28,7 @@
     <p class="auth-foot"><a href="/privacy">Privacy notice</a></p>
   </div>
 </div>
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, toast, DEMO } from "{{ url_for('static', filename='js/app.js') }}";
   import { needsMfa, totpFactors, verifyCode, logEvent } from "{{ url_for('static', filename='js/session.js') }}";
   const $ = (id) => document.getElementById(id);

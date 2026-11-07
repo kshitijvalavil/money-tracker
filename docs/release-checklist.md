@@ -10,7 +10,8 @@ live board's log ("Before deploy" and "After deploy" entries for that sprint).
 - [ ] All browser suites pass in demo mode (smoke, bills, goals, PWA, capture, investments, email/review, phone layout, this sprint's suite)
 - [ ] Design check: 390, 768 and 1440 wide, dark and day: no sideways scroll, no clipped text, 44px tap targets on phone
 - [ ] Security re-run: no keys in code or git history, keys only in Render/GitHub secrets, RLS on every new table, forms escaped (no XSS), rate limits intact, security headers + CSP, debug off, `pip-audit` clean, unused files removed
-- [ ] New database migration applied to Supabase (and checked with the advisors)
+- [ ] New database migration applied to Supabase (and checked with the advisors); advisors result posted on the board
+- [ ] Privacy notice still true? If it changed, bump `NOTICE_VERSION` in `app.py` so people accept it again
 - [ ] CI green on the PR
 
 ## After deploy (on the live site)

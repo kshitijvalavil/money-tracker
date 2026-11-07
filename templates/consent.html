@@ -21,7 +21,7 @@
     <p class="small" id="ver"></p>
   </div>
 </div>
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, DEMO, toast } from "{{ url_for('static', filename='js/app.js') }}";
   import { logEvent, noticeVersion, rememberConsent } from "{{ url_for('static', filename='js/session.js') }}";
   const $ = (id) => document.getElementById(id);

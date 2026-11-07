@@ -103,7 +103,7 @@
 {% endblock %}
 
 {% block page_script %}
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, DEMO, toast, esc, signOut, currentTheme, setTheme } from "{{ url_for('static', filename='js/app.js') }}";
   import { exportMyData, downloadJson } from "{{ url_for('static', filename='js/privacy.js') }}";
   import { logEvent, totpFactors, verifyCode, EVENT_LABEL } from "{{ url_for('static', filename='js/session.js') }}";
