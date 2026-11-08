@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Privacy notice — Money Tracker{% endblock %}
+{% block body %}
+<div class="auth-wrap">
+  <div class="card auth-card doc">
+    <div class="brand">Money<span>Tracker</span></div>
+    <h1 class="doc-title">Before you start</h1>
+    <p class="card-intro">Money Tracker keeps private money information for you. Here is the short version. Please read the full notice, then accept to continue.</p>
+    <ul class="doc-list">
+      <li>Only you can see your data. Other people with a login cannot see yours.</li>
+      <li>We store what you put in (accounts, transactions, budgets, goals, bills, investments) and a short security log of your sign-ins.</li>
+      <li>Nothing is sold, shared for advertising, or used to track you.</li>
+      <li>You can download all your data, or delete your account and everything in it, any time from Profile.</li>
+    </ul>
+    <p><a href="/privacy" target="_blank" rel="noopener">Read the full privacy notice</a> (opens in a new tab)</p>
+    <form id="consentForm">
+      <label class="check"><input type="checkbox" id="agree" required> I have read the privacy notice and I agree to it.</label>
+      <button class="btn" type="submit" id="accept">Accept and continue</button>
+      <button class="btn ghost" type="button" id="decline">No thanks, sign me out</button>
+    </form>
+    <p class="small" id="ver"></p>
+  </div>
+</div>
+<script type="module" nonce="{{ csp_nonce }}">
+  import { db, DEMO, toast } from "{{ url_for('static', filename='js/app.js') }}";
+  import { logEvent, noticeVersion, rememberConsent } from "{{ url_for('static', filename='js/session.js') }}";
+  const $ = (id) => document.getElementById(id);
+  $("ver").textContent = "Notice version " + noticeVersion();
+
+  let user = null;
+  if (DEMO) { window.location.href = "/"; }
+  else if (db) {
+    const { data } = await db.auth.getUser();
+    user = data.user;
+    if (!user) window.location.href = "/login";
+  }
+
+  $("consentForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!db || !user) return;
+    const btn = $("accept");
+    btn.disabled = true; btn.textContent = "Saving…";
+    const { error } = await db.from("user_consents")
+      .upsert({ user_id: user.id, notice_version: noticeVersion(), accepted_at: new Date().toISOString() }, { onConflict: "user_id" });
+    if (error) {
+      toast("Couldn't save that. Nothing was changed. Try again.");
+      btn.disabled = false; btn.textContent = "Accept and continue";
+      return;
+    }
+    await logEvent(db, "consent_accepted", { version: noticeVersion() });
+    rememberConsent(user.id);
+    window.location.href = "/";
+  });
+
+  $("decline").addEventListener("click", async () => {
+    try { await db.auth.signOut(); } catch (e) {}
+    window.location.href = "/login";
+  });
+</script>
+{% endblock %}

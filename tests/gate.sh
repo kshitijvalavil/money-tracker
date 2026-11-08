@@ -42,7 +42,7 @@ if [ "$WHAT" = all ] || [ "$WHAT" = unit ]; then
     for f in tests/test_parsers.py tests/test_scanner.py tests/test_scanner_adversarial.py \
              tests/test_channel_parsers.py tests/test_recurring.py tests/billreader_test.py \
              tests/billtext_test.py tests/security_test.py tests/test_review.py \
-             tests/statementreader_test.py tests/xlsreader_test.py tests/voiceparse_test.py; do
+             tests/statementreader_test.py tests/xlsreader_test.py tests/voiceparse_api_test.py; do
         [ -f "$f" ] && run "unit: $f" python3 "$f"
     done
     run "unit: scanner dry run" python3 -m bot.scanner --from-dir tests/fixtures
@@ -64,18 +64,28 @@ if [ "$WHAT" = all ] || [ "$WHAT" = sql ]; then
 fi
 
 if [ "$WHAT" = all ] || [ "$WHAT" = ui ]; then
-    DEMO_MODE=1 gunicorn app:app --bind "127.0.0.1:$PORT" --workers 2 >"$LOGDIR/gunicorn.log" 2>&1 &
-    GPID=$!
+    GPID=""
+    start_server() {
+        [ -n "$GPID" ] && kill "$GPID" 2>/dev/null
+        DEMO_MODE=1 gunicorn app:app --bind "127.0.0.1:$PORT" --workers 2 --timeout 120 >>"$LOGDIR/gunicorn.log" 2>&1 &
+        GPID=$!
+        for i in $(seq 1 30); do curl -fsS -o /dev/null "$BASE_URL/" && return 0; sleep 1; done
+        return 1
+    }
     trap 'kill $GPID 2>/dev/null' EXIT
-    for i in $(seq 1 30); do curl -fsS -o /dev/null "$BASE_URL/" && break; sleep 1; done
+    start_server
     for f in tests/smoke_test.py tests/bills_ui_test.py tests/sprint2_adversarial_ui.py \
              tests/sprint3_ui_test.py tests/sprint4_pwa_test.py tests/sprint5_capture_test.py \
              tests/investments_ui_test.py tests/sprint6_budgets_goals_test.py \
              tests/sprint6_email_ui_test.py tests/sprint6_hotfix_test.py tests/phone_layout_test.py \
              tests/sprint9_review_inbox_test.py tests/sprint10_flex_test.py \
              tests/sprint11_networth_test.py tests/sprint12_ui_test.py tests/sprint13_ui_test.py \
-             tests/sprint15_import_ui_test.py tests/sprint16_voice_ui_test.py; do
-        [ -f "$f" ] && run "ui: $f" python3 "$f"
+             tests/sprint14_privacy_ui_test.py tests/sprint14_session_ui_test.py tests/sprint14_csp_test.py \
+             tests/sprint14_deploying_test.py tests/sprint15_import_ui_test.py tests/sprint16_voice_ui_test.py; do
+        [ -f "$f" ] || continue
+        # A long browser suite can exhaust the demo server; make sure it's up (restart if not) before each one.
+        curl -fsS -o /dev/null "$BASE_URL/" 2>/dev/null || start_server
+        run "ui: $f" python3 "$f"
     done
 fi
 

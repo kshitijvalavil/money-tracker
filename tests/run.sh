@@ -153,17 +153,17 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/sprint13_prefs_test.sql"
 
-# ---- Voice source (0021): recurring/transaction/import can be 'voice' ---------
-"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres voice
-"${PSQL[@]}" -d voice \
-    -c "\\cd $PWD/$HERE_MIGRATIONS" \
-    -f "$PWD/tests/voice_source_test.sql"
-
 # ---- Bulk file import (0020): batches, staging de-dupe, undo import, RLS ------
 "$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres fileimp
 "${PSQL[@]}" -d fileimp \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/file_import_test.sql"
+
+# ---- Voice source (0022): recurring/transaction/import can be 'voice' ---------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres voice
+"${PSQL[@]}" -d voice \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/voice_source_test.sql"
 
 # ---- Multi-user isolation (every table): a new tester sees none of the owner's
 # data, and cannot read, change, delete, or plant rows in another user's account.
@@ -171,3 +171,16 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
 "${PSQL[@]}" -d iso \
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/user_isolation_test.sql"
+
+# ---- Sprint 14: delete my account removes the caller's login and every row in
+# all 15 data tables, and nobody else's.
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres delacct
+"${PSQL[@]}" -d delacct \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/delete_account_test.sql"
+
+# ---- Sprint 14: audit log (append-only, 12-month prune) + consent record.
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres auditdb
+"${PSQL[@]}" -d auditdb \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/audit_consent_test.sql"

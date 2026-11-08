@@ -42,7 +42,7 @@
 {% endblock %}
 
 {% block page_script %}
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, DEMO, esc, money, toast, today, authHeaders, refreshImportsBadge } from "{{ url_for('static', filename='js/app.js') }}";
   import { parseVoice } from "{{ url_for('static', filename='js/voiceparse.js') }}";
   const $ = (id) => document.getElementById(id);

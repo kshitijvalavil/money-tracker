@@ -174,7 +174,8 @@ function seed() {
 
   const data = { accounts, categories, transactions, budgets, pending_imports, recurring,
            goals, goal_contributions, labels, transaction_labels, investments,
-           category_rules, sync_status, net_worth_snapshots: [], user_prefs: [], import_batches: [] };
+           category_rules, sync_status, net_worth_snapshots: [], user_prefs: [], import_batches: [],
+           audit_log: [], user_consents: [] };
   restoreFileImports(data);
   return data;
 }
@@ -200,6 +201,7 @@ function restoreFileImports(s) {
     const account_id = accId(account_name);
     if (account_id) s.transactions.push({ ...row, account_id, category_id: catId(category_name, row.type) });
   }
+  // Sprint 16: voice bills survive moving between pages too.
   for (const r of saved.recurring || []) {
     const { account_name, category_name, ...row } = r;
     const account_id = accId(account_name);
@@ -207,6 +209,9 @@ function restoreFileImports(s) {
     if (account_id && category_id) s.recurring.push({ ...row, account_id, category_id });
   }
 }
+// Sprint 15 file imports and Sprint 16 voice both stage rows that must survive
+// moving between demo pages; persist either source.
+const KEEP_SRC = new Set(["file", "voice"]);
 function persistFileImports(s) {
   try {
     const catName = (id) => s.categories.find((c) => c.id === id)?.name || null;
@@ -799,7 +804,6 @@ const DEFAULTS = {
 };
 
 const FILE_TABLES = new Set(["pending_imports", "import_batches", "transactions", "recurring"]);
-const KEEP_SRC = new Set(["file", "voice"]);
 
 // ---- a tiny chainable, awaitable query builder ----------------------------
 function makeBuilder(store, table) {
@@ -826,6 +830,7 @@ function makeBuilder(store, table) {
     },
     order(c, o) { this._orders.push([c, o?.ascending !== false]); return this; },
     limit(n) { this._limit = n; return this; },
+    range(a, b) { this._range = [a, b]; return this; },
     _match(r) { return this._filters.every((f) => f(r)); },
     _run() {
       const s = store.data;
@@ -881,6 +886,7 @@ function makeBuilder(store, table) {
         }
         const count = this._count ? out.length : null;
         if (this._limit != null) out = out.slice(0, this._limit);
+        if (this._range) out = out.slice(this._range[0], this._range[1] + 1);
         return { data: this._head ? null : out, error: null, count };
       } catch (e) {
         return { data: null, error: { message: e.message || String(e), code: e.code || null } };
@@ -896,13 +902,40 @@ function makeBuilder(store, table) {
 }
 
 export function createDemoClient() {
-  const store = { data: seed() };
+  const store = { data: seed(), factors: [] };
   const user = { id: "demo-user", email: "demo@example.com" };
   return {
     auth: {
       async getUser() { return { data: { user }, error: null }; },
       async signInWithPassword() { return { data: { user }, error: null }; },
       async signOut() { return { error: null }; },
+      // Two-step sign-in stand-in. Accepts the code 123456 so the screens can be tried.
+      mfa: {
+        async listFactors() {
+          const all = store.factors.map((f) => ({ ...f }));
+          return { data: { all, totp: all.filter((f) => f.factor_type === "totp") }, error: null };
+        },
+        async enroll({ friendlyName }) {
+          const id = "demo-factor-" + (store.factors.length + 1);
+          store.factors.push({ id, friendly_name: friendlyName || "Authenticator", factor_type: "totp", status: "unverified" });
+          const svg = "<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><rect width='180' height='180' fill='white'/><rect x='20' y='20' width='50' height='50'/><rect x='110' y='20' width='50' height='50'/><rect x='20' y='110' width='50' height='50'/></svg>";
+          return { data: { id, type: "totp", totp: { qr_code: "data:image/svg+xml;utf-8," + svg, secret: "DEMOSECRETKEY234", uri: "otpauth://totp/Demo" } }, error: null };
+        },
+        async challenge() { return { data: { id: "demo-challenge" }, error: null }; },
+        async verify({ factorId, code }) {
+          if (String(code) !== "123456") return { data: null, error: { message: "Invalid TOTP code entered" } };
+          const f = store.factors.find((x) => x.id === factorId);
+          if (f) f.status = "verified";
+          return { data: {}, error: null };
+        },
+        async unenroll({ factorId }) {
+          store.factors = store.factors.filter((f) => f.id !== factorId);
+          return { data: { id: factorId }, error: null };
+        },
+        async getAuthenticatorAssuranceLevel() {
+          return { data: { currentLevel: "aal1", nextLevel: "aal1" }, error: null };
+        },
+      },
     },
     from(table) { return makeBuilder(store, table); },
     async rpc(name, params) {

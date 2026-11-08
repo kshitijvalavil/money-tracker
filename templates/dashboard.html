@@ -112,7 +112,7 @@
 {% endblock %}
 
 {% block page_script %}
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, money, moneyCompact, esc, thisMonth, toast, today, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
   import { dueLabel, shortDate, addDays, daysBetween } from "{{ url_for('static', filename='js/recurring.js') }}";
   import { sparkline } from "{{ url_for('static', filename='js/charts.js') }}";

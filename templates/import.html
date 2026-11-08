@@ -93,7 +93,7 @@
 {% endblock %}
 
 {% block page_script %}
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, DEMO, esc, money, toast, authHeaders, refreshImportsBadge } from "{{ url_for('static', filename='js/app.js') }}";
   import { mapGrid, headerFingerprint } from "{{ url_for('static', filename='js/importmap.js') }}";
   import { readFile, bestSheet, pdfPageImages, ImportError } from "{{ url_for('static', filename='js/fileimport.js') }}";

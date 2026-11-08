@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Privacy notice — Money Tracker{% endblock %}
+{% block body %}
+<div class="auth-wrap">
+  <article class="card auth-card doc" aria-labelledby="pn-title">
+    <div class="brand">Money<span>Tracker</span></div>
+    <h1 class="doc-title" id="pn-title">Privacy notice</h1>
+    <p class="small">Version {{ NOTICE_VERSION }}. Written in plain language on purpose.</p>
+
+    <h2>Who this is</h2>
+    <p>Money Tracker is a private, invite-only money app run by one person. You can only get in with a login that was created for you.</p>
+
+    <h2>What we keep about you</h2>
+    <ul class="doc-list">
+      <li><b>Your login:</b> your email address and a password. We never see your password; it is stored only as a scrambled (hashed) value by our sign-in provider.</li>
+      <li><b>What you enter:</b> accounts, transactions, categories, budgets, goals, bills, investments, labels, rules, net worth history and your settings.</li>
+      <li><b>Imported transactions, if turned on for your account:</b> the amount, date, merchant or note and a masked account ending taken from bank alert emails. The email itself is not stored.</li>
+      <li><b>Bill photos:</b> read on your own device. Only the words found in the photo are sent to our server to fill the form, and they are not stored.</li>
+      <li><b>A security log:</b> when you sign in, change your password, turn two-step sign-in on or off, download your data, sign out of all devices or accept this notice. Kept for 12 months.</li>
+      <li><b>Your consent:</b> which version of this notice you accepted, and when.</li>
+    </ul>
+
+    <h2>Why</h2>
+    <p>Only to run the app for you: show your numbers, budgets and alerts, keep you signed in, and keep your account safe. We do not sell your data, share it for advertising, or track you with analytics or advertising cookies.</p>
+
+    <h2>Where it lives, and who else touches it</h2>
+    <ul class="doc-list">
+      <li><b>Supabase</b> stores the database and handles sign-in. Your data is held in their Singapore region.</li>
+      <li><b>Render</b> hosts the website and serves it to you.</li>
+      <li>Your browser keeps a sign-in token and your day/night choice in its own storage. That is all.</li>
+    </ul>
+    <p>Your data is separated from other people's by database rules, so another login cannot read it. Be aware that the person who runs the app has administrator access to the database for maintenance, as with any small service.</p>
+
+    <h2>How long we keep it</h2>
+    <p>Your data stays until you delete it or delete your account. The security log is trimmed to the last 12 months. When you delete your account, your login and all your data are removed straight away.</p>
+
+    <h2>Your choices</h2>
+    <ul class="doc-list">
+      <li><b>Get a copy:</b> Profile, then "Download all my data".</li>
+      <li><b>Fix something:</b> edit it in the app.</li>
+      <li><b>Delete everything:</b> Profile, then "Delete my account". It cannot be undone.</li>
+      <li><b>Say no to this notice:</b> sign out when asked, and ask for your account to be deleted.</li>
+    </ul>
+
+    <h2>How we protect it</h2>
+    <p>Sign-in is checked on the server, you can add an authenticator app for two-step sign-in, the app signs you out after 30 minutes of nothing, connections are encrypted, and the site blocks outside scripts. If something ever goes wrong with your data, we will tell you without delay and say what happened and what to do.</p>
+
+    <h2>Questions or complaints</h2>
+    {% if PRIVACY_CONTACT %}
+    <p>Write to <a href="mailto:{{ PRIVACY_CONTACT }}">{{ PRIVACY_CONTACT }}</a>. You can also complain to the Data Protection Board of India.</p>
+    {% else %}
+    <p>Ask the person who invited you to Money Tracker. You can also complain to the Data Protection Board of India.</p>
+    {% endif %}
+    <p>Security researchers: see <a href="/.well-known/security.txt">security.txt</a>.</p>
+
+    <h2>Not for children</h2>
+    <p>Money Tracker is for adults (18 and over).</p>
+
+    <h2>Changes</h2>
+    <p>If this notice changes, the version date above changes and you will be asked to accept it again before you carry on.</p>
+
+    <p><a href="/login">Back to sign in</a></p>
+  </article>
+</div>
+{% endblock %}

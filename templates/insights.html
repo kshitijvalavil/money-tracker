@@ -74,7 +74,7 @@
 {% endblock %}
 
 {% block page_script %}
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, money, esc, thisMonth, toast, today } from "{{ url_for('static', filename='js/app.js') }}";
   const $ = (id) => document.getElementById(id);
   $("month").value = thisMonth();
@@ -152,7 +152,7 @@
     const label = { income: "Income", expense: "Expenses", net: "Net saved" };
     $("mom").innerHTML = data.map((r) => `
       <div class="stat">
-        <div class="stat-label">${label[r.metric] || r.metric}</div>
+        <div class="stat-label">${esc(label[r.metric] || r.metric)}</div>
         <div class="stat-value">${money(r.current)}</div>
         <div class="stat-delta">${delta(r.metric, r.current, r.previous)}</div>
       </div>`).join("");
@@ -275,7 +275,7 @@
   if (db) { loadMonthly(); loadBars(); }
 </script>
 
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   // Sprint 12: money-flow (Sankey) for the selected month + 6-month category sparklines.
   import { db, money, esc, thisMonth } from "{{ url_for('static', filename='js/app.js') }}";
   import { sankey, sparkline, trendDir } from "{{ url_for('static', filename='js/charts.js') }}";

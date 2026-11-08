@@ -13,6 +13,8 @@
       <div id="acctEmail" style="font-weight:600;padding:4px 0">Loading…</div>
     </div>
     <button class="btn ghost" id="signoutBtn">Sign out</button>
+    <button class="btn ghost" id="signoutAllBtn" type="button">Sign out of all devices</button>
+    <p class="small" style="margin-top:8px">Signs you out everywhere you are signed in, including other phones and computers. Use it if a device is lost. You are also signed out automatically after 30 minutes of inactivity.</p>
   </div>
 
   <div class="card">
@@ -28,15 +30,61 @@
   <div class="card">
     <h2>Change password</h2>
     <p style="color:var(--muted);font-size:0.88rem;margin-bottom:16px">
-      Use at least 8 characters. You stay signed in after changing it.</p>
+      Use at least 12 characters. You stay signed in after changing it.</p>
     <form id="pwForm" autocomplete="off">
       <div class="field"><label for="pw1">New password</label>
-        <input type="password" id="pw1" autocomplete="new-password" minlength="8" required></div>
+        <input type="password" id="pw1" autocomplete="new-password" minlength="12" required></div>
       <div class="field"><label for="pw2">Confirm new password</label>
-        <input type="password" id="pw2" autocomplete="new-password" minlength="8" required></div>
+        <input type="password" id="pw2" autocomplete="new-password" minlength="12" required></div>
       <button class="btn" type="submit" id="pwSubmit">Update password</button>
     </form>
   </div>
+</div>
+
+<div class="grid cols-2" style="margin-top:16px">
+  <div class="card" id="mfaCard">
+    <h2>Two-step sign-in</h2>
+    <p class="card-intro">Add an authenticator app (Google Authenticator, Authy, 1Password and similar). After your password you will enter a 6-digit code from the app, so a stolen password alone is not enough.</p>
+    <p id="mfaStatus" role="status" style="font-weight:600"></p>
+    <div id="mfaSetup" hidden>
+      <p>1. Scan this code with your authenticator app.</p>
+      <img id="mfaQr" alt="QR code to scan with your authenticator app" width="180" height="180" style="background:#fff;border-radius:8px">
+      <p class="small">Cannot scan? Type this key into the app: <code id="mfaSecret"></code></p>
+      <form id="mfaVerifyForm" autocomplete="off">
+        <div class="field"><label for="mfaCode">2. Type the 6-digit code it shows</label>
+          <input id="mfaCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required></div>
+        <button class="btn" type="submit" id="mfaOn">Turn on</button>
+        <button class="btn ghost" type="button" id="mfaCancel">Cancel</button>
+      </form>
+    </div>
+    <button class="btn" type="button" id="mfaStart">Set up two-step sign-in</button>
+    <button class="btn ghost" type="button" id="mfaRemove" hidden>Turn off two-step sign-in</button>
+  </div>
+
+  <div class="card" id="activityCard">
+    <h2>Recent security activity</h2>
+    <p class="card-intro">The last things that happened on your account. If you see something you did not do, change your password and sign out of all devices.</p>
+    <ul class="doc-list" id="activityList" aria-busy="true"><li>Loading…</li></ul>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px" id="dataCard">
+  <h2>Your data</h2>
+  <p class="card-intro">Your money data belongs to you. Download a copy at any time, or delete your account and everything in it. <a href="/privacy">Read the privacy notice</a>.</p>
+  <div class="field">
+    <button class="btn ghost" type="button" id="exportBtn">Download all my data</button>
+    <p id="exportMsg" role="status" style="color:var(--muted);font-size:0.88rem;margin-top:8px"></p>
+  </div>
+  <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+  <h3 style="margin:0 0 6px">Delete my account</h3>
+  <p class="card-intro">This permanently deletes your login and every transaction, budget, goal, bill and setting. It cannot be undone, so download your data first.</p>
+  <form id="deleteForm" autocomplete="off">
+    <div class="field"><label for="delPw">Your password</label>
+      <input type="password" id="delPw" autocomplete="current-password" required></div>
+    <div class="field"><label for="delConfirm">Type DELETE to confirm</label>
+      <input id="delConfirm" autocomplete="off" required placeholder="DELETE"></div>
+    <button class="btn danger" type="submit" id="delSubmit">Delete my account forever</button>
+  </form>
 </div>
 
 <div class="card rules-card" style="margin-top:16px">
@@ -55,8 +103,10 @@
 {% endblock %}
 
 {% block page_script %}
-<script type="module">
+<script type="module" nonce="{{ csp_nonce }}">
   import { db, DEMO, toast, esc, signOut, currentTheme, setTheme } from "{{ url_for('static', filename='js/app.js') }}";
+  import { exportMyData, downloadJson } from "{{ url_for('static', filename='js/privacy.js') }}";
+  import { logEvent, totpFactors, verifyCode, EVENT_LABEL } from "{{ url_for('static', filename='js/session.js') }}";
   const $ = (id) => document.getElementById(id);
 
   // --- Account -------------------------------------------------------------
@@ -125,13 +175,134 @@
   });
   loadRules();
 
+  // --- Your data: download and delete --------------------------------------
+  $("exportBtn").addEventListener("click", async () => {
+    if (!db) { toast("Supabase isn't configured yet."); return; }
+    const btn = $("exportBtn"), msg = $("exportMsg");
+    btn.disabled = true; msg.textContent = "Gathering your data…";
+    try {
+      const { data } = await db.auth.getUser();
+      const out = await exportMyData(db, data?.user?.email || "");
+      const total = Object.values(out.row_counts).reduce((a, b) => a + b, 0);
+      downloadJson(out, "money-tracker-export-" + new Date().toISOString().slice(0, 10) + ".json");
+      logEvent(db, "data_exported", { records: total });
+      msg.textContent = "Saved " + total + " records. Keep the file somewhere safe: it holds your private money data.";
+    } catch (e) {
+      msg.textContent = "";
+      toast("Couldn't download your data. Nothing was changed. Try again.");
+    } finally { btn.disabled = false; }
+  });
+
+  $("deleteForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (DEMO) { toast("Deleting is disabled in demo mode.", "ok"); return; }
+    if (!db) { toast("Supabase isn't configured yet."); return; }
+    if ($("delConfirm").value.trim() !== "DELETE") { toast("Type DELETE in capitals to confirm."); return; }
+    const btn = $("delSubmit");
+    btn.disabled = true; btn.textContent = "Deleting…";
+    try {
+      // Ask for the password again so a borrowed, unlocked phone cannot delete the account.
+      const { data: who } = await db.auth.getUser();
+      const email = who?.user?.email;
+      const { error: authErr } = await db.auth.signInWithPassword({ email, password: $("delPw").value });
+      if (authErr) { toast("That password isn't right. Nothing was deleted."); return; }
+      const { error } = await db.rpc("delete_my_account");
+      if (error) { toast("Couldn't delete the account. Nothing was changed. Try again."); return; }
+      try { await db.auth.signOut(); } catch (e2) {}
+      location.href = "/login";
+    } finally { btn.disabled = false; btn.textContent = "Delete my account forever"; $("delPw").value = ""; }
+  });
+
+  // --- Sign out of all devices ----------------------------------------------
+  $("signoutAllBtn").addEventListener("click", async () => {
+    if (DEMO) { toast("Signing out is disabled in demo mode.", "ok"); return; }
+    if (!confirm("Sign out of every device, including this one?")) return;
+    await logEvent(db, "sign_out_all");
+    try { await db.auth.signOut({ scope: "global" }); } catch (e) {}
+    location.href = "/login";
+  });
+
+  // --- Two-step sign-in (authenticator app) ---------------------------------
+  let pendingFactor = null;
+  async function paintMfa() {
+    if (!db?.auth?.mfa) { $("mfaCard").hidden = true; return; }
+    const on = await totpFactors(db);
+    $("mfaStatus").textContent = on.length ? "On: sign-in asks for a code from your authenticator app." : "Off: sign-in uses only your password.";
+    $("mfaStart").hidden = on.length > 0 || !!pendingFactor;
+    $("mfaRemove").hidden = on.length === 0;
+    $("mfaSetup").hidden = !pendingFactor;
+  }
+  async function dropUnverified() {
+    const { data } = await db.auth.mfa.listFactors();
+    for (const f of (data?.all || [])) if (f.status !== "verified") await db.auth.mfa.unenroll({ factorId: f.id });
+  }
+  $("mfaStart").addEventListener("click", async () => {
+    $("mfaStart").disabled = true;
+    try {
+      await dropUnverified();
+      const { data, error } = await db.auth.mfa.enroll({ factorType: "totp", friendlyName: "Authenticator " + Date.now() });
+      if (error) { toast("Couldn't start set-up. " + error.message); return; }
+      pendingFactor = data.id;
+      $("mfaQr").src = data.totp.qr_code;
+      $("mfaSecret").textContent = data.totp.secret;
+      $("mfaCode").value = "";
+      await paintMfa();
+      $("mfaCode").focus();
+    } finally { $("mfaStart").disabled = false; }
+  });
+  $("mfaVerifyForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!pendingFactor) return;
+    const btn = $("mfaOn"); btn.disabled = true;
+    try {
+      const { error } = await verifyCode(db, pendingFactor, $("mfaCode").value);
+      if (error) { toast("That code didn't work. Wait for a new one and try again."); $("mfaCode").value = ""; return; }
+      pendingFactor = null;
+      await logEvent(db, "mfa_enabled");
+      toast("Two-step sign-in is on.", "ok");
+      await paintMfa(); loadActivity();
+    } finally { btn.disabled = false; }
+  });
+  $("mfaCancel").addEventListener("click", async () => {
+    try { await dropUnverified(); } catch (e) {}
+    pendingFactor = null; await paintMfa();
+  });
+  $("mfaRemove").addEventListener("click", async () => {
+    if (!confirm("Turn off two-step sign-in? Your account will be protected by your password alone.")) return;
+    const on = await totpFactors(db);
+    for (const f of on) {
+      const { error } = await db.auth.mfa.unenroll({ factorId: f.id });
+      if (error) { toast("Couldn't turn it off. " + error.message); return; }
+    }
+    await logEvent(db, "mfa_removed");
+    toast("Two-step sign-in is off.", "ok");
+    await paintMfa(); loadActivity();
+  });
+  paintMfa();
+
+  // --- Recent security activity ----------------------------------------------
+  async function loadActivity() {
+    const ul = $("activityList");
+    const { data, error } = await db.from("audit_log").select("event, created_at").order("created_at", { ascending: false }).limit(15);
+    ul.setAttribute("aria-busy", "false");
+    ul.textContent = "";
+    if (error) { const li = document.createElement("li"); li.textContent = "Couldn't load your activity right now."; ul.appendChild(li); return; }
+    if (!data.length) { const li = document.createElement("li"); li.textContent = "Nothing yet. Your sign-ins and security changes will appear here."; ul.appendChild(li); return; }
+    for (const r of data) {
+      const li = document.createElement("li");
+      li.textContent = (EVENT_LABEL[r.event] || r.event) + " · " + new Date(r.created_at).toLocaleString();
+      ul.appendChild(li);
+    }
+  }
+  loadActivity();
+
   // --- Change password -----------------------------------------------------
   $("pwForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     if (DEMO) { toast("Password changes are disabled in demo mode.", "ok"); return; }
     if (!db) { toast("Supabase isn't configured yet."); return; }
     const pw1 = $("pw1").value, pw2 = $("pw2").value;
-    if (pw1.length < 8) { toast("Password must be at least 8 characters."); return; }
+    if (pw1.length < 12) { toast("Password must be at least 12 characters."); return; }
     if (pw1 !== pw2) { toast("The two passwords don't match."); return; }
     const btn = $("pwSubmit");
     btn.disabled = true; btn.textContent = "Updating…";
@@ -139,6 +310,7 @@
     btn.disabled = false; btn.textContent = "Update password";
     if (error) { toast(error.message); return; }
     $("pw1").value = ""; $("pw2").value = "";
+    logEvent(db, "password_changed");
     toast("Password updated.", "ok");
   });
 </script>

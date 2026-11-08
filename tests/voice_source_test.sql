@@ -30,9 +30,9 @@ grant execute on function auth.uid() to public;
 \i migrations/0011_import_channel.sql
 \i migrations/0012_security_hardening.sql
 \i migrations/0013_review_inbox.sql
-\i migrations/0021_voice.sql
+\i migrations/0022_voice.sql
 -- Idempotent: running it twice is harmless.
-\i migrations/0021_voice.sql
+\i migrations/0022_voice.sql
 
 grant select, insert, update, delete on all tables in schema public to app_user;
 grant authenticated to app_user;

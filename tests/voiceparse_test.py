@@ -74,17 +74,24 @@ else:
 # Endpoint.
 import app as appmod  # noqa: E402
 
+# Verify sign-in server-side (Sprint 14): stub the lookup so a known token maps
+# to a user and anything else is rejected.
 appmod.DEMO_MODE = False
+appmod._fetch_supabase_user = lambda token: "user-voice" if token == "good-token" else None
+appmod._AUTH_CACHE.clear()
+AUTH = {"Authorization": "Bearer good-token"}
 cl = appmod.app.test_client()
 check(cl.post("/api/parse-voice", json={"text": "paid 50 for tea"}).status_code == 401, "signed out: 401")
-r = cl.post("/api/parse-voice", json={"text": "paid 450 to Starbucks on UPI"}, headers={"Authorization": "Bearer x"})
+check(cl.post("/api/parse-voice", json={"text": "paid 50 for tea"}, headers={"Authorization": "Bearer forged"}).status_code == 401,
+      "a forged token is rejected (verified server-side)")
+r = cl.post("/api/parse-voice", json={"text": "paid 450 to Starbucks on UPI"}, headers=AUTH)
 check(r.status_code == 200 and r.get_json()["rows"][0]["amount"] == 450, "signed in: parses")
-r = cl.post("/api/parse-voice", json={"text": ""}, headers={"Authorization": "Bearer x"})
+r = cl.post("/api/parse-voice", json={"text": ""}, headers=AUTH)
 check(r.status_code == 200 and r.get_json().get("error") == "empty", "empty transcript: clean error, no crash")
-r = cl.post("/api/parse-voice", json={"text": "x" * 5000}, headers={"Authorization": "Bearer x"})
+r = cl.post("/api/parse-voice", json={"text": "x" * 5000}, headers=AUTH)
 check(r.status_code == 200, "very long transcript handled")
 appmod._RL_HITS.clear()
-codes = [cl.post("/api/parse-voice", json={"text": "paid 5 for tea"}, headers={"Authorization": "Bearer x", "X-Forwarded-For": "7.7.7.7"}).status_code for _ in range(42)]
+codes = [cl.post("/api/parse-voice", json={"text": "paid 5 for tea"}, headers={**AUTH, "X-Forwarded-For": "7.7.7.7"}).status_code for _ in range(42)]
 check(codes.count(429) >= 2, "rate limited")
 appmod._RL_HITS.clear()
 

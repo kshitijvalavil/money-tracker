@@ -273,6 +273,48 @@ def parse_receipt(subject, sender, body, message_id=None, email_date=None):
     }
 
 
+# --- Never keep a full card number -------------------------------------------
+# Emails sometimes spell out a whole card number. We only ever want the last four
+# digits. A run of 13-19 digits (spaces or dashes allowed) that passes the Luhn
+# card checksum is replaced; ordinary long numbers such as 12-digit UPI references
+# are left alone because they do not pass the checksum or are too short.
+_CARD_RUN = re.compile(r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")
+
+
+def _luhn_ok(digits):
+    total, flip = 0, False
+    for ch in reversed(digits):
+        d = int(ch)
+        if flip:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+        flip = not flip
+    return total % 10 == 0
+
+
+def mask_card_numbers(text):
+    """Replace any card-number-looking digits with 'card ending 1234'."""
+    if not text or not isinstance(text, str):
+        return text
+
+    def repl(m):
+        digits = re.sub(r"\D", "", m.group(0))
+        if 13 <= len(digits) <= 19 and _luhn_ok(digits):
+            return "card ending " + digits[-4:]
+        return m.group(0)
+
+    return _CARD_RUN.sub(repl, text)
+
+
+def _mask_result(result):
+    for key in ("note", "merchant", "account_hint"):
+        if result.get(key):
+            result[key] = mask_card_numbers(result[key])
+    return result
+
+
 # Registry of parsers. The statement-PDF parser (Phase 2b) plugs in here too.
 PARSERS = [parse_sbi_alert, parse_bank_alert, parse_google_pay, parse_receipt]
 
@@ -282,5 +324,5 @@ def parse_email(subject, sender, body, message_id=None, email_date=None):
     for parser in PARSERS:
         result = parser(subject, sender, body, message_id, email_date)
         if result:
-            return result
+            return _mask_result(result)
     return None
