@@ -18,6 +18,8 @@ from collections import defaultdict, deque
 from flask import Flask, g, jsonify, redirect, render_template, request
 
 from billreader import BillReadError, parse_bill_text, read_bill
+from statementreader import read_statement
+from xlsreader import XlsReadError, read_xls
 
 
 def _load_dotenv(path=".env"):
@@ -330,6 +332,11 @@ def imports():
     return render_template("imports.html", page="imports")
 
 
+@app.route("/import")
+def import_file():
+    return render_template("import.html", page="imports")
+
+
 @app.route("/profile")
 def profile():
     return render_template("profile.html", page="profile")
@@ -459,6 +466,43 @@ def api_parse_bill_text():
         return jsonify({"error": "No text was read from the photo. Try a clearer, straight-on shot."}), 400
     # The form only needs a little text; ignore anything huge.
     return jsonify(parse_bill_text(text[:20000]))
+
+
+@app.route("/api/read-xls", methods=["POST"])
+def api_read_xls():
+    # Old binary Excel (.xls) only: parsed in memory with xlrd and thrown away.
+    # The browser reads every other format itself. Verified sign-in (like the
+    # bill endpoints, Sprint 14), counted per person and per address.
+    uid = _signed_in_user()
+    if not uid:
+        return jsonify({"error": "Please sign in and try again."}), 401
+    if _rate_limited("xls:user:" + uid, max_hits=30) or _rate_limited("xls:" + _client_ip(), max_hits=30):
+        return _too_many(_RL_WINDOW)
+    try:
+        return jsonify(read_xls(request.get_data(cache=False)))
+    except XlsReadError as e:
+        return jsonify({"error": e.message}), e.status
+
+
+@app.route("/api/read-statement", methods=["POST"])
+def api_read_statement():
+    # Claude fallback for a scanned or messy statement, only after the person
+    # agrees in the browser. Nothing is stored. Demo mode returns a fixed sample.
+    uid = _signed_in_user()
+    if not uid:
+        return jsonify({"error": "Please sign in and try again."}), 401
+    if _rate_limited("stmt:user:" + uid, max_hits=6) or _rate_limited("stmt:" + _client_ip(), max_hits=6):
+        return _too_many(_RL_WINDOW)
+    try:
+        out = read_statement(
+            request.get_json(silent=True),
+            demo=DEMO_MODE,
+            api_key=os.environ.get("ANTHROPIC_API_KEY"),
+            model=os.environ.get("STATEMENT_MODEL"),
+        )
+    except BillReadError as e:
+        return jsonify({"error": e.message}), e.status
+    return jsonify(out)
 
 
 @app.route("/healthz")

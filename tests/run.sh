@@ -153,6 +153,12 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/sprint13_prefs_test.sql"
 
+# ---- Bulk file import (0020): batches, staging de-dupe, undo import, RLS ------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres fileimp
+"${PSQL[@]}" -d fileimp \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/file_import_test.sql"
+
 # ---- Multi-user isolation (every table): a new tester sees none of the owner's
 # data, and cannot read, change, delete, or plant rows in another user's account.
 "$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres iso

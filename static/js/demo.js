@@ -172,9 +172,46 @@ function seed() {
     as_of: day(thisMonth, 1), created_at: new Date().toISOString(),
   }));
 
-  return { accounts, categories, transactions, budgets, pending_imports, recurring,
+  const data = { accounts, categories, transactions, budgets, pending_imports, recurring,
            goals, goal_contributions, labels, transaction_labels, investments,
-           category_rules, sync_status, net_worth_snapshots: [], user_prefs: [], audit_log: [], user_consents: [] };
+           category_rules, sync_status, net_worth_snapshots: [], user_prefs: [], import_batches: [],
+           audit_log: [], user_consents: [] };
+  restoreFileImports(data);
+  return data;
+}
+
+// Sprint 15: file imports survive moving between demo pages (the import page
+// stages rows, the review page accepts them) by living in sessionStorage for
+// this tab. Ids are re-made on every load, so rows are stored with account and
+// category NAMES and linked up again here.
+const FILE_KEY = "mt.demo.fileImports";
+function restoreFileImports(s) {
+  let saved;
+  try { saved = JSON.parse(sessionStorage.getItem(FILE_KEY) || "null"); } catch { saved = null; }
+  if (!saved) return;
+  const catId = (name, kind) => s.categories.find((c) => c.name === name && c.kind === kind)?.id || null;
+  const accId = (name) => s.accounts.find((a) => a.name === name)?.id || null;
+  s.import_batches = (saved.batches || []).slice(0, 50);
+  for (const p of saved.pending || []) {
+    const { suggested_category_name, ...row } = p;
+    s.pending_imports.push({ ...row, suggested_category_id: catId(suggested_category_name, row.direction) });
+  }
+  for (const t of saved.transactions || []) {
+    const { account_name, category_name, ...row } = t;
+    const account_id = accId(account_name);
+    if (account_id) s.transactions.push({ ...row, account_id, category_id: catId(category_name, row.type) });
+  }
+}
+function persistFileImports(s) {
+  try {
+    const catName = (id) => s.categories.find((c) => c.id === id)?.name || null;
+    const accName = (id) => s.accounts.find((a) => a.id === id)?.name || null;
+    const pending = s.pending_imports.filter((p) => p.source === "file").map(({ suggested_category_id, ...p }) =>
+      ({ ...p, suggested_category_name: catName(suggested_category_id) }));
+    const transactions = s.transactions.filter((t) => t.source === "file").map(({ account_id, category_id, ...t }) =>
+      ({ ...t, account_name: accName(account_id), category_name: catName(category_id) }));
+    sessionStorage.setItem(FILE_KEY, JSON.stringify({ batches: s.import_batches, pending, transactions }));
+  } catch { /* storage full or blocked: demo just forgets on reload */ }
 }
 
 // Same SQLSTATE-style errors as the real functions.
@@ -400,6 +437,14 @@ function undoApprove(s, params) {
 function rpc(s, name, params) {
   if (name === "approve_import" || name === "reject_import") return importRpc(s, name, params);
   if (name === "undo_approve") return undoApprove(s, params);
+  if (name === "undo_import_batch") {           // mirrors 0020
+    const b = s.import_batches.find((x) => x.id === params?.p_batch_id);
+    if (!b) fail("P0002", `import ${params?.p_batch_id} not found`);
+    const before = s.pending_imports.length;
+    s.pending_imports = s.pending_imports.filter((p) => !(p.import_batch_id === b.id && p.status === "pending"));
+    b.undone_at = new Date().toISOString();
+    return before - s.pending_imports.length;
+  }
   if (RECURRING_RPCS.includes(name)) return recurringRpc(s, name, params);
   const m = params?.p_month;
   if (name === "account_balances") return accountBalances(s);
@@ -741,7 +786,12 @@ function enrich(s, table, row) {
 const DEFAULTS = {
   recurring: { next_seq: 0, auto_post: false, active: true, source: "manual" },
   investments: { kind: "other", note: "", as_of: localDate(new Date()) },
+  pending_imports: { status: "pending", note: "", merchant: null, suggested_category_id: null,
+                     merged_message_ids: [], merged_sources: [], channel: null },
+  import_batches: { added: 0, skipped: 0, used_claude: false, undone_at: null },
 };
+
+const FILE_TABLES = new Set(["pending_imports", "import_batches", "transactions"]);
 
 // ---- a tiny chainable, awaitable query builder ----------------------------
 function makeBuilder(store, table) {
@@ -752,10 +802,11 @@ function makeBuilder(store, table) {
     select(_cols, o) { this._op = "select"; this._count = o?.count || null; this._head = !!o?.head; return this; },
     insert(p) { this._op = "insert"; this._payload = p; return this; },
     update(p) { this._op = "update"; this._payload = p; return this; },
-    upsert(p, o) { this._op = "upsert"; this._payload = p; this._conflict = o?.onConflict; return this; },
+    upsert(p, o) { this._op = "upsert"; this._payload = p; this._conflict = o?.onConflict; this._ignoreDup = !!o?.ignoreDuplicates; return this; },
     delete() { this._op = "delete"; return this; },
     eq(c, v) { this._filters.push((r) => String(r[c]) === String(v)); return this; },
     gte(c, v) { this._filters.push((r) => r[c] >= v); return this; },
+    in(c, vals) { const set = new Set((vals || []).map(String)); this._filters.push((r) => set.has(String(r[c]))); return this; },
     lte(c, v) { this._filters.push((r) => r[c] <= v); return this; },
     or(expr) {
       const tests = expr.split(",").map((p) => {
@@ -787,8 +838,8 @@ function makeBuilder(store, table) {
           for (const p of list) {
             const key = (this._conflict || "").split(",").map((k) => k.trim()).filter((k) => k !== "user_id");
             const existing = rows.find((r) => key.every((k) => String(r[k]) === String(p[k])));
-            if (existing) Object.assign(existing, p);
-            else rows.push({ id: uid(), created_at: new Date().toISOString(), ...p });
+            if (existing) { if (!this._ignoreDup) Object.assign(existing, p); }
+            else rows.push({ id: uid(), created_at: new Date().toISOString(), ...(DEFAULTS[table] || {}), ...p });
           }
           return { data: null, error: null };
         }
@@ -829,7 +880,11 @@ function makeBuilder(store, table) {
         return { data: null, error: { message: e.message || String(e), code: e.code || null } };
       }
     },
-    then(resolve) { resolve(this._run()); },
+    then(resolve) {
+      const out = this._run();
+      if (this._op !== "select" && FILE_TABLES.has(table)) persistFileImports(store.data);
+      resolve(out);
+    },
   };
   return b;
 }
@@ -874,11 +929,13 @@ export function createDemoClient() {
     async rpc(name, params) {
       // Write RPCs get a short fake network delay so loading states are visible.
       if (["approve_import", "reject_import", "undo_approve", "mark_recurring_paid", "skip_recurring",
-           "set_transaction_labels"].includes(name)) {
+           "set_transaction_labels", "undo_import_batch"].includes(name)) {
         await new Promise((r) => setTimeout(r, 350));
       }
       try {
-        return { data: rpc(store.data, name, params), error: null };
+        const data = rpc(store.data, name, params);
+        if (["approve_import", "reject_import", "undo_approve", "undo_import_batch"].includes(name)) persistFileImports(store.data);
+        return { data, error: null };
       } catch (e) {
         return { data: null, error: { message: e.message || String(e), code: e.code || null } };
       }
