@@ -64,10 +64,16 @@ if [ "$WHAT" = all ] || [ "$WHAT" = sql ]; then
 fi
 
 if [ "$WHAT" = all ] || [ "$WHAT" = ui ]; then
-    DEMO_MODE=1 gunicorn app:app --bind "127.0.0.1:$PORT" --workers 2 >"$LOGDIR/gunicorn.log" 2>&1 &
-    GPID=$!
+    GPID=""
+    start_server() {
+        [ -n "$GPID" ] && kill "$GPID" 2>/dev/null
+        DEMO_MODE=1 gunicorn app:app --bind "127.0.0.1:$PORT" --workers 2 --timeout 120 >>"$LOGDIR/gunicorn.log" 2>&1 &
+        GPID=$!
+        for i in $(seq 1 30); do curl -fsS -o /dev/null "$BASE_URL/" && return 0; sleep 1; done
+        return 1
+    }
     trap 'kill $GPID 2>/dev/null' EXIT
-    for i in $(seq 1 30); do curl -fsS -o /dev/null "$BASE_URL/" && break; sleep 1; done
+    start_server
     for f in tests/smoke_test.py tests/bills_ui_test.py tests/sprint2_adversarial_ui.py \
              tests/sprint3_ui_test.py tests/sprint4_pwa_test.py tests/sprint5_capture_test.py \
              tests/investments_ui_test.py tests/sprint6_budgets_goals_test.py \
@@ -76,7 +82,10 @@ if [ "$WHAT" = all ] || [ "$WHAT" = ui ]; then
              tests/sprint11_networth_test.py tests/sprint12_ui_test.py tests/sprint13_ui_test.py \
              tests/sprint14_privacy_ui_test.py tests/sprint14_session_ui_test.py tests/sprint14_csp_test.py \
              tests/sprint14_deploying_test.py tests/sprint15_import_ui_test.py tests/sprint16_voice_ui_test.py; do
-        [ -f "$f" ] && run "ui: $f" python3 "$f"
+        [ -f "$f" ] || continue
+        # A long browser suite can exhaust the demo server; make sure it's up (restart if not) before each one.
+        curl -fsS -o /dev/null "$BASE_URL/" 2>/dev/null || start_server
+        run "ui: $f" python3 "$f"
     done
 fi
 
