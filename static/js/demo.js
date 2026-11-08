@@ -201,16 +201,28 @@ function restoreFileImports(s) {
     const account_id = accId(account_name);
     if (account_id) s.transactions.push({ ...row, account_id, category_id: catId(category_name, row.type) });
   }
+  // Sprint 16: voice bills survive moving between pages too.
+  for (const r of saved.recurring || []) {
+    const { account_name, category_name, ...row } = r;
+    const account_id = accId(account_name);
+    const category_id = catId(category_name, row.type);
+    if (account_id && category_id) s.recurring.push({ ...row, account_id, category_id });
+  }
 }
+// Sprint 15 file imports and Sprint 16 voice both stage rows that must survive
+// moving between demo pages; persist either source.
+const KEEP_SRC = new Set(["file", "voice"]);
 function persistFileImports(s) {
   try {
     const catName = (id) => s.categories.find((c) => c.id === id)?.name || null;
     const accName = (id) => s.accounts.find((a) => a.id === id)?.name || null;
-    const pending = s.pending_imports.filter((p) => p.source === "file").map(({ suggested_category_id, ...p }) =>
+    const pending = s.pending_imports.filter((p) => KEEP_SRC.has(p.source)).map(({ suggested_category_id, ...p }) =>
       ({ ...p, suggested_category_name: catName(suggested_category_id) }));
-    const transactions = s.transactions.filter((t) => t.source === "file").map(({ account_id, category_id, ...t }) =>
+    const transactions = s.transactions.filter((t) => KEEP_SRC.has(t.source)).map(({ account_id, category_id, ...t }) =>
       ({ ...t, account_name: accName(account_id), category_name: catName(category_id) }));
-    sessionStorage.setItem(FILE_KEY, JSON.stringify({ batches: s.import_batches, pending, transactions }));
+    const recurring = s.recurring.filter((r) => r.source === "voice").map(({ account_id, category_id, ...r }) =>
+      ({ ...r, account_name: accName(account_id), category_name: catName(category_id) }));
+    sessionStorage.setItem(FILE_KEY, JSON.stringify({ batches: s.import_batches, pending, transactions, recurring }));
   } catch { /* storage full or blocked: demo just forgets on reload */ }
 }
 
@@ -791,7 +803,7 @@ const DEFAULTS = {
   import_batches: { added: 0, skipped: 0, used_claude: false, undone_at: null },
 };
 
-const FILE_TABLES = new Set(["pending_imports", "import_batches", "transactions"]);
+const FILE_TABLES = new Set(["pending_imports", "import_batches", "transactions", "recurring"]);
 
 // ---- a tiny chainable, awaitable query builder ----------------------------
 function makeBuilder(store, table) {

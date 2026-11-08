@@ -159,6 +159,12 @@ echo "  post_due_recurring race: session 1 posted 5, session 2 posted 0, 5 disti
     -c "\\cd $PWD/$HERE_MIGRATIONS" \
     -f "$PWD/tests/file_import_test.sql"
 
+# ---- Voice source (0022): recurring/transaction/import can be 'voice' ---------
+"$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres voice
+"${PSQL[@]}" -d voice \
+    -c "\\cd $PWD/$HERE_MIGRATIONS" \
+    -f "$PWD/tests/voice_source_test.sql"
+
 # ---- Multi-user isolation (every table): a new tester sees none of the owner's
 # data, and cannot read, change, delete, or plant rows in another user's account.
 "$BIN/createdb" -h "$TMP" -p "$PORT" -U postgres iso

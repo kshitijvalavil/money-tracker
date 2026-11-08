@@ -59,7 +59,13 @@ def run():
     check(h.get("X-Frame-Options") == "DENY", "X-Frame-Options: DENY")
     check("strict-origin" in (h.get("Referrer-Policy") or ""), "a Referrer-Policy is set")
     check("max-age=" in (h.get("Strict-Transport-Security") or ""), "HSTS is set")
-    check("microphone=()" in (h.get("Permissions-Policy") or ""), "Permissions-Policy restricts sensors")
+    pp = h.get("Permissions-Policy") or ""
+    # Sensors are restricted to this origin at most, never opened to all ('*').
+    # Camera and microphone are self (the bill-snap and voice-note pages ask for
+    # them, and the browser still prompts); geolocation and payment stay off.
+    check("microphone=(self)" in pp and "camera=(self)" in pp
+          and "geolocation=()" in pp and "payment=()" in pp and "*" not in pp,
+          "Permissions-Policy restricts sensors to this origin")
 
     # ---- Debug is off by default -----------------------------------------
     check(appmod.app.debug is False, "Flask debug is off by default")

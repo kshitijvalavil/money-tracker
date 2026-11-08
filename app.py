@@ -20,6 +20,7 @@ from flask import Flask, g, jsonify, redirect, render_template, request
 from billreader import BillReadError, parse_bill_text, read_bill
 from statementreader import read_statement
 from xlsreader import XlsReadError, read_xls
+from voiceparse import parse_voice
 
 
 def _load_dotenv(path=".env"):
@@ -99,7 +100,9 @@ _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy": "camera=(self), microphone=(), geolocation=(), payment=()",
+    # microphone is self so the voice-note page can ask to listen (Sprint 16);
+    # the browser still prompts for permission on each use.
+    "Permissions-Policy": "camera=(self), microphone=(self), geolocation=(), payment=()",
     "Cross-Origin-Opener-Policy": "same-origin",
     # Tell browsers to stick to HTTPS for a year (Render serves the app over TLS).
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
@@ -337,6 +340,11 @@ def import_file():
     return render_template("import.html", page="imports")
 
 
+@app.route("/voice")
+def voice():
+    return render_template("voice.html", page="transactions")
+
+
 @app.route("/profile")
 def profile():
     return render_template("profile.html", page="profile")
@@ -503,6 +511,23 @@ def api_read_statement():
     except BillReadError as e:
         return jsonify({"error": e.message}), e.status
     return jsonify(out)
+
+
+@app.route("/api/parse-voice", methods=["POST"])
+def api_parse_voice():
+    # FREE path: turn a spoken sentence into draft transactions with local rules,
+    # no API call. The browser parses on-device too; this is a server twin the UI
+    # can ask for a second opinion. Verified sign-in + rate limited; never stores.
+    uid = _signed_in_user()
+    if not uid:
+        return jsonify({"error": "Please sign in and try again."}), 401
+    if _rate_limited("voice:user:" + uid, max_hits=40) or _rate_limited("voice:" + _client_ip(), max_hits=40):
+        return _too_many(_RL_WINDOW)
+    data = request.get_json(silent=True) or {}
+    text = data.get("text")
+    if not isinstance(text, str):
+        text = ""
+    return jsonify(parse_voice(text[:2000]))
 
 
 @app.route("/healthz")

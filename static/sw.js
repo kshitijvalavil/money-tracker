@@ -20,6 +20,7 @@ const SHELL = [
   "/static/js/ask.js",
   "/static/js/importmap.js",
   "/static/js/fileimport.js",
+  "/static/js/voiceparse.js",
   "/static/vendor/supabase.js",
   "/static/manifest.webmanifest",
   "/static/icons/icon-192.png",

@@ -1066,3 +1066,47 @@ kbd { font: 600 0.7rem/1.4 inherit; border: 1px solid var(--line); border-bottom
 .check input { margin-top: 3px; width: 20px; height: 20px; flex: none; }
 .auth-foot { text-align: center; margin: 14px 0 0; font-size: 0.85rem; }
 .small { font-size: 0.82rem; color: var(--muted); }
+
+/* Add by voice (Sprint 16) --------------------------------------------------- */
+.vo-mic-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 8px 0 18px; }
+.vo-mic { width: 84px; height: 84px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--btn); color: #fff; display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow); transition: transform .12s, background .15s; }
+.vo-mic:hover { background: var(--btn-hover); }
+.vo-mic:focus-visible { outline: 3px solid var(--brand-ring); outline-offset: 3px; }
+.vo-mic:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+.vo-mic.live { background: var(--neg); animation: vo-pulse 1.3s ease-out infinite; }
+@keyframes vo-pulse { 0% { box-shadow: 0 0 0 0 rgba(214,69,64,.5); } 100% { box-shadow: 0 0 0 18px rgba(214,69,64,0); } }
+.vo-mic-hint { color: var(--muted); font-size: 0.9rem; margin: 0; text-align: center; max-width: 42ch; }
+.vo-lang select { width: auto; min-width: 160px; }
+.vo-type { margin-top: 6px; }
+.vo-type-row { display: flex; gap: 8px; }
+.vo-type-row input { flex: 1; min-width: 0; }
+.vo-type-row .btn { flex: none; min-height: 44px; }
+.vo-samples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.vo-sample { background: var(--bg); border: 1px solid var(--line); color: var(--ink); border-radius: 999px;
+  padding: 7px 13px; font-size: 0.85rem; cursor: pointer; min-height: 36px; }
+.vo-sample:hover { border-color: var(--brand); color: var(--brand); }
+.vo-status { min-height: 1.2em; margin: 12px 0 0; color: var(--muted); font-size: 0.9rem; }
+.vo-status.err { color: var(--neg); font-weight: 600; }
+.vo-results { margin-top: 16px; }
+.vo-heard { color: var(--muted); font-size: 0.9rem; margin: -4px 0 14px; overflow-wrap: anywhere; }
+.vo-item { border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; background: var(--bg); }
+.vo-item.vo-done { opacity: .6; }
+.vo-amt-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.vo-amt { display: flex; align-items: center; gap: 6px; font-size: 1.3rem; font-weight: 700; }
+.vo-amt input { width: 150px; font-size: 1.2rem; font-weight: 700; }
+.vo-dir button { padding: 8px 14px; }
+.vo-chip-row { margin: 4px 0 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+.vo-low { background: var(--neg-bg); color: var(--neg); }
+.vo-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.vo-actions .btn { min-height: 44px; }
+.vo-msg { font-size: 0.85rem; color: var(--muted); }
+.vo-msg.err { color: var(--neg); font-weight: 600; }
+.vo-msg.ok { color: var(--pos); font-weight: 600; }
+@media (max-width: 640px) {
+  .vo-amt input { width: 120px; }
+  .vo-actions .btn { flex: 1 1 auto; }
+  .vo-type-row { flex-wrap: wrap; }
+  .vo-type-row .btn { flex: 1 1 100%; }
+}

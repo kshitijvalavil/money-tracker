@@ -97,3 +97,29 @@ python3 tests/statementreader_test.py  # Claude fallback (no network; stubbed)
 # SQL: run via the gate, or directly as the postgres user:
 #   su postgres -s /bin/bash -c "cd $PWD && bash tests/run.sh"
 ```
+
+## 6. Try the voice note (Sprint 16)
+
+Open **Transactions → Add by voice** (or `/voice`). Tap the mic and say something,
+or type it in the box and press **Read it** (there are tappable example phrases).
+You get a card per item; check the amount, account and category, then:
+
+- **Add** — saves an expense/income straight away.
+- **Add as bill** — appears for phrases like "…monthly"; saves a recurring bill.
+- **Send to review** — drops it in To review instead.
+
+Try: "paid 450 to Starbucks on UPI", "chai 20 and auto 80 cash", "got my salary
+85000", "electricity bill 1840 due on the 15th monthly". The parser understands
+rupees/₹, "4.5k", "1.2 lakh", a few Hinglish numbers ("paanch sau"), UPI / card /
+cash, and dates like "today" or "on the 15th". Your voice is never stored.
+
+**The microphone needs HTTPS** — see the HTTPS note in section 4. On plain
+`http://<laptop-ip>` the mic is disabled, but the typed box (and your phone
+keyboard's own mic) still work, so you can try the whole flow.
+
+Run just the voice tests:
+
+```bash
+node tests/voiceparse_test.mjs          # JS parser (191 phrase checks)
+python3 tests/voiceparse_test.py        # Python twin + JS/Python parity + endpoint
+```
