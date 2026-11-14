@@ -70,9 +70,9 @@ def sweep(ctx, tag):
             check(sparks > 0, f"{tag} insights: trend sparklines drawn ({sparks})")
         if path == "/":
             sparks = page.evaluate(
-                "[...document.querySelectorAll('.stat-row .spark')].filter(e => e.innerHTML.length > 20).length"
+                "[...document.querySelectorAll('.figures .spark')].filter(e => e.innerHTML.length > 20).length"
             )
-            check(sparks >= 1, f"{tag} home: stat-tile sparklines drawn ({sparks})")
+            check(sparks >= 1, f"{tag} home: headline sparklines drawn ({sparks})")
             check(svg_filled(page, "#spkForecast") > 20, f"{tag} home: forecast hero sparkline drawn")
         page.close()
 

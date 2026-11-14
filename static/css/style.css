@@ -102,7 +102,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
 .budget-left, .cut-save, .num, td.amt, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 
 /* Small labels: pixel type, the one retro touch. */
-.label, .stat-label, th, .cell-label, .eyebrow, .tool-title, .rv-head {
+.label, .stat-label, th, .cell-label, .eyebrow, .rv-head {
   font-family: var(--pixel); font-weight: 400; font-size: 0.66rem; letter-spacing: .04em;
   text-transform: uppercase; color: var(--muted);
 }
@@ -368,11 +368,10 @@ select:disabled { opacity: .6; cursor: not-allowed; }
 .bulk-status { color: var(--muted); font-size: 0.88rem; }
 .bulk-status:empty { display: none; }
 .card-intro { color: var(--muted); font-size: 0.9rem; margin-bottom: 16px; max-width: 68ch; }
-.scan-status { color: var(--muted); font-size: 0.88rem; margin: -6px 0 14px; }
+
 .table-wrap { overflow-x: auto; position: relative; } /* contains sr-only text too */
 .nowrap { white-space: nowrap; }
-.cell-select { padding: 6px 8px; font-size: 0.88rem; min-width: 132px; }
-.match-note { font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+
 .row-actions { white-space: nowrap; text-align: right; }
 .row-actions .icon-btn { min-width: 32px; min-height: 32px; border-radius: var(--r-ctl); margin-left: 4px; }
 .row-actions .icon-btn:hover:not(:disabled) { background: var(--neg-bg); }
@@ -380,7 +379,7 @@ select:disabled { opacity: .6; cursor: not-allowed; }
 .row-msg[hidden] { display: none; }
 #rows tr td { transition: opacity .2s, background-color .2s; }
 #rows tr.busy td { opacity: .6; }
-#rows tr.leaving td { opacity: 0; }
+
 #rows tr.failed td { background: var(--neg-bg); }
 
 .state { padding: 40px 24px; }
@@ -404,49 +403,8 @@ select:disabled { opacity: .6; cursor: not-allowed; }
   #rows tr td, .toast { transition: none; }
 }
 
-/* Imports: labels only shown in the stacked (phone) layout */
+/* Cell labels are only shown in the stacked (phone) layouts */
 .cell-label { display: none; }
-.cell-hint { font-size: 0.75rem; color: var(--neg); margin-top: 4px; max-width: 26ch; }
-
-/* Imports: below 640px each row becomes a stacked card so date, note,
-   account and category stay visible while approving. */
-@media (max-width: 640px) {
-  #importsTable, #importsTable tbody { display: block; }
-  #importsTable thead {
-    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0);
-  }
-  #rows tr[data-id] {
-    display: grid; grid-template-columns: auto 1fr auto;
-    grid-template-areas:
-      "note note amt"
-      "date source source"
-      "acc acc acc"
-      "cat cat cat"
-      "act act act";
-    gap: 8px 10px; padding: 14px 4px; border-bottom: 1px solid var(--line);
-  }
-  #rows tr[data-id]:last-child { border-bottom: none; }
-  #rows tr[data-id] td { display: block; padding: 0; border: none; }
-  #rows tr.failed { background: var(--neg-bg); border-radius: var(--r-ctl); padding: 14px 10px; }
-  #rows tr.failed td { background: none; }
-  #rows .c-note { grid-area: note; font-weight: 600; }
-  #rows .c-date { grid-area: date; color: var(--muted); font-size: 0.85rem; align-self: center; }
-  #rows .c-source { grid-area: source; align-self: center; }
-  #rows .c-account { grid-area: acc; }
-  #rows .c-category { grid-area: cat; }
-  #rows .amt { grid-area: amt; }
-  #rows .cell-label {
-    display: block; font-size: 0.72rem; font-weight: 600; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .02em; margin-bottom: 4px;
-  }
-  #rows .cell-select { width: 100%; padding: 9px 10px; font-size: 0.95rem; }
-  #rows .cell-hint { max-width: none; }
-  #rows tr[data-id] td.row-actions { grid-area: act; display: flex; gap: 8px; text-align: left; }
-  #rows .row-actions .approve { flex: 1; padding: 10px 12px; font-size: 0.95rem; }
-  #rows .row-actions .icon-btn { min-width: 44px; min-height: 44px; margin: 0;
-                                 border: 1px solid var(--line); }
-  #rows .skeleton-row td:nth-child(n+4) { display: none; }
-}
 
 /* Bills (recurring) ------------------------------------------------------- */
 :root { --warn: #9a5b00; }
@@ -548,6 +506,7 @@ input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--ne
   #billRows .more-actions { flex-basis: 100%; margin: 0; justify-content: space-between; }
   #billRows .more-actions .link-btn { flex: 1; min-height: 44px; border: 1px solid var(--line); }
   #billRows .skeleton-row td:nth-child(n+3) { display: none; }
+
   .suggest, .bill-item { flex-wrap: wrap; }
   .bill-item .mark-paid { flex-basis: 100%; min-height: 44px; }
   .suggest-actions { flex-basis: 100%; justify-content: flex-start; }
@@ -919,7 +878,7 @@ kbd { font: 600 0.7rem/1.4 inherit; border: 1px solid var(--line); border-bottom
 }
 
 /* Stat foot + delta + sparkline */
-.stat-row { margin-top: 0; }
+
 .stat-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; min-height: 30px; }
 .delta { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
 .delta.pos { color: var(--pos); } .delta.neg { color: var(--neg); }
@@ -984,7 +943,6 @@ kbd { font: 600 0.7rem/1.4 inherit; border: 1px solid var(--line); border-bottom
 .pill.brand { background: var(--brand-soft); color: var(--brand); }
 
 /* Ask your money */
-
 
 /* Richer empty state: a soft icon tile, a line and one clear action */
 .empty-state { text-align: center; padding: 34px 22px; }
@@ -1165,7 +1123,7 @@ th.num, .num { text-align: right; }
 .home-col { display: grid; gap: 16px; min-width: 0; align-content: start; }
 .home-col > .card { margin-top: 0; min-width: 0; }
 .t-date { white-space: nowrap; font-family: var(--mono); font-size: 0.82rem; color: var(--muted); }
-.switch-ui::after, .tgl-ui::after { border-radius: 2px !important; }
+.switch-ui::after{ border-radius: 2px !important; }
 
 /* Assistant chat ------------------------------------------------------------- */
 .chat { display: flex; flex-direction: column; min-height: calc(100dvh - 130px); max-width: 760px; }

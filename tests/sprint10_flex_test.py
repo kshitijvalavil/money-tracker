@@ -45,7 +45,7 @@ def run(pw):
     # ---- Dashboard: hero + buckets ----------------------------------------
     page.goto(f"{BASE}/", wait_until="networkidle")
     page.wait_for_selector("#bucketsCard:not([hidden])", timeout=8000)
-    check("Left to spend freely" in text(page, "#ltsHeading"), "hero reads 'Left to spend freely'")
+    check(text(page, "#ltsHeading").strip() == "Left to spend", "hero reads 'Left to spend'")
     hero_left = rupees(text(page, "#ltsValue"))
     check(hero_left and hero_left > 0, f"hero shows a positive amount (got {hero_left})")
     check("flexible" in text(page, "#ltsSub").lower(), "hero sub mentions the flexible budget")
