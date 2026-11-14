@@ -61,7 +61,7 @@
   <div class="fc-legend" id="flowLegend">
     <span><span class="fc-swatch" style="background:var(--muted)"></span>Fixed</span>
     <span><span class="fc-swatch" style="background:var(--brand)"></span>Flexible</span>
-    <span><span class="fc-swatch" style="background:#c9972b"></span>Non-monthly</span>
+    <span><span class="fc-swatch" style="background:var(--warn)"></span>Non-monthly</span>
     <span><span class="fc-swatch" style="background:var(--pos)"></span>Savings</span>
   </div>
   <div id="flowTop" class="flow-top"></div>
@@ -76,12 +76,11 @@
 {% block page_script %}
 <script type="module" nonce="{{ csp_nonce }}">
   import { db, money, esc, thisMonth, toast, today } from "{{ url_for('static', filename='js/app.js') }}";
+  themeCharts();
   const $ = (id) => document.getElementById(id);
   $("month").value = thisMonth();
 
   // A calm, readable categorical palette.
-  const PALETTE = ["#2f5fe0", "#17a2b8", "#27ae60", "#e1a200", "#e4572e",
-                   "#8e44ad", "#d81b60", "#00897b", "#5c6bc0", "#789262"];
   let pie, bars;
 
   // Change line: arrow + percent vs last month, coloured by whether the move
@@ -198,8 +197,8 @@
       data: {
         labels: data.map((d) => d.month),
         datasets: [
-          { label: "Income",  data: data.map((d) => Number(d.income)),  backgroundColor: "#27ae60", borderRadius: 4 },
-          { label: "Expenses", data: data.map((d) => Number(d.expense)), backgroundColor: "#e4572e", borderRadius: 4 },
+          { label: "Income",  data: data.map((d) => Number(d.income)),  backgroundColor: cssVar("--pos"), borderRadius: 1 },
+          { label: "Expenses", data: data.map((d) => Number(d.expense)), backgroundColor: cssVar("--neg"), borderRadius: 1 },
         ],
       },
       options: {
@@ -278,9 +277,9 @@
 <script type="module" nonce="{{ csp_nonce }}">
   // Sprint 12: money-flow (Sankey) for the selected month + 6-month category sparklines.
   import { db, money, esc, thisMonth } from "{{ url_for('static', filename='js/app.js') }}";
-  import { sankey, sparkline, trendDir } from "{{ url_for('static', filename='js/charts.js') }}";
+  import { sankey, sparkline, trendDir, PALETTE, cssVar, themeCharts } from "{{ url_for('static', filename='js/charts.js') }}";
   const $ = (id) => document.getElementById(id);
-  const BK = { fixed: "var(--muted)", flexible: "var(--brand)", non_monthly: "#c9972b", savings: "var(--pos)" };
+  const BK = { fixed: "var(--muted)", flexible: "var(--brand)", non_monthly: "var(--warn)", savings: "var(--pos)" };
   const BK_LABEL = { fixed: "Fixed", flexible: "Flexible", non_monthly: "Non-monthly", savings: "Savings" };
 
   function monthsBack(n) {

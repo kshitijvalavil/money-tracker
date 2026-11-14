@@ -131,3 +131,18 @@ export function sankey(el, columns, links, opts = {}) {
 function esc(s) {
   return String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 }
+
+// One chart palette for the whole app, tuned to the passbook colours and
+// readable on both paper and night backgrounds.
+export const PALETTE = ["#1a6549", "#c98a1b", "#ad3a25", "#3d6a8a", "#7a6a4f",
+                        "#5f9f82", "#dcae52", "#c4705c", "#93a3b1", "#b9ad8f"];
+// Read a design token (e.g. "--pos") so charts follow the active theme.
+export const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// Make Chart.js (loaded as a global on the pages that draw charts) match the app.
+export function themeCharts() {
+  const C = window.Chart; if (!C) return;
+  C.defaults.font.family = cssVar("--sans") || "sans-serif";
+  C.defaults.color = cssVar("--muted");
+  C.defaults.borderColor = cssVar("--line");
+}

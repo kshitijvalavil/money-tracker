@@ -1,124 +1,156 @@
 {% extends "_shell.html" %}
-{% block title %}Ask your money — Money Tracker{% endblock %}
+{% block title %}Ask — Money Tracker{% endblock %}
 {% block content %}
-<div class="page-head">
-  <h1>Ask your money</h1>
-  <span class="pill channel plain">Free · on-device</span>
+<div class="chat" id="chat">
+  <div class="chat-log" id="log" role="log" aria-live="polite" aria-label="Conversation">
+    <div class="chat-intro" id="intro">
+      <h1>Ask about your money</h1>
+      <p class="muted" id="introNote">Balances, what's outstanding, where it went, what's due. Attach a statement and I'll turn it into transactions for you to review.</p>
+      <div class="chat-chips" id="chips"></div>
+    </div>
+  </div>
+
+  <div class="chat-consent card" id="consent" hidden>
+    <p><strong>Before you start.</strong> Your questions, and the figures needed to answer them, are sent to Anthropic's Claude to write the reply. Nothing is stored on our server, and it can't change your data. <a class="card-link" href="/privacy">Privacy notice</a></p>
+    <button type="button" class="btn" id="consentOk">OK, start</button>
+  </div>
+
+  <form class="chat-bar" id="form" autocomplete="off">
+    <div class="chat-file" id="fileChip" hidden><span id="fileName"></span><button type="button" class="icon-btn" id="fileClear" aria-label="Remove the attached file">×</button></div>
+    <div class="chat-row">
+      <input type="file" id="file" class="sr-only" tabindex="-1" accept=".xlsx,.xlsm,.csv,.tsv,.txt,.pdf,.docx">
+      <button type="button" class="icon-btn chat-attach" id="attach" aria-label="Attach a spreadsheet or statement"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="square" aria-hidden="true"><path d="M20 11l-8 8a5 5 0 01-7-7l8-8a3.5 3.5 0 015 5l-8 8a2 2 0 01-3-3l7-7"/></svg></button>
+      <textarea id="q" rows="1" placeholder="Ask a question…" aria-label="Your question" enterkeyhint="send"></textarea>
+      <button class="btn" type="submit" id="send">Ask</button>
+    </div>
+  </form>
 </div>
-
-<form class="card ask-bar" id="askForm" autocomplete="off">
-  <span class="ask-q" aria-hidden="true">?</span>
-  <input id="askInput" class="ask-input" type="text" name="q"
-         placeholder="Ask about your spending, saving or bills…"
-         aria-label="Ask a question about your money">
-  <button class="btn" type="submit">Ask</button>
-</form>
-
-<div id="askAnswer" hidden></div>
-
-<div class="card">
-  <div class="card-head"><h2>Try asking</h2></div>
-  <div class="ask-chips" id="askChips"></div>
-</div>
-
-<p class="card-intro" style="margin-top:14px">
-  Answers are worked out on your device from your own transactions — nothing is
-  sent to any AI service, so this is free and private. It understands amounts,
-  categories, months, bills, balances and goals.
-</p>
 {% endblock %}
 
 {% block page_script %}
 <script type="module" nonce="{{ csp_nonce }}">
-  import { db, esc, toast, today } from "{{ url_for('static', filename='js/app.js') }}";
+  import { db, DEMO, esc, toast, today, authHeaders, refreshImportsBadge } from "{{ url_for('static', filename='js/app.js') }}";
+  import { converse, acceptProposal, AssistantUnavailable } from "{{ url_for('static', filename='js/assistant.js') }}";
   import { answerQuestion, suggestedQuestions } from "{{ url_for('static', filename='js/ask.js') }}";
 
   const $ = (id) => document.getElementById(id);
-  let data = null;
+  const log = $("log"), q = $("q");
+  const history = [];                 // the conversation, in the shape the API wants
+  const ctx = { db, today: today(), file: null, authHeaders, onStep: () => {}, onProposal: showProposal };
+  let busy = false, basic = false, basicData = null, announced = null;   // announced: the file already mentioned to Claude
 
-  function sparkSvg(vals, dir) {
-    if (!vals || vals.length < 2) return "";
-    const w = 150, h = 40, pad = 4;
-    const mn = Math.min(...vals), mx = Math.max(...vals), rng = (mx - mn) || 1, n = vals.length;
-    const x = (i) => pad + i * (w - 2 * pad) / (n - 1);
-    const y = (v) => h - pad - ((v - mn) / rng) * (h - 2 * pad);
-    const col = dir === "down" ? "var(--neg)" : "var(--pos)";
-    let line = `M${x(0).toFixed(1)} ${y(vals[0]).toFixed(1)}`;
-    for (let i = 1; i < n; i++) line += ` L${x(i).toFixed(1)} ${y(vals[i]).toFixed(1)}`;
-    const area = `${line} L${x(n - 1).toFixed(1)} ${(h - pad).toFixed(1)} L${x(0).toFixed(1)} ${(h - pad).toFixed(1)} Z`;
-    return `<svg class="ask-spark" viewBox="0 0 ${w} ${h}" role="img" aria-label="Recent trend">` +
-      `<defs><linearGradient id="askg" x1="0" y1="0" x2="0" y2="1">` +
-      `<stop offset="0" stop-color="${col}" stop-opacity="0.26"/>` +
-      `<stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>` +
-      `<path d="${area}" fill="url(#askg)"/>` +
-      `<path d="${line}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>` +
-      `<circle cx="${x(n - 1).toFixed(1)}" cy="${y(vals[n - 1]).toFixed(1)}" r="2.6" fill="${col}"/></svg>`;
+  // ---- drawing ----------------------------------------------------------------
+  function bubble(cls, html) {
+    $("intro").hidden = true;
+    const el = document.createElement("div");
+    el.className = "msg " + cls; el.innerHTML = html;
+    log.appendChild(el); el.scrollIntoView({ block: "end" });
+    return el;
   }
+  const say = (text) => bubble("from-me", esc(text));
+  const reply = (text) => bubble("from-bot", esc(text).split(/\n{2,}/).map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`).join(""));
 
-  function render(ans) {
-    const box = $("askAnswer");
-    box.hidden = false;
-    if (!ans.ok) {
-      box.innerHTML = `<div class="card"><div class="row-meta" style="margin-bottom:4px">You asked</div>` +
-        `<h2 style="margin-bottom:10px">${esc(ans.question)}</h2>` +
-        `<p class="state-body" style="margin:0">${esc(ans.message)}</p></div>`;
-      box.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      return;
-    }
-    const mini = (ans.breakdown || []).length
-      ? `<div class="mini ask-mini">` + ans.breakdown.map((b) =>
-          `<div><div class="m-label">${esc(b.label)}</div><div class="m-val">${esc(String(b.val))}</div></div>`).join("") + `</div>`
-      : "";
-    box.innerHTML = `<div class="card ask-answer">` +
-      `<div class="row-meta" style="margin-bottom:4px">You asked</div>` +
-      `<h2 style="margin-bottom:12px">${esc(ans.title || ans.question)}</h2>` +
-      `<div class="hero-value">${esc(String(ans.value))}</div>` +
-      `<div class="hero-sub">${esc(ans.sub || "")}</div>` +
-      mini +
-      (ans.spark ? sparkSvg(ans.spark, ans.sparkDir) : "") +
-      (ans.note ? `<div class="hero-foot">${esc(ans.note)}</div>` : "") +
-      `</div>`;
-    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }
-
-  async function ensureData() {
-    if (data) return data;
-    const [bal, bills, goals, tx, cats, rec] = await Promise.all([
-      db.rpc("account_balances"),
-      db.rpc("upcoming_recurring", { p_days: 31 }),
-      db.rpc("goal_progress"),
-      db.from("transactions").select("occurred_on, amount, type, category_id, note").gte("occurred_on", monthsAgo(13)),
-      db.from("categories").select("id, name, kind"),
-      db.from("recurring").select("name, amount, type, frequency, active"),
-    ]);
-    if (bal.error) { toast(bal.error.message); return null; }
-    data = {
-      balances: bal.data || [], bills: bills.data || [], goals: goals.data || [],
-      txns: tx.data || [], categories: cats.data || [], recurring: rec.data || [], today: today(),
+  function showProposal({ rows, label }) {
+    const money = (n) => "₹" + Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 });
+    const body = rows.slice(0, 8).map((r) => `<tr><td class="t-date">${esc(r.date)}</td><td>${esc(r.note || "—")}</td>` +
+      `<td class="amt ${r.direction === "income" ? "pos" : "neg"}">${r.direction === "income" ? "+" : "−"}${money(r.amount)}</td></tr>`).join("");
+    const el = bubble("proposal card", `<div class="eyebrow">For your review</div><h2>${esc(label)}</h2>` +
+      `<table>${body}</table>` + (rows.length > 8 ? `<p class="muted small">and ${rows.length - 8} more</p>` : "") +
+      `<div class="form-actions"><button type="button" class="btn">Add ${rows.length} to review</button>` +
+      `<button type="button" class="btn ghost">Discard</button></div><p class="muted small" role="status"></p>`);
+    const [add, drop] = el.querySelectorAll("button"), note = el.querySelector("[role=status]");
+    drop.onclick = () => { el.querySelector(".form-actions").remove(); note.textContent = "Discarded. Nothing was added."; };
+    add.onclick = async () => {
+      add.disabled = drop.disabled = true; add.textContent = "Adding…";
+      try {
+        const done = await acceptProposal(db, { rows, label });
+        el.querySelector(".form-actions").remove();
+        note.innerHTML = done.added
+          ? `${done.added} waiting in <a class="card-link" href="/imports">To review</a>.` + (done.skipped ? ` ${done.skipped} already imported, skipped.` : "")
+          : "All of these were already imported, so nothing new was added.";
+        refreshImportsBadge();
+      } catch (e) {
+        add.disabled = drop.disabled = false; add.textContent = `Add ${rows.length} to review`;
+        toast("Couldn't add the rows. Check your connection and try again.");
+      }
     };
-    return data;
-  }
-  function monthsAgo(n) {
-    const t = new Date();
-    const d = new Date(t.getFullYear(), t.getMonth() - n, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
   }
 
-  async function ask(q) {
-    const d = await ensureData();
-    if (!d) return;
-    render(answerQuestion(q, d));
+  // ---- basic answers (no AI): used when the assistant isn't switched on ---------
+  async function basicAnswer(text) {
+    if (!basicData) {
+      const ago = new Date(); ago.setMonth(ago.getMonth() - 13, 1);
+      const since = `${ago.getFullYear()}-${String(ago.getMonth() + 1).padStart(2, "0")}-01`;
+      const [bal, bills, goals, tx, cats, rec] = await Promise.all([
+        db.rpc("account_balances"), db.rpc("upcoming_recurring", { p_days: 31 }), db.rpc("goal_progress"),
+        db.from("transactions").select("occurred_on, amount, type, category_id, note").gte("occurred_on", since),
+        db.from("categories").select("id, name, kind"), db.from("recurring").select("name, amount, type, frequency, active"),
+      ]);
+      if (bal.error) throw new Error(bal.error.message);
+      basicData = { balances: bal.data || [], bills: bills.data || [], goals: goals.data || [], txns: tx.data || [],
+        categories: cats.data || [], recurring: rec.data || [], today: today() };
+    }
+    const a = answerQuestion(text, basicData);
+    if (!a.ok) return a.message;
+    return [`${a.title || a.question}: ${a.value}`, a.sub, ...(a.breakdown || []).map((b) => `- ${b.label}: ${b.val}`), a.note].filter(Boolean).join("\n");
   }
 
-  $("askChips").innerHTML = suggestedQuestions().map((q) =>
-    `<button type="button" class="pill brand ask-chip">${esc(q)}</button>`).join("");
-  $("askChips").querySelectorAll(".ask-chip").forEach((c) =>
-    c.addEventListener("click", () => { $("askInput").value = c.textContent; ask(c.textContent); }));
+  // ---- sending -----------------------------------------------------------------
+  async function send(text) {
+    text = text.trim();
+    if (!text || busy) return;
+    if (!consented()) { $("consent").hidden = false; $("consentOk").focus(); return; }
+    busy = true; $("send").disabled = true; q.value = ""; grow();
+    const fresh = ctx.file && ctx.file !== announced ? ctx.file : null;
+    say(text + (fresh ? `\n[${fresh.name}]` : ""));
+    if (fresh) { announced = fresh; $("fileChip").hidden = true; }
+    const wait = bubble("from-bot waiting", "Thinking…");
+    ctx.onStep = (t) => { wait.textContent = t; };
+    try {
+      if (basic) reply(await basicAnswer(text));
+      else {
+        history.push({ role: "user", content: text + (fresh ? `\n\n[Attached file: ${fresh.name}]` : "") });
+        try { reply(await converse(ctx, history)); }
+        catch (e) {
+          if (!(e instanceof AssistantUnavailable)) throw e;
+          basic = true; history.length = 0;
+          $("introNote").textContent = "Basic answers only: the full assistant isn't switched on for this server yet.";
+          bubble("note", "The full assistant isn't switched on for this server yet, so this is a basic answer worked out on your device.");
+          reply(await basicAnswer(text));
+        }
+      }
+    } catch (e) {
+      // Drop the unanswered turn so the next question starts from a valid conversation.
+      while (history.length && history[history.length - 1].role !== "assistant") history.pop();
+      bubble("note err", esc(e?.message || "Something went wrong. Please try again."));
+    } finally {
+      wait.remove(); busy = false; $("send").disabled = false; q.focus();
+    }
+  }
 
-  $("askForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const q = $("askInput").value.trim();
-    if (q) ask(q);
-  });
+  // ---- consent (once per device) -------------------------------------------------
+  const KEY = "mt.assistantOk";
+  const consented = () => { try { return DEMO || localStorage.getItem(KEY) === "1"; } catch { return true; } };
+  $("consentOk").onclick = () => { try { localStorage.setItem(KEY, "1"); } catch {} $("consent").hidden = true; if (q.value.trim()) send(q.value); else q.focus(); };
+
+  // ---- composer --------------------------------------------------------------------
+  const grow = () => { q.style.height = "auto"; q.style.height = Math.min(q.scrollHeight, 140) + "px"; };
+  q.addEventListener("input", grow);
+  q.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(q.value); } });
+  $("form").addEventListener("submit", (e) => { e.preventDefault(); send(q.value); });
+  $("attach").onclick = () => $("file").click();
+  $("file").onchange = () => {
+    const f = $("file").files[0]; if (!f) return;
+    ctx.file = f; $("fileName").textContent = f.name; $("fileChip").hidden = false;
+    if (!q.value.trim()) q.value = "Turn this file into transactions.";
+    grow(); q.focus();
+  };
+  $("fileClear").onclick = () => { ctx.file = null; $("file").value = ""; $("fileChip").hidden = true; };
+
+  const STARTERS = ["What's outstanding right now?", "How much did I spend this month, and on what?", "Can I afford ₹20,000 this weekend?", ...suggestedQuestions().slice(0, 2)];
+  $("chips").innerHTML = STARTERS.map((s) => `<button type="button" class="chat-chip">${esc(s)}</button>`).join("");
+  $("chips").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => send(b.textContent)));
+  if (DEMO) window.__assistant = { ctx, history, send };   // for browser tests
+  q.focus();
 </script>
 {% endblock %}

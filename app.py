@@ -17,6 +17,7 @@ from collections import defaultdict, deque
 
 from flask import Flask, g, jsonify, redirect, render_template, request
 
+from assistant import AssistantError, reply as assistant_reply
 from billreader import BillReadError, parse_bill_text, read_bill
 from statementreader import read_statement
 from xlsreader import XlsReadError, read_xls
@@ -59,7 +60,7 @@ DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
 MAINTENANCE = os.environ.get("MAINTENANCE_MODE", "").lower() in ("1", "true", "yes")
 # Bump this date whenever templates/privacy.html changes in a way people should
 # re-accept. Everyone is asked to accept the current version before using the app.
-NOTICE_VERSION = "2026-11-07"
+NOTICE_VERSION = "2026-11-14"
 # Optional: where people can send privacy questions and complaints (set on Render).
 PRIVACY_CONTACT = os.environ.get("PRIVACY_CONTACT_EMAIL", "").strip()
 _MAINTENANCE_OPEN = ("/healthz", "/privacy", "/.well-known/", "/api/status", "/deploying", "/offline", "/sw.js", "/static/")
@@ -207,7 +208,7 @@ def _signed_in_user():
 
 
 def _too_many(window):
-    resp = jsonify({"error": "Too many reads just now. Please wait a moment and try again."})
+    resp = jsonify({"error": "Too many requests just now. Please wait a moment and try again."})
     resp.headers["Retry-After"] = str(window)
     return resp, 429
 
@@ -436,6 +437,32 @@ def api_read_statement():
         )
     except BillReadError as e:
         return jsonify({"error": e.message}), e.status
+    return jsonify(out)
+
+
+@app.route("/api/assistant", methods=["POST"])
+def api_assistant():
+    # One turn of the assistant chat. The browser holds the conversation and runs
+    # the data tools itself; this only forwards to Claude. Verified sign-in, and
+    # counted per person and per address (each question is a few turns).
+    uid = _signed_in_user()
+    if not uid:
+        return jsonify({"error": "Please sign in and try again."}), 401
+    if (_rate_limited("ask:user:" + uid, max_hits=40) or _rate_limited("ask:" + _client_ip(), max_hits=40)
+            or _rate_limited("ask:day:" + uid, max_hits=400, window=86400)):
+        return _too_many(_RL_WINDOW)
+    data = request.get_json(silent=True) or {}
+    try:
+        out = assistant_reply(
+            data.get("messages"),
+            today=data.get("today") or "",
+            demo=DEMO_MODE,
+            api_key=os.environ.get("ANTHROPIC_API_KEY"),
+            model=os.environ.get("ASSISTANT_MODEL"),
+            effort=os.environ.get("ASSISTANT_EFFORT"),
+        )
+    except AssistantError as e:
+        return jsonify({"error": e.message, "unavailable": e.status == 503}), e.status
     return jsonify(out)
 
 

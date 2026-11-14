@@ -24,6 +24,7 @@
 </section>
 
 <div class="home-grid">
+ <div class="home-col">
   <section class="card" aria-labelledby="ltsHeading">
     <div class="card-head"><h2 id="ltsHeading">Left to spend</h2><a href="/budgets" class="card-link">Budgets</a></div>
     <div id="ltsCard" hidden>
@@ -36,6 +37,15 @@
     <div id="bucketsCard" class="buckets" hidden><div id="buckets"></div></div>
   </section>
 
+  <section class="card" aria-labelledby="recentHeading">
+    <div class="card-head"><h2 id="recentHeading">Latest</h2><a href="/transactions" class="card-link">All transactions</a></div>
+    <div class="table-wrap"><table class="tx-table tx-compact">
+      <thead class="sr-only"><tr><th>Date</th><th>Category</th><th>Account</th><th>Note</th><th>Amount</th></tr></thead>
+      <tbody id="recent"></tbody>
+    </table></div>
+  </section>
+ </div>
+ <div class="home-col">
   <section class="card" aria-labelledby="fcHeading">
     <div class="card-head"><h2 id="fcHeading">Month-end forecast</h2><a href="/forecast" class="card-link">Forecast</a></div>
     <div class="hero-value" id="fcCardVal">—</div>
@@ -52,13 +62,7 @@
     </ul>
   </section>
 
-  <section class="card" aria-labelledby="recentHeading">
-    <div class="card-head"><h2 id="recentHeading">Latest</h2><a href="/transactions" class="card-link">All transactions</a></div>
-    <div class="table-wrap"><table class="tx-table tx-compact">
-      <thead class="sr-only"><tr><th>Date</th><th>Category</th><th>Account</th><th>Note</th><th>Amount</th></tr></thead>
-      <tbody id="recent"></tbody>
-    </table></div>
-  </section>
+ </div>
 </div>
 {% endblock %}
 

@@ -1,8 +1,8 @@
 /* The "we are updating" page. Self-contained: it must still look right when
    everything else is down, so it uses no shared stylesheet and no scripts but its own. */
-:root { color-scheme: light dark; --bg: #f6f7f9; --ink: #141b2d; --muted: #5d6879; --brand: #2f5fe0; --line: #d9dee7; --ok: #1f8a4c; }
+:root { color-scheme: light dark; --bg: #f3eee3; --ink: #1c1b18; --muted: #655f53; --brand: #1c1b18; --line: #d9d1bf; --ok: #17704a; --on-ok: #fcfaf5; }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #0e1320; --ink: #e7ecf3; --muted: #9aa6b8; --brand: #6a8df2; --line: #26304a; --ok: #52d68a; }
+  :root { --bg: #121310; --ink: #ece7da; --muted: #a39d8e; --brand: #ece7da; --line: #34372f; --ok: #7fd1a6; --on-ok: #121310; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
@@ -18,8 +18,8 @@ body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify
 .kicker { margin: 0 0 6px; font-size: 0.78rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 h1 { font-size: 1.55rem; line-height: 1.25; margin: 0 0 10px; }
 .lead { margin: 0 0 18px; line-height: 1.55; color: var(--muted); }
-.chatter { min-height: 3.2em; margin: 0 0 18px; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 10px; line-height: 1.45; font-size: 0.95rem; }
-.open { display: inline-block; margin: 0 0 14px; padding: 12px 22px; border-radius: 10px; background: var(--ok); color: #fff;
+.chatter { min-height: 3.2em; margin: 0 0 18px; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 4px; line-height: 1.45; font-size: 0.95rem; }
+.open { display: inline-block; margin: 0 0 14px; padding: 12px 22px; border-radius: 4px; background: var(--ok); color: var(--on-ok);
         font-weight: 700; text-decoration: none; min-height: 44px; }
 .open[hidden] { display: none; }
 .open:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }

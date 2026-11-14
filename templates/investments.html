@@ -64,7 +64,9 @@
 
 {% block page_script %}
 <script type="module" nonce="{{ csp_nonce }}">
+  import { PALETTE, cssVar, themeCharts } from "{{ url_for('static', filename='js/charts.js') }}";
   import { db, money, esc, toast, today } from "{{ url_for('static', filename='js/app.js') }}";
+  themeCharts();
   const $ = (id) => document.getElementById(id);
 
   // Must match the check constraint in migration 0010.
@@ -72,7 +74,6 @@
     mutual_fund: "Mutual fund", stocks: "Stocks", fixed_deposit: "Fixed deposit",
     gold: "Gold", retirement: "PPF / EPF / NPS", crypto: "Crypto", other: "Other",
   };
-  const PALETTE = ["#004D61", "#5CC0D6", "#27ae60", "#e1a200", "#e4572e", "#8e44ad", "#789262"];
   $("kind").innerHTML = Object.entries(KINDS)
     .map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
 

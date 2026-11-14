@@ -8,7 +8,7 @@ images/text are used for this one call and never stored or logged.
 import json
 import re
 
-from billreader import ANTHROPIC_VERSION, API_URL, BillReadError, MAX_AMOUNT, _call_model  # noqa: F401
+from billreader import BillReadError, MAX_AMOUNT, _call_model
 
 DEFAULT_MODEL = "claude-sonnet-5-5"
 ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp"}
