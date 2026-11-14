@@ -14,7 +14,7 @@ jobs:
     name: Parser, scanner and database tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0          # the secret scan reads the full history
       - uses: actions/setup-python@v5
@@ -34,7 +34,7 @@ jobs:
     name: Browser smoke test (demo mode)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
