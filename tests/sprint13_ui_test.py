@@ -74,18 +74,17 @@ def feature_checks(ctx):
     page = ctx.new_page()
     page.goto(BASE + "/ask", wait_until="networkidle")
     page.wait_for_timeout(600)
-    chips = page.locator(".ask-chip").count()
+    # The chat itself is covered by tests/assistant_ui_test.py; here: a starter
+    # question and a typed one both get a rupee answer.
+    chips = page.locator(".chat-chip").count()
     check(chips >= 4, f"ask: suggested questions shown ({chips})")
-    check("Free" in page.inner_text(".page-head"), "ask: free/on-device badge present")
-    page.locator(".ask-chip").first.click()
-    page.wait_for_timeout(500)
-    ans = page.inner_text("#askAnswer")
-    check("₹" in ans, f"ask: suggested question returns a rupee answer")
-    # A typed question.
-    page.fill("#askInput", "what is my balance")
-    page.locator("#askForm button[type=submit]").click()
-    page.wait_for_timeout(400)
-    check("₹" in page.inner_text("#askAnswer"), "ask: typed balance question answered")
+    page.locator(".chat-chip").first.click()
+    page.wait_for_selector(".msg.from-bot:not(.waiting)", timeout=15000)
+    check("₹" in page.inner_text(".msg.from-bot"), "ask: suggested question returns a rupee answer")
+    page.fill("#q", "what is my balance")
+    page.keyboard.press("Enter")
+    page.wait_for_function("() => document.querySelectorAll('.msg.from-bot:not(.waiting)').length === 2", timeout=15000)
+    check("₹" in page.locator(".msg.from-bot").last.inner_text(), "ask: typed question answered (Enter sends)")
     page.close()
 
 

@@ -47,8 +47,9 @@ def main():
 
         pg.goto(BASE + "/investments", wait_until="networkidle")
         pg.wait_for_timeout(600)
-        check(pg.locator(".nav a[href='/investments']").get_attribute("class") == "active",
-              "Investments nav item is active")
+        check("active" in (pg.locator(".nav a[href='/net-worth']").get_attribute("class") or "")
+              and pg.locator(".seg-nav a[href='/investments']").get_attribute("aria-current") == "page",
+              "Wealth is the active menu entry and Investments the active tab")
         check(pg.locator("#holdingRows tr").count() == 5, "demo portfolio shows 5 holdings")
         check(pg.locator("#alloc").count() == 1, "allocation chart renders")
         value = money_val(pg.inner_text("#sumValue"))

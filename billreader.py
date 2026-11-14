@@ -7,11 +7,9 @@ image is used only for this one call and is never stored or logged.
 import json
 import os
 import re
-import urllib.error
-import urllib.request
 
-API_URL = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_VERSION = "2023-06-01"
+import claude_client
+
 DEFAULT_MODEL = "claude-haiku-5-5"
 ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp"}
 FREQS = {"weekly", "monthly", "quarterly", "yearly"}
@@ -94,27 +92,15 @@ def _clean(obj):
 
 
 def _call_model(body, api_key, timeout):
-    """POST to the Messages API and return the parsed response, or raise BillReadError."""
-    req = urllib.request.Request(
-        API_URL,
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "content-type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": ANTHROPIC_VERSION,
-        },
-    )
+    """Ask Claude and return the parsed response, or raise BillReadError."""
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        status = 429 if e.code == 429 else 502
-        msg = ("The bill reader is busy right now. Wait a moment and try again."
-               if e.code == 429 else
-               "Couldn't read the bill just now. Please try again.")
-        raise BillReadError(status, msg)
-    except (urllib.error.URLError, TimeoutError, OSError):
-        raise BillReadError(504, "Reading the bill timed out. Check your connection and try again.")
+        return claude_client.call(body, api_key, timeout)
+    except claude_client.ClaudeError as e:
+        if e.kind == "busy":
+            raise BillReadError(429, "The bill reader is busy right now. Wait a moment and try again.")
+        if e.kind == "timeout":
+            raise BillReadError(504, "Reading the bill timed out. Check your connection and try again.")
+        raise BillReadError(502, "Couldn't read the bill just now. Please try again.")
 
 
 # ---------------------------------------------------------------------------

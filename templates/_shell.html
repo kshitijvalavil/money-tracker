@@ -1,33 +1,35 @@
 {% extends "base.html" %}
-{# Signed-in shell: sidebar nav (desktop) + off-canvas drawer and bottom tab bar (mobile). #}
+{# Signed-in shell. Desktop: a left rail. Phone: top bar + bottom tabs, with the rail as a drawer.
+   Six destinations; related pages sit behind section tabs instead of separate menu entries. #}
+{% set SECTIONS = {
+  "transactions": [("transactions", "/transactions", "History"), ("bills", "/bills", "Bills"), ("calendar", "/calendar", "Calendar"), ("imports", "/imports", "To review"), ("import", "/import", "Import a file")],
+  "plan": [("budgets", "/budgets", "Budgets"), ("goals", "/goals", "Goals"), ("forecast", "/forecast", "Forecast")],
+  "wealth": [("networth", "/net-worth", "Net worth"), ("accounts", "/accounts", "Accounts"), ("investments", "/investments", "Investments")],
+} %}
+{% set NAV = [("home", "/", "Home", "home"), ("transactions", "/transactions", "Transactions", "tx"), ("plan", "/budgets", "Plan", "plan"), ("wealth", "/net-worth", "Wealth", "wealth"), ("insights", "/insights", "Insights", "insights"), ("ask", "/ask", "Ask", "ask")] %}
+{% set ICONS = {"home": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M4 11l8-7 8 7v9h-5v-6H9v6H4z\"/></svg>", "tx": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M7 20V5M7 5L3.5 8.5M7 5l3.5 3.5M17 4v15M17 19l3.5-3.5M17 19l-3.5-3.5\"/></svg>", "plan": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-3\"/></svg>", "wealth": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M4 9l8-5 8 5M5 9v9M9.5 9v9M14.5 9v9M19 9v9M3 20h18\"/></svg>", "insights": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M4 18l5-6 4 3 7-9M15 6h5v5\"/></svg>", "ask": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M4 5h16v11H11l-5 4v-4H4z\"/><path d=\"M9 10h.01M12 10h.01M15 10h.01\"/></svg>", "bell": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M6 17V10a6 6 0 0112 0v7M4 17h16M10 20h4\"/></svg>", "settings": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M4 7h10M18 7h2M4 17h2M10 17h10\"/><rect x=\"14\" y=\"5\" width=\"4\" height=\"4\"/><rect x=\"6\" y=\"15\" width=\"4\" height=\"4\"/></svg>", "plus": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg>", "menu": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M4 7h16M4 12h16M4 17h16\"/></svg>", "pen": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M5 19h4L19 9l-4-4L5 15z\"/></svg>", "mic": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><rect x=\"9\" y=\"4\" width=\"6\" height=\"10\"/><path d=\"M6 11a6 6 0 0012 0M12 17v3\"/></svg>", "cam": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M4 8h4l1.5-2h5L16 8h4v11H4z\"/><rect x=\"10\" y=\"11\" width=\"4\" height=\"4\"/></svg>", "file": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M6 3h8l4 4v14H6zM14 3v4h4M9 13h6M9 17h6\"/></svg>", "close": "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"square\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6L6 18\"/></svg>"} %}
 {% block body %}
 <div class="app">
   <header class="topbar">
-    <button class="hamburger" id="menuBtn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     <div class="brand">Money<span>Tracker</span></div>
-    <a href="/alerts" class="topbar-bell {{ 'active' if page=='alerts' }}" aria-label="Alerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg><span class="nav-badge dot" id="alertsBadgeTop" aria-hidden="true" hidden></span></a>
+    <a href="/ask" class="{{ 'active' if section=='ask' }}" aria-label="Ask the assistant">{{ ICONS.ask|safe }}</a>
+    <a href="/alerts" class="topbar-bell {{ 'active' if page=='alerts' }}" aria-label="Alerts">{{ ICONS.bell|safe }}<span class="nav-badge dot" id="alertsBadgeTop" aria-hidden="true" hidden></span></a>
+    <button class="hamburger" id="menuBtn" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">{{ ICONS.menu|safe }}</button>
   </header>
   <div class="scrim" id="scrim" hidden></div>
 
   <aside class="sidebar" id="sidebar">
     <div class="brand">Money<span>Tracker</span></div>
-    <nav class="nav">
-      <a href="/"             class="{{ 'active' if page=='dashboard' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 001 1h12a1 1 0 001-1v-9"/></svg></span> Dashboard</a>
-      <a href="/transactions" class="{{ 'active' if page in ('transactions', 'bills', 'imports') }}" data-nav="imports"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 16V5M7 5L4 8M7 5l3 3"/><path d="M17 8v11M17 19l3-3M17 19l-3-3"/></svg></span> Transactions
-        <span class="nav-badge" id="importsBadge" aria-hidden="true" hidden></span></a>
-      <a href="/alerts"       class="{{ 'active' if page=='alerts' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></span> Alerts
+    <nav class="nav" aria-label="Main">
+      <button type="button" class="add-btn" data-open-add><span class="ico">{{ ICONS.plus|safe }}</span> Add</button>
+      {% for key, href, label, icon in NAV %}
+      <a href="{{ href }}" class="{{ 'active' if section==key }}"{% if key=='transactions' %} data-nav="imports"{% endif %}><span class="ico">{{ ICONS[icon]|safe }}</span> {{ label }}{% if key=='transactions' %}
+        <span class="nav-badge" id="importsBadge" aria-hidden="true" hidden></span>{% endif %}</a>
+      {% endfor %}
+      <div class="nav-sep" role="presentation"></div>
+      <a href="/alerts" class="{{ 'active' if page=='alerts' }}"><span class="ico">{{ ICONS.bell|safe }}</span> Alerts
         <span class="nav-badge" id="alertsBadge" aria-hidden="true" hidden></span></a>
-      <a href="/accounts"     class="{{ 'active' if page=='accounts' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-5 9 5"/><path d="M5 9v9M9 9v9M15 9v9M19 9v9"/><path d="M3 20h18"/></svg></span> Accounts</a>
-      <a href="/budgets"      class="{{ 'active' if page=='budgets' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/></svg></span> Budgets</a>
-      <a href="/calendar"     class="{{ 'active' if page=='calendar' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></span> Bills calendar</a>
-      <a href="/goals"        class="{{ 'active' if page=='goals' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 21V4"/><path d="M6 4h12l-2.5 3.5L18 11H6"/></svg></span> Goals</a>
-      <a href="/net-worth"    class="{{ 'active' if page=='networth' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg></span> Net worth</a>
-      <a href="/investments"  class="{{ 'active' if page=='investments' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></span> Investments</a>
-      <a href="/wealth"       class="{{ 'active' if page=='wealth' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 12V3"/><path d="M12 12l7 4.5"/></svg></span> Wealth</a>
-      <a href="/forecast"     class="{{ 'active' if page=='forecast' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l5-5 4 3 5-7"/><path d="M17 8h4v4"/><path d="M3 21h18"/></svg></span> Forecast</a>
-      <a href="/insights"     class="{{ 'active' if page=='insights' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 00-3.8 10.6c.5.5.8 1.2.8 1.9v.5h6v-.5c0-.7.3-1.4.8-1.9A6 6 0 0012 3z"/></svg></span> Insights</a>
-      <a href="/ask"          class="{{ 'active' if page=='ask' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 114 2c-.9.7-1.6 1.2-1.6 2.4"/><path d="M12 17h.01"/></svg></span> Ask your money</a>
-      <a href="/profile"      class="{{ 'active' if page=='profile' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></span> Profile &amp; settings</a>
+      <a href="/profile" class="{{ 'active' if page=='profile' }}"><span class="ico">{{ ICONS.settings|safe }}</span> Settings</a>
     </nav>
     <div class="bottom">
       <button class="theme-toggle" id="themeToggle"><span class="ico" id="themeIcon"></span> <span id="themeLabel">Night mode</span></button>
@@ -37,24 +39,41 @@
   </aside>
 
   <main class="content">
+    {% if SECTIONS[section] %}
+    <nav class="seg-nav" aria-label="{{ section|capitalize }} pages">
+      {% for key, href, label in SECTIONS[section] %}
+      <a href="{{ href }}"{% if page == key %} aria-current="page"{% endif %}>{{ label }}{% if key=='imports' %}
+        <span class="seg-count" data-imports-count hidden></span>{% endif %}</a>
+      {% endfor %}
+    </nav>
+    {% endif %}
     {% block content %}{% endblock %}
   </main>
 
   <nav class="tabbar" aria-label="Primary">
-    <a href="/"             class="{{ 'active' if page=='dashboard' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 001 1h12a1 1 0 001-1v-9"/></svg></span><span class="lbl">Home</span></a>
-    <a href="/transactions" class="{{ 'active' if page in ('transactions', 'bills', 'imports') }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 16V5M7 5L4 8M7 5l3 3"/><path d="M17 8v11M17 19l3-3M17 19l-3-3"/></svg></span><span class="lbl">Transactions</span></a>
-    <a href="/transactions" class="fab" aria-label="Add a transaction"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span></a>
-    <a href="/insights"     class="{{ 'active' if page=='insights' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 00-3.8 10.6c.5.5.8 1.2.8 1.9v.5h6v-.5c0-.7.3-1.4.8-1.9A6 6 0 0012 3z"/></svg></span><span class="lbl">Insights</span></a>
-    <a href="/profile"      class="{{ 'active' if page=='profile' }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></span><span class="lbl">Profile</span></a>
+    <a href="/" class="{{ 'active' if section=='home' }}"><span class="ico">{{ ICONS.home|safe }}</span><span class="lbl">Home</span></a>
+    <a href="/transactions" class="{{ 'active' if section=='transactions' }}" aria-label="Transactions"><span class="ico">{{ ICONS.tx|safe }}</span><span class="lbl">Activity</span></a>
+    <button type="button" class="fab" data-open-add aria-label="Add a transaction"><span class="ico">{{ ICONS.plus|safe }}</span></button>
+    <a href="/budgets" class="{{ 'active' if section=='plan' }}"><span class="ico">{{ ICONS.plan|safe }}</span><span class="lbl">Plan</span></a>
+    <a href="/net-worth" class="{{ 'active' if section=='wealth' }}"><span class="ico">{{ ICONS.wealth|safe }}</span><span class="lbl">Wealth</span></a>
   </nav>
 </div>
+
+<dialog class="sheet" id="addSheet" aria-labelledby="addSheetTitle">
+  <div class="sheet-head"><h2 id="addSheetTitle">Add</h2><button type="button" class="icon-btn" id="addSheetClose" aria-label="Close">{{ ICONS.close|safe }}</button></div>
+  <ul class="sheet-list">
+    <li><a href="/transactions#add"><span class="ico">{{ ICONS.pen|safe }}</span><strong>Type it</strong><small>One expense, income or transfer</small></a></li>
+    <li><a href="/voice"><span class="ico">{{ ICONS.mic|safe }}</span><strong>Say it</strong><small>"Paid 450 for lunch by UPI"</small></a></li>
+    <li><a href="/bills#snap"><span class="ico">{{ ICONS.cam|safe }}</span><strong>Snap a bill</strong><small>Photo of a bill or receipt</small></a></li>
+    <li><a href="/import"><span class="ico">{{ ICONS.file|safe }}</span><strong>Import a file</strong><small>Excel, CSV, PDF or Word statement</small></a></li>
+  </ul>
+</dialog>
 <script type="module" nonce="{{ csp_nonce }}">
   import { requireAuth, signOut, initThemeToggle, refreshImportsBadge, refreshAlertsBadge, postDueBills } from "{{ url_for('static', filename='js/app.js') }}";
   document.querySelector(".nav a.active")?.setAttribute("aria-current", "page");
   document.querySelector(".tabbar a.active")?.setAttribute("aria-current", "page");
 
-  // Mobile drawer: the hamburger opens the sidebar off-canvas; the scrim,
-  // Escape, or tapping a link closes it.
+  // Phone drawer: the menu button slides the rail in; the scrim, Escape or a link closes it.
   const sidebar = document.getElementById("sidebar");
   const scrim = document.getElementById("scrim");
   const menuBtn = document.getElementById("menuBtn");
@@ -63,10 +82,16 @@
     scrim.hidden = !open;
     menuBtn.setAttribute("aria-expanded", String(open));
   };
-  menuBtn?.addEventListener("click", () => setDrawer(!sidebar.classList.contains("open")));
-  scrim?.addEventListener("click", () => setDrawer(false));
-  sidebar?.querySelectorAll(".nav a").forEach((a) => a.addEventListener("click", () => setDrawer(false)));
+  menuBtn.addEventListener("click", () => setDrawer(!sidebar.classList.contains("open")));
+  scrim.addEventListener("click", () => setDrawer(false));
+  sidebar.querySelectorAll(".nav a").forEach((a) => a.addEventListener("click", () => setDrawer(false)));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") setDrawer(false); });
+
+  // Add sheet: every way to add something, from any page.
+  const sheet = document.getElementById("addSheet");
+  document.querySelectorAll("[data-open-add]").forEach((b) => b.addEventListener("click", () => { setDrawer(false); sheet.showModal(); }));
+  document.getElementById("addSheetClose").addEventListener("click", () => sheet.close());
+  sheet.addEventListener("click", (e) => { if (e.target === sheet) sheet.close(); });   // tap outside
 
   initThemeToggle(document.getElementById("themeToggle"),
                   document.getElementById("themeIcon"),
@@ -77,7 +102,7 @@
   if (user) {
     postDueBills();          // auto-post bills that came due (once per page load)
     refreshImportsBadge();
-    refreshAlertsBadge();    // Sprint 13: unread-alerts count on the bell
+    refreshAlertsBadge();
     // New imports can land while the tab sits in the background.
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") { refreshImportsBadge(); refreshAlertsBadge(); }

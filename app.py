@@ -17,10 +17,10 @@ from collections import defaultdict, deque
 
 from flask import Flask, g, jsonify, redirect, render_template, request
 
+from assistant import AssistantError, reply as assistant_reply
 from billreader import BillReadError, parse_bill_text, read_bill
 from statementreader import read_statement
 from xlsreader import XlsReadError, read_xls
-from voiceparse import parse_voice
 
 
 def _load_dotenv(path=".env"):
@@ -60,7 +60,7 @@ DEMO_MODE = os.environ.get("DEMO_MODE", "").lower() in ("1", "true", "yes")
 MAINTENANCE = os.environ.get("MAINTENANCE_MODE", "").lower() in ("1", "true", "yes")
 # Bump this date whenever templates/privacy.html changes in a way people should
 # re-accept. Everyone is asked to accept the current version before using the app.
-NOTICE_VERSION = "2026-11-07"
+NOTICE_VERSION = "2026-11-14"
 # Optional: where people can send privacy questions and complaints (set on Render).
 PRIVACY_CONTACT = os.environ.get("PRIVACY_CONTACT_EMAIL", "").strip()
 _MAINTENANCE_OPEN = ("/healthz", "/privacy", "/.well-known/", "/api/status", "/deploying", "/offline", "/sw.js", "/static/")
@@ -208,7 +208,7 @@ def _signed_in_user():
 
 
 def _too_many(window):
-    resp = jsonify({"error": "Too many reads just now. Please wait a moment and try again."})
+    resp = jsonify({"error": "Too many requests just now. Please wait a moment and try again."})
     resp.headers["Retry-After"] = str(window)
     return resp, 429
 
@@ -240,124 +240,51 @@ def inject_config():
     }
 
 
-@app.route("/")
-def dashboard():
-    return render_template("dashboard.html", page="dashboard")
+# Every page is a template; the browser does the data work. (path, template,
+# page key, section). The section picks the highlighted menu entry and the tab
+# strip in templates/_shell.html.
+PAGES = [
+    ("/", "dashboard.html", "dashboard", "home"),
+    ("/login", "login.html", "login", ""),
+    ("/consent", "consent.html", "consent", ""),
+    ("/privacy", "privacy.html", "privacy", ""),
+    ("/transactions", "transactions.html", "transactions", "transactions"),
+    ("/bills", "bills.html", "bills", "transactions"),
+    ("/calendar", "calendar.html", "calendar", "transactions"),
+    ("/imports", "imports.html", "imports", "transactions"),
+    ("/import", "import.html", "import", "transactions"),
+    ("/voice", "voice.html", "voice", "transactions"),
+    ("/budgets", "budgets.html", "budgets", "plan"),
+    ("/goals", "goals.html", "goals", "plan"),
+    ("/forecast", "forecast.html", "forecast", "plan"),
+    ("/net-worth", "networth.html", "networth", "wealth"),
+    ("/accounts", "accounts.html", "accounts", "wealth"),
+    ("/investments", "investments.html", "investments", "wealth"),
+    ("/insights", "insights.html", "insights", "insights"),
+    ("/ask", "ask.html", "ask", "ask"),
+    ("/alerts", "alerts.html", "alerts", ""),
+    ("/profile", "profile.html", "profile", ""),
+]
 
 
-@app.route("/login")
-def login():
-    return render_template("login.html", page="login")
+def _page_view(template, page, section):
+    def view():
+        return render_template(template, page=page, section=section)
+    return view
 
 
-@app.route("/transactions")
-def transactions():
-    return render_template("transactions.html", page="transactions")
+for _path, _template, _page, _section in PAGES:
+    app.add_url_rule(_path, endpoint="page_" + _page, view_func=_page_view(_template, _page, _section))
 
-
-@app.route("/accounts")
-def accounts():
-    return render_template("accounts.html", page="accounts")
-
-
-@app.route("/budgets")
-def budgets():
-    return render_template("budgets.html", page="budgets")
-
-
-@app.route("/bills")
-def bills():
-    return render_template("bills.html", page="bills")
-
-
-@app.route("/calendar")
-def calendar():
-    # Sprint 11: a month view of recurring bills and their due dates.
-    return render_template("calendar.html", page="calendar")
-
-
-@app.route("/goals")
-def goals():
-    return render_template("goals.html", page="goals")
-
-
-@app.route("/investments")
-def investments():
-    return render_template("investments.html", page="investments")
-
-
-@app.route("/net-worth")
-def net_worth():
-    # Sprint 11: everything you own minus everything you owe, over time.
-    return render_template("networth.html", page="networth")
-
-
-@app.route("/wealth")
-def wealth():
-    # Sprint 11: where your money is invested (allocation + holdings).
-    return render_template("wealth.html", page="wealth")
-
-
-@app.route("/forecast")
-def forecast():
-    # Sprint 12: where your balance is headed by the end of the month.
-    return render_template("forecast.html", page="forecast")
-
-
-@app.route("/insights")
-def insights():
-    return render_template("insights.html", page="insights")
-
-
-@app.route("/alerts")
-def alerts():
-    # Sprint 13: an Alerts centre — budget, bill, balance and goal warnings,
-    # computed in the browser from the user's own rows.
-    return render_template("alerts.html", page="alerts")
-
-
-@app.route("/ask")
-def ask():
-    # Sprint 13: "Ask your money" — a plain-language question box answered on
-    # the device from the user's own data (no AI service, no paid API).
-    return render_template("ask.html", page="ask")
+# Pages that were merged into others. Old links, bookmarks and installed apps
+# still resolve.
+MOVED = {"/reports": "/insights", "/wealth": "/investments"}
 
 
 @app.route("/reports")
-def reports():
-    # Reports merged into Insights (Sprint 6 IA). Keep the path as a redirect
-    # so old links, bookmarks and the PWA cache still resolve.
-    return redirect("/insights", code=301)
-
-
-@app.route("/imports")
-def imports():
-    return render_template("imports.html", page="imports")
-
-
-@app.route("/import")
-def import_file():
-    return render_template("import.html", page="imports")
-
-
-@app.route("/voice")
-def voice():
-    return render_template("voice.html", page="transactions")
-
-
-@app.route("/profile")
-def profile():
-    return render_template("profile.html", page="profile")
-
-
-@app.route("/privacy")
-def privacy():
-    return render_template("privacy.html", page="privacy")
-
-
-@app.route("/consent")
-def consent():
-    return render_template("consent.html", page="consent")
+@app.route("/wealth")
+def moved():
+    return redirect(MOVED[request.path], code=301)
 
 
 @app.route("/.well-known/security.txt")
@@ -513,21 +440,30 @@ def api_read_statement():
     return jsonify(out)
 
 
-@app.route("/api/parse-voice", methods=["POST"])
-def api_parse_voice():
-    # FREE path: turn a spoken sentence into draft transactions with local rules,
-    # no API call. The browser parses on-device too; this is a server twin the UI
-    # can ask for a second opinion. Verified sign-in + rate limited; never stores.
+@app.route("/api/assistant", methods=["POST"])
+def api_assistant():
+    # One turn of the assistant chat. The browser holds the conversation and runs
+    # the data tools itself; this only forwards to Claude. Verified sign-in, and
+    # counted per person and per address (each question is a few turns).
     uid = _signed_in_user()
     if not uid:
         return jsonify({"error": "Please sign in and try again."}), 401
-    if _rate_limited("voice:user:" + uid, max_hits=40) or _rate_limited("voice:" + _client_ip(), max_hits=40):
+    if (_rate_limited("ask:user:" + uid, max_hits=40) or _rate_limited("ask:" + _client_ip(), max_hits=40)
+            or _rate_limited("ask:day:" + uid, max_hits=400, window=86400)):
         return _too_many(_RL_WINDOW)
     data = request.get_json(silent=True) or {}
-    text = data.get("text")
-    if not isinstance(text, str):
-        text = ""
-    return jsonify(parse_voice(text[:2000]))
+    try:
+        out = assistant_reply(
+            data.get("messages"),
+            today=data.get("today") or "",
+            demo=DEMO_MODE,
+            api_key=os.environ.get("ANTHROPIC_API_KEY"),
+            model=os.environ.get("ASSISTANT_MODEL"),
+            effort=os.environ.get("ASSISTANT_EFFORT"),
+        )
+    except AssistantError as e:
+        return jsonify({"error": e.message, "unavailable": e.status == 503}), e.status
+    return jsonify(out)
 
 
 @app.route("/healthz")

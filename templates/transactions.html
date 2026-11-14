@@ -3,15 +3,10 @@
 {% block content %}
 <div class="page-head">
   <h1>Transactions</h1>
-  <div class="head-actions">
-    <a class="btn ghost" href="/bills#add" id="addBillLink"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>Add a bill</a>
-    <a class="btn ghost" href="/import" id="importFileLink"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>Import a file</a>
-    <a class="btn ghost" href="/voice" id="voiceLink"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px;margin-right:6px"><path d="M12 2a3 3 0 00-3 3v6a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M5 10v1a7 7 0 0014 0v-1M12 18v3"/></svg>Add by voice</a>
-  </div>
 </div>
-{% include "_txn_tabs.html" %}
 
-<div class="card" style="margin-bottom:16px">
+<div class="tx-layout">
+<div class="card tx-add" id="add">
   <h2>Add transaction</h2>
   <form id="form">
     <div class="field">
@@ -32,7 +27,7 @@
         <select id="account"></select></div>
       <div class="field" id="categoryField"><label for="category">Category</label>
         <select id="category"></select></div>
-      <div class="field" id="toAccountField" style="display:none"><label for="toAccount">To account</label>
+      <div class="field" id="toAccountField" hidden><label for="toAccount">To account</label>
         <select id="toAccount"></select></div>
     </div>
     <div class="field"><label for="note">Note (optional)</label>
@@ -41,10 +36,10 @@
   </form>
 </div>
 
-<div class="card">
-  <div class="page-head" style="margin-bottom:16px">
-    <h2 style="margin:0">History</h2>
-    <div class="row" style="margin:0">
+<div class="card tx-history">
+  <div class="card-head">
+    <h2>History</h2>
+    <div class="tx-filters">
       <input type="month" id="fMonth">
       <select id="fAccount"><option value="">All accounts</option></select>
     </div>
@@ -52,10 +47,11 @@
   <div class="table-wrap">
     <table id="txTable" class="tx-table">
       <thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Account</th><th>Note</th>
-        <th style="text-align:right">Amount</th><th></th></tr></thead>
+        <th class="num">Amount</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
+</div>
 </div>
 {% endblock %}
 
@@ -96,8 +92,8 @@
       type = b.dataset.type;
       $("typeToggle").querySelectorAll("button").forEach((x) => x.classList.toggle("active", x === b));
       const transfer = type === "transfer";
-      $("categoryField").style.display = transfer ? "none" : "";
-      $("toAccountField").style.display = transfer ? "" : "none";
+      $("categoryField").hidden = transfer;
+      $("toAccountField").hidden = !transfer;
       $("accountLabel").textContent = transfer ? "From account" : "Account";
       if (!transfer) fillCategories();
     };
@@ -212,5 +208,6 @@
   $("fAccount").addEventListener("change", loadRows);
 
   if (db) { await loadLists(); loadRows(); }
+  if (location.hash === "#add") $("amount").focus();
 </script>
 {% endblock %}

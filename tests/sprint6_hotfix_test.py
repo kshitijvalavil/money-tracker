@@ -75,17 +75,18 @@ def main():
         keys = pg.evaluate("async () => await caches.keys()")
         check(m and f"money-tracker-{m.group(1)}" in keys, f"browser cache uses the stamped name ({keys})")
 
-        # Add a bill from Transactions.
-        link = pg.locator("#addBillLink")
-        check(link.is_visible() and "Add a bill" in link.inner_text(), "Transactions shows an Add a bill button")
-        link.click()
-        pg.wait_for_url(re.compile(r"/bills#add$"))
+        # Add a bill from anywhere: the Add button, then the Bills tab's own Add bill link.
+        pg.locator(".nav [data-open-add]").click()
+        check(pg.locator("#addSheet a[href='/bills#snap']").is_visible(), "the Add sheet offers Snap a bill")
+        pg.keyboard.press("Escape")
+        check(pg.locator(".seg-nav a[href='/bills']").is_visible(), "Transactions has a Bills tab")
+        pg.goto(BASE + "/bills#add", wait_until="networkidle")
         pg.wait_for_timeout(1200)
         check(pg.inner_text("#formTitle") == "Add a bill", "lands on the Add a bill form")
         check(pg.evaluate("() => document.activeElement && document.activeElement.id") == "fName",
               "bill name field is focused, ready to type")
         check(pg.locator(".seg-nav a[href='/bills']").get_attribute("aria-current") == "page",
-              "Bills & subscriptions tab is current")
+              "Bills tab is current")
         b.close()
 
     for e in errors:

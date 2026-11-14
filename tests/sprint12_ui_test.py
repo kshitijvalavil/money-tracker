@@ -70,55 +70,34 @@ def sweep(ctx, tag):
             check(sparks > 0, f"{tag} insights: trend sparklines drawn ({sparks})")
         if path == "/":
             sparks = page.evaluate(
-                "[...document.querySelectorAll('.stat-row .spark')].filter(e => e.innerHTML.length > 20).length"
+                "[...document.querySelectorAll('.figures .spark')].filter(e => e.innerHTML.length > 20).length"
             )
-            check(sparks >= 1, f"{tag} home: stat-tile sparklines drawn ({sparks})")
+            check(sparks >= 1, f"{tag} home: headline sparklines drawn ({sparks})")
             check(svg_filled(page, "#spkForecast") > 20, f"{tag} home: forecast hero sparkline drawn")
         page.close()
 
 
-def customize_flow(ctx):
+def home_layout(ctx):
+    """Home is one fixed layout: four figures, then two columns. No customise mode."""
     page = ctx.new_page()
     errs = []
     page.on("pageerror", lambda e: errs.append(str(e)))
     page.goto(BASE + "/", wait_until="networkidle")
     page.wait_for_timeout(800)
 
-    page.click("#customizeBtn")
-    page.wait_for_timeout(200)
-    tools_shown = page.evaluate(
-        "getComputedStyle(document.querySelector('.card-tools')).display !== 'none'"
-    )
-    check(tools_shown, "customize: card tools revealed")
-
-    hidden = page.evaluate(
-        """() => { const c = document.querySelector('.home-card[data-card-id=\"networth\"]');
-                   c.querySelector('.hide-toggle').click();
-                   return c.classList.contains('is-hidden'); }"""
-    )
-    check(hidden, "customize: toggle hides a card")
-
-    order_before = page.evaluate("[...document.querySelectorAll('.home-card')].map(c => c.dataset.cardId)")
-    page.focus('.home-card[data-card-id="forecast"] .drag-handle')
-    page.keyboard.press("ArrowUp")
-    page.wait_for_timeout(150)
-    order_after = page.evaluate("[...document.querySelectorAll('.home-card')].map(c => c.dataset.cardId)")
-    check(order_before != order_after, "customize: keyboard arrow reorders a card")
-
-    page.click("#customizeBtn")
-    page.wait_for_timeout(150)
+    labels = [x.inner_text().strip().lower() for x in page.locator(".figures .label").all()]
+    check(labels == ["balance", "money in", "money out", "net worth"], f"home: four headline figures in order ({labels})")
+    check(all("₹" in page.inner_text(sel) for sel in ("#balance", "#income", "#expense", "#nwCardVal")), "home: every figure shows rupees")
+    heads = [x.inner_text().strip() for x in page.locator(".home-grid h2").all()]
+    check(heads == ["Left to spend", "Bills due", "Month-end forecast", "Latest"], f"home: sections in order ({heads})")
+    check(page.locator("#customizeBtn, .drag-handle, .hide-toggle").count() == 0, "home: no customise controls")
+    check(page.locator(".figure-link").get_attribute("href") == "/net-worth", "home: net worth figure opens Net worth")
+    # An old saved layout (from the removed customise mode) is simply ignored.
+    page.evaluate("localStorage.setItem('homeLayout', JSON.stringify([{id:'networth',show:false},{id:'stats',show:false}]))")
     page.reload(wait_until="networkidle")
-    page.wait_for_timeout(800)
-    still_hidden = page.evaluate(
-        "document.querySelector('.home-card[data-card-id=\"networth\"]').classList.contains('is-hidden')"
-    )
-    check(still_hidden, "customize: hidden card stays hidden after reload")
-    order_reload = page.evaluate("[...document.querySelectorAll('.home-card')].map(c => c.dataset.cardId)")
-    check(
-        order_reload.index("forecast") == order_after.index("forecast"),
-        "customize: card order persists after reload",
-    )
-    check(not errs, f"customize: no page errors ({errs[:1]})")
+    page.wait_for_timeout(600)
+    check(page.locator(".figures .figure:visible").count() == 4, "home: a stale saved layout hides nothing")
+    check(not errs, f"home: no page errors ({errs[:1]})")
     page.close()
 
 
@@ -141,7 +120,7 @@ def main():
 
         # Interaction flow once, at desktop size (light).
         desk = b.new_context(viewport={"width": 1440, "height": 900}, service_workers="block")
-        customize_flow(desk)
+        home_layout(desk)
         desk.close()
         b.close()
 

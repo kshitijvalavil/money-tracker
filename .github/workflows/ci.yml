@@ -1,5 +1,7 @@
 name: CI
 
+# Runs Captain Shipit's gate (tests/gate.sh): the same suites, in the same order,
+# as a local run. A suite added to the gate is in CI automatically.
 on:
   push:
   pull_request:
@@ -13,55 +15,20 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # the secret scan reads the full history
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
-      - name: Install PostgreSQL
-        run: sudo apt-get update && sudo apt-get install -y postgresql
-      - name: Dependency audit (known vulnerabilities)
-        run: pip install pip-audit && pip-audit -r requirements.txt
-      - name: Secret scan (code and full git history)
-        run: python3 tests/secret_scan.py
-      - name: No unescaped user text in HTML strings
-        run: python3 tests/innerhtml_lint.py
-      - name: Card numbers are masked
-        run: python3 tests/test_card_masking.py
-      - name: Parser tests
-        run: python3 tests/test_parsers.py
-      - name: Scanner tests
-        run: python3 tests/test_scanner.py
-      - name: Scanner adversarial tests
-        run: python3 tests/test_scanner_adversarial.py
-      - name: Bank alert + Google Pay parser tests
-        run: python3 tests/test_channel_parsers.py
-      - name: Recurring bills tests
-        run: python3 tests/test_recurring.py
-      - name: Bill reader tests
-        run: python3 tests/billreader_test.py
-      - name: Bill-text (free OCR) parser tests
-        run: python3 tests/billtext_test.py
-      - name: Security hardening tests
-        run: python3 tests/security_test.py
-      - name: Review inbox (duplicate merging + rules)
-        run: python3 tests/test_review.py
-      - name: XLS reader tests (Sprint 15)
-        run: python3 tests/xlsreader_test.py
-      - name: Statement (Claude fallback) reader tests (Sprint 15)
-        run: python3 tests/statementreader_test.py
-      - name: Import column mapper tests (Node, Sprint 15)
-        run: node tests/importmap_test.mjs
-      - name: Voice parser tests (Node, Sprint 16)
-        run: node tests/voiceparse_test.mjs
-      - name: Voice parser tests (Python twin + parity, Sprint 16)
-        run: python3 tests/voiceparse_test.py
-      - name: Scanner dry run on fixtures
-        run: python3 -m bot.scanner --from-dir tests/fixtures
-      - name: Database tests (schema, RLS, money math)
-        run: bash tests/run.sh
-      - name: Sprint 2 release gate (dates, races, RLS, detection)
-        run: bash tests/sprint2_adversarial.sh
+          cache: pip
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt pip-audit
+          sudo apt-get update && sudo apt-get install -y postgresql
+      - name: Lints, unit tests and dependency audit
+        run: bash tests/gate.sh unit
+      - name: Database tests (schema, RLS between users, money math, races)
+        run: bash tests/gate.sh sql
 
   smoke:
     name: Browser smoke test (demo mode)
@@ -81,100 +48,5 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Build import sample fixtures
         run: python3 tools/make_import_samples.py
-      - name: Start app in demo mode
-        run: |
-          DEMO_MODE=1 nohup gunicorn app:app --bind 127.0.0.1:8099 > gunicorn.log 2>&1 &
-          for i in $(seq 1 30); do
-            curl -fsS -o /dev/null http://127.0.0.1:8099/ && exit 0
-            sleep 1
-          done
-          echo "app did not start"; cat gunicorn.log; exit 1
-      - name: Smoke test
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/smoke_test.py
-      - name: Bills page tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/bills_ui_test.py
-      - name: Sprint 2 adversarial UI tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint2_adversarial_ui.py
-      - name: Sprint 3 goals / labels / insights UI tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint3_ui_test.py
-      - name: Sprint 4 PWA + mobile tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint4_pwa_test.py
-      - name: Sprint 5 snap-a-bill capture tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint5_capture_test.py
-      - name: Sprint 6 investments UI tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/investments_ui_test.py
-      - name: Sprint 6 budgets and goals UI tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint6_budgets_goals_test.py
-      - name: Sprint 6 email import UI tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint6_email_ui_test.py
-      - name: Sprint 6 hotfix tests (fresh design after deploy, add a bill)
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint6_hotfix_test.py
-      - name: Phone layout tests (every page fits, transaction amounts on screen)
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/phone_layout_test.py
-      - name: Review inbox UI (phone + desktop)
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint9_review_inbox_test.py
-      - name: Sprint 10 flex budget UI (buckets, rollovers, recap)
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint10_flex_test.py
-      - name: Sprint 11 net worth, wealth, calendar, goals UI
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint11_networth_test.py
-      - name: Sprint 12 forecast, flow (Sankey), sparklines, custom Home UI
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint12_ui_test.py
-      - name: Sprint 13 alerts + Ask your money UI and logic
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint13_ui_test.py
-      - name: Sprint 14 privacy UI (download my data, delete my account)
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint14_privacy_ui_test.py
-      - name: Sprint 14 session UI (two-step set-up, activity log, privacy notice, idle lock)
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint14_session_ui_test.py
-      - name: Sprint 14 CSP (zero violations on every page, OCR under the policy, injection blocked)
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint14_csp_test.py
-      - name: Sprint 14 updating page (deploy message, real server restart)
-        run: python tests/sprint14_deploying_test.py
-      - name: Sprint 15 bulk import UI tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint15_import_ui_test.py
-      - name: Sprint 16 voice note UI tests
-        env:
-          BASE_URL: http://127.0.0.1:8099
-        run: python tests/sprint16_voice_ui_test.py
-      - name: Server log
-        if: always()
-        run: cat gunicorn.log || true
+      - name: Every browser suite, phone to desktop, day and night
+        run: bash tests/gate.sh ui

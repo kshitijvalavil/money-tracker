@@ -2,18 +2,13 @@
 {% block title %}Import from a file — Money Tracker{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Import from a file</h1>
-  <div class="head-actions">
-    <a class="btn ghost" href="/imports">Back to review</a>
-  </div>
+  <h1>Import a file</h1>
 </div>
-{% include "_txn_tabs.html" %}
 
 <!-- Step 1: pick a file -------------------------------------------------- -->
 <section class="card imp-step" id="stepPick" aria-labelledby="pickTitle">
   <h2 id="pickTitle">Add many expenses at once</h2>
-  <p class="card-intro">Drop an Excel, CSV, PDF statement or Word table. Any layout works: we find the columns for you and
-    show a preview. Nothing is added until you accept it in <a class="card-link" href="/imports">To review</a>.</p>
+  <p class="card-intro">Any layout works. You get a preview first, and nothing is added until you accept it in <a class="card-link" href="/imports">To review</a>.</p>
   <label class="imp-drop" id="drop" for="file">
     <input type="file" id="file" class="sr-only"
       accept=".xlsx,.xlsm,.xls,.csv,.tsv,.txt,.pdf,.docx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
@@ -68,7 +63,7 @@
   <div class="table-wrap imp-preview-wrap">
     <table class="tx-table imp-preview" id="preview">
       <caption class="sr-only">First rows of the file, as they will be added</caption>
-      <thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Category in file</th><th style="text-align:right">Amount</th></tr></thead>
+      <thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Category in file</th><th class="num">Amount</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
@@ -97,6 +92,7 @@
   import { db, DEMO, esc, money, toast, authHeaders, refreshImportsBadge } from "{{ url_for('static', filename='js/app.js') }}";
   import { mapGrid, headerFingerprint } from "{{ url_for('static', filename='js/importmap.js') }}";
   import { readFile, bestSheet, pdfPageImages, ImportError } from "{{ url_for('static', filename='js/fileimport.js') }}";
+  import { stageRows } from "{{ url_for('static', filename='js/stage.js') }}";
   const $ = (id) => document.getElementById(id);
 
   const ROLES = [["", "Ignore"], ["date", "Date"], ["amount", "Amount"], ["debit", "Money out (debit)"], ["credit", "Money in (credit)"],
@@ -105,7 +101,6 @@
     ["altamount", "Second amount (compare only)"]];
   const MAP_KEY = "mt.importMappings";
   let file = null, read = null, sheetIdx = 0, result = null, manual = null, usedClaude = false, lastBatch = null;
-  let accounts = [], categories = [], rules = [];
 
   // ---- small helpers --------------------------------------------------------
   function show(step) {
@@ -114,38 +109,7 @@
   const status = (msg, err) => { $("pickStatus").textContent = msg || ""; $("pickStatus").classList.toggle("err", !!err); };
   const loadMaps = () => { try { return JSON.parse(localStorage.getItem(MAP_KEY) || "{}"); } catch { return {}; } };
   const saveMap = (fp, v) => { try { const m = loadMaps(); m[fp] = v; localStorage.setItem(MAP_KEY, JSON.stringify(m)); } catch {} };
-  const kindOf = (name, k) => (["xlsx", "xls", "csv", "pdf", "docx"].includes(k) ? k : "other");
   const shortDate = (iso) => new Date(iso + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-  // 64-bit-ish key from two 32-bit hashes (no crypto.subtle: it's missing on plain-http phone tests).
-  function hashKey(s) {
-    let a = 0x811c9dc5, b = 5381;
-    for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); a = Math.imul(a ^ c, 16777619) >>> 0; b = ((b * 33) ^ c) >>> 0; }
-    return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
-  }
-
-  // ---- category suggestion ----------------------------------------------------
-  const SYN = [
-    [/eat|food|dinner|lunch|breakfast|restaurant|cafe|beverage|swiggy|zomato|grocer|kitchen|snack/i, "Food"],
-    [/transport|cab|uber|ola|auto|metro|fuel|petrol|flight|train|bus|travel/i, "Transport"],
-    [/health|medic|pharma|doctor|hospital|clinic/i, "Health"],
-    [/rent\b/i, "Rent"],
-    [/bill|electric|water|gas|phone|mobile|internet|broadband|subscription|recharge/i, "Bills"],
-    [/shop|apparel|cloth|amazon|flipkart|laundry/i, "Shopping"],
-    [/fun|movie|social|entertain|netflix|party|game/i, "Entertainment"],
-    [/salary|payroll|wage/i, "Salary"], [/freelance|invoice/i, "Freelance"], [/gift/i, "Gift"], [/invest|mutual|sip|stock|ipo/i, "Investment"],
-  ];
-  function suggestCategory(r) {
-    const mine = categories.filter((c) => c.kind === r.direction);
-    const by = (n) => mine.find((c) => c.name.toLowerCase() === String(n).toLowerCase().trim());
-    const hit = (r.subcategory && by(r.subcategory)) || (r.category && by(r.category));
-    if (hit) return hit.id;
-    const text = `${r.note} ${r.category} ${r.subcategory}`.toLowerCase();
-    const rule = rules.find((x) => text.includes(String(x.match_text).toLowerCase()));
-    if (rule && mine.some((c) => c.id === rule.category_id)) return rule.category_id;
-    for (const [re, name] of SYN) if (re.test(text) && by(name)) return by(name).id;
-    return null;
-  }
-
   // ---- step 1: read ---------------------------------------------------------------
   async function pick(f, opts = {}) {
     file = f; usedClaude = false; manual = null; status("Reading " + f.name + "…");
@@ -291,40 +255,9 @@
     const fp = headerFingerprint(result.header || []);
     if (result.columns) saveMap(fp, { mapping: Object.fromEntries(result.columns.map((c) => [c.index, c.role])), dateOrder: $("dateOrder").value, sign: $("signRule").value });
     try {
-      const [a, c, ru] = await Promise.all([db.from("accounts").select("id, name"), db.from("categories").select("id, name, kind"),
-        db.from("category_rules").select("match_text, category_id")]);
-      accounts = a.data || []; categories = c.data || []; rules = ru.error ? [] : ru.data || [];
-      const batchId = crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (d) => (d ^ (Math.random() * 16) >> (d / 4)).toString(16));
-      const kind = kindOf(file.name, read.kind);
-      const ins = await db.from("import_batches").insert({ id: batchId, file_name: file.name.slice(0, 120) || "file", file_kind: kind,
-        row_count: rows.length, used_claude: usedClaude });
-      if (ins.error) throw ins.error;
-      const payload = rows.map((x) => {
-        const cat = [x.category, x.subcategory].filter(Boolean).join(" / ").slice(0, 80);
-        const note = (x.note || [x.category, x.subcategory].filter(Boolean).join(" - ")).slice(0, 200);
-        return {
-          source: "file", direction: x.direction, amount: x.amount, occurred_on: x.date, note,
-          merchant: note.trim() ? note.trim().slice(0, 80) : null,
-          account_hint: x.account ? x.account.slice(0, 80) : null, category_hint: cat || null,
-          suggested_category_id: suggestCategory(x), import_batch_id: batchId,
-          source_message_id: "file:" + hashKey(x.dedupe),
-        };
-      });
-      // Which of these are already in (from an earlier import of the same rows)?
-      const ids = payload.map((p) => p.source_message_id);
-      const seen = new Set();
-      for (let i = 0; i < ids.length; i += 150) {
-        const q = await db.from("pending_imports").select("source_message_id").in("source_message_id", ids.slice(i, i + 150));
-        if (q.error) throw q.error;
-        (q.data || []).forEach((r) => seen.add(r.source_message_id));
-      }
-      const fresh = payload.filter((p) => !seen.has(p.source_message_id));
-      for (let i = 0; i < fresh.length; i += 200) {
-        const up = await db.from("pending_imports").upsert(fresh.slice(i, i + 200), { onConflict: "user_id,source_message_id", ignoreDuplicates: true });
-        if (up.error) throw up.error;
-      }
-      await db.from("import_batches").update({ added: fresh.length, skipped: rows.length - fresh.length }).eq("id", batchId);
-      lastBatch = batchId;
+      const done = await stageRows(db, rows, { fileName: file.name, kind: read.kind, usedClaude });
+      lastBatch = done.batchId;
+      const fresh = { length: done.added };
       const dup = rows.length - fresh.length;
       $("doneTitle").textContent = fresh.length ? `Added ${fresh.length} to review` : "Nothing new to add";
       $("doneBody").textContent = (fresh.length ? `${fresh.length} ${fresh.length === 1 ? "row is" : "rows are"} waiting in To review. Nothing is counted until you accept it.` : "")

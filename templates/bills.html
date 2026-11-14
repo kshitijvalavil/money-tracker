@@ -3,21 +3,18 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Transactions</h1>
+    <h1>Bills</h1>
     <p class="page-sub" id="monthlyTotal" aria-live="polite"></p>
   </div>
   <button class="btn" id="addBillBtn" type="button">Add bill</button>
 </div>
-{% include "_txn_tabs.html" %}
 
 <div class="card capture-card" id="captureCard">
-  <h2>Snap a bill</h2>
-  <p class="card-intro">Drop or choose a photo of a bill and we'll read the details into the form below.
-    On your phone you can take a photo right now. Check everything, then add it.</p>
+  <h2 id="snap">Snap a bill</h2>
   <div class="dropzone" id="dropzone" tabindex="0" role="button"
        aria-label="Add a bill photo" aria-describedby="captureHelp">
     <div class="dz-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
-    <div class="dz-text"><strong>Drop a bill photo here</strong><span>or use the buttons below</span></div>
+    <div class="dz-text"><strong>Drop a photo of a bill</strong><span>We fill in the form; you check it and save.</span></div>
     <div class="dz-actions">
       <button class="btn ghost sm" type="button" id="pickBtn">Choose file</button>
       <button class="btn ghost sm" type="button" id="cameraBtn">Take photo</button>
@@ -39,7 +36,7 @@
       <caption class="sr-only">Recurring bills and income, soonest first</caption>
       <thead><tr>
         <th scope="col">Bill</th>
-        <th scope="col" style="text-align:right">Amount</th>
+        <th scope="col" class="num">Amount</th>
         <th scope="col">Next due</th>
         <th scope="col">Auto-post</th>
         <th scope="col"><span class="sr-only">Actions</span></th>
@@ -52,8 +49,7 @@
 <div class="grid cols-2 bills-lower">
   <div class="card" id="formCard">
     <h2 id="formTitle" tabindex="-1">Add a bill</h2>
-    <p class="card-intro" id="formIntro">Rent, subscriptions, insurance, or income that repeats.
-      We'll remind you when it's due.</p>
+    <p class="card-intro" id="formIntro">Anything that repeats: rent, subscriptions, insurance, salary.</p>
     <form id="billForm" novalidate>
       <div class="field"><label for="fName">Name</label>
         <input type="text" id="fName" maxlength="80" required autocomplete="off"
@@ -110,8 +106,7 @@
 
   <div class="card" id="suggestCard">
     <h2>Looks like a bill</h2>
-    <p class="card-intro">Payments that repeat in your transactions at a steady interval.
-      Add one to get reminders, or dismiss it.</p>
+    <p class="card-intro">Payments we've seen repeat in your transactions.</p>
     <ul class="suggest-list" id="suggestions" aria-label="Suggested bills"></ul>
   </div>
 </div>

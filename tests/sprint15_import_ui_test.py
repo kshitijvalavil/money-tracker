@@ -212,7 +212,7 @@ def stage_review_undo(browser):
     check(page.locator(".rv-from", has_text="From a file").count() == 0, "after undo: no file rows left to review")
     page.goto(BASE + "/transactions", wait_until="networkidle")
     page.wait_for_timeout(600)
-    check(page.locator("#importFileLink").is_visible(), "History has an Import a file button")
+    check(page.locator(".seg-nav a[href='/import']").is_visible(), "Transactions has an Import a file tab")
     check(not errs, f"stage/undo: no page errors ({errs[:1]})")
     ctx.close()
 

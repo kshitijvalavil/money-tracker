@@ -59,16 +59,17 @@ def main():
         check(pg.evaluate(EMOJI) is False, "no emojis on Net worth")
         shot(pg, "s11-networth.png")
 
-        # ---- Wealth ----------------------------------------------------------
+        # ---- Investments (the old Wealth page was merged into it) -----------------
         pg.goto(BASE + "/wealth", wait_until="networkidle")
         pg.wait_for_timeout(700)
-        check("₹" in pg.inner_text("#sumValue"), "wealth current value shows")
+        check(pg.url.endswith("/investments"), "the old /wealth address lands on Investments")
+        check("₹" in pg.inner_text("#sumValue"), "investments current value shows")
         check("₹" in pg.inner_text("#sumInvested"), "invested total shows")
         check(pg.locator("#alloc").count() == 1, "allocation donut renders")
-        check(pg.locator("#holdings .wh-row").count() >= 1, "holdings list populated")
-        check(pg.locator("#holdings a[href='/investments'], .card-head a[href='/investments']").count() >= 1,
-              "a link to manage investments is present")
-        check(pg.evaluate(EMOJI) is False, "no emojis on Wealth")
+        check(pg.locator("#holdingRows tr").count() >= 1, "holdings list populated")
+        check([a.inner_text().strip() for a in pg.locator(".seg-nav a").all()] == ["Net worth", "Accounts", "Investments"],
+              "Wealth tabs: Net worth, Accounts, Investments")
+        check(pg.evaluate(EMOJI) is False, "no emojis on Investments")
         shot(pg, "s11-wealth.png")
 
         # ---- Bills calendar --------------------------------------------------
@@ -99,7 +100,7 @@ def main():
         # ---- No sideways scroll on phone and desktop -------------------------
         for w, h in ((1440, 1000), (390, 844)):
             pg.set_viewport_size({"width": w, "height": h})
-            for path in ("/net-worth", "/wealth", "/calendar", "/goals"):
+            for path in ("/net-worth", "/investments", "/calendar", "/goals"):
                 pg.goto(BASE + path, wait_until="networkidle")
                 pg.wait_for_timeout(400)
                 over = pg.evaluate("() => document.documentElement.scrollWidth - window.innerWidth")

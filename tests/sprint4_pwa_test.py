@@ -76,35 +76,42 @@ def run(pw):
     check(mp.locator(".tabbar").is_visible(), "mobile shows the bottom tab bar")
     check(mp.locator("#menuBtn").is_visible(), "mobile shows the hamburger")
 
-    fab = mp.locator(".tabbar a.fab")
-    check(fab.is_visible(), "the + Add FAB is shown")
-    check(fab.get_attribute("href") == "/transactions", "the FAB links to the add-transaction page")
+    fab = mp.locator(".tabbar .fab")
+    check(fab.is_visible(), "the + Add button is shown")
+    fab.click()
+    mp.wait_for_timeout(200)
+    links = [a.get_attribute("href") for a in mp.locator("#addSheet a").all()]
+    check(mp.locator("#addSheet").is_visible() and links == ["/transactions#add", "/voice", "/bills#snap", "/import"],
+          f"the + button opens the Add sheet with all four ways to add ({links})")
+    mp.keyboard.press("Escape")
+    mp.wait_for_timeout(150)
+    check(not mp.locator("#addSheet").is_visible(), "Escape closes the Add sheet")
 
-    # Drawer starts off-canvas (its right edge is at or left of the viewport edge).
+    # Drawer starts off-canvas (it slides in from the right edge).
     box = mp.locator("#sidebar").bounding_box()
-    check(box is not None and box["x"] + box["width"] <= 1, "the drawer starts off-canvas")
+    check(box is not None and box["x"] >= 389, "the drawer starts off-canvas")
 
     # Hamburger opens it; the scrim appears.
     mp.locator("#menuBtn").click()
     mp.wait_for_timeout(350)
     box = mp.locator("#sidebar").bounding_box()
-    check(box is not None and box["x"] >= -1, "the hamburger opens the drawer")
+    check(box is not None and box["x"] + box["width"] <= 391, "the menu button opens the drawer")
     check(mp.locator("#scrim").is_visible(), "a scrim appears behind the open drawer")
     check(mp.get_attribute("#menuBtn", "aria-expanded") == "true", "hamburger reports expanded")
 
-    # Scrim closes it (tap the exposed area to the right of the 264px drawer).
-    mp.locator("#scrim").click(position={"x": 350, "y": 400})
+    # Scrim closes it (tap the exposed area to the left of the drawer).
+    mp.locator("#scrim").click(position={"x": 40, "y": 400})
     mp.wait_for_timeout(350)
     box = mp.locator("#sidebar").bounding_box()
-    check(box is not None and box["x"] + box["width"] <= 1, "tapping the scrim closes the drawer")
+    check(box is not None and box["x"] >= 389, "tapping the scrim closes the drawer")
 
     # A drawer link closes the drawer and navigates.
     mp.locator("#menuBtn").click()
     mp.wait_for_timeout(300)
-    mp.locator("#sidebar .nav a[href='/goals']").click()
+    mp.locator("#sidebar .nav a[href='/insights']").click()
     mp.wait_for_load_state("networkidle")
     mp.wait_for_timeout(300)
-    check(mp.url.endswith("/goals"), "a drawer link navigates")
+    check(mp.url.endswith("/insights"), "a drawer link navigates")
     check(not mp.locator("#scrim").is_visible(), "the drawer closes after following a link")
 
     # No horizontal scroll and >= 44px tap targets across pages / widths.
@@ -115,7 +122,7 @@ def run(pw):
             mp.wait_for_timeout(200)
             hscroll = mp.evaluate("() => document.documentElement.scrollWidth > window.innerWidth + 1")
             check(not hscroll, f"no horizontal scroll on {path} at {w}px")
-        small = mp.evaluate("""() => [...document.querySelectorAll('.tabbar a')]
+        small = mp.evaluate("""() => [...document.querySelectorAll('.tabbar a, .tabbar button')]
             .filter(a => a.getBoundingClientRect().height < 44).length""")
         check(small == 0, f"all tab-bar targets >= 44px tall at {w}px")
 

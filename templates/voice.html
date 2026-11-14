@@ -3,14 +3,11 @@
 {% block content %}
 <div class="page-head">
   <h1>Add by voice</h1>
-  <div class="head-actions"><a class="btn ghost" href="/transactions">Back</a></div>
 </div>
-{% include "_txn_tabs.html" %}
 
 <section class="card vo-card">
   <p class="card-intro">Say what you spent, like <em>"paid 450 to Starbucks on UPI"</em> or
-    <em>"electricity bill 1840 due on the 15th monthly"</em>. We turn it into a card you check before anything is saved.
-    Your voice is never stored, and the sentence stays on your device unless you ask Claude to help.</p>
+    <em>"electricity bill 1840 due on the 15th monthly"</em>. You check a card before anything is saved. Your voice is never stored.</p>
 
   <div class="vo-mic-wrap">
     <button type="button" class="vo-mic" id="mic" aria-pressed="false" aria-label="Start listening">
