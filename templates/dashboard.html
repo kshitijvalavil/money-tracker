@@ -3,112 +3,63 @@
 {% block content %}
 <div class="page-head">
   <h1>Home</h1>
-  <div class="head-actions">
-    <div class="month-nav">
-      <button class="icon-btn month-step" type="button" id="monthPrev" aria-label="Previous month"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
-      <input type="month" id="month" aria-label="Month shown">
-      <button class="icon-btn month-step" type="button" id="monthNext" aria-label="Next month"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
-    </div>
-    <button class="btn ghost" id="customizeBtn" type="button" aria-pressed="false">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2.1" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2.1" fill="currentColor" stroke="none"/><circle cx="8" cy="18" r="2.1" fill="currentColor" stroke="none"/></svg>
-      <span id="customizeLabel">Customize</span>
-    </button>
+  <div class="month-nav">
+    <button class="icon-btn month-step" type="button" id="monthPrev" aria-label="Previous month"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <input type="month" id="month" aria-label="Month shown">
+    <button class="icon-btn month-step" type="button" id="monthNext" aria-label="Next month"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
   </div>
 </div>
 
-<nav class="needs needs-desk" id="needsDesk" aria-label="Needs you" hidden></nav>
-<p class="customize-hint" id="customizeHint" hidden>Drag a card by its handle, or focus the handle and use the arrow keys. Toggle a card to show or hide it. Your layout is saved to your account.</p>
+<nav class="needs" id="needs" aria-label="Needs you" hidden></nav>
 
-<div class="home-grid" id="homeCards">
-  {% set tools %}{% endset %}
-  <section class="home-card span2" data-card-id="stats">
-    <div class="card-tools"><button class="drag-handle" type="button" aria-label="Reorder Overview" title="Drag or use arrow keys"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button><span class="tool-title">Overview</span><button class="hide-toggle" type="button" role="switch" aria-checked="true" aria-label="Show Overview"><span class="tgl-ui"></span></button></div>
-    <div class="grid cols-3 stat-row">
-      <div class="card stat"><div class="label">Total balance</div><div class="value" id="balance">—</div>
-        <div class="stat-foot"><span class="delta" id="balanceDelta"></span><svg class="spark" id="spkBalance"></svg></div></div>
-      <div class="card stat"><div class="label">Income this month</div><div class="value pos" id="income">—</div>
-        <div class="stat-foot"><span class="delta" id="incomeDelta"></span><svg class="spark" id="spkIncome"></svg></div></div>
-      <div class="card stat"><div class="label">Spent this month</div><div class="value neg" id="expense">—</div>
-        <div class="stat-foot"><span class="delta" id="expenseDelta"></span><svg class="spark" id="spkExpense"></svg></div></div>
-    </div>
-  </section>
+<section class="card figures" aria-label="This month at a glance">
+  <div class="figure"><div class="label">Balance</div><div class="value" id="balance">—</div>
+    <div class="stat-foot"><span class="delta" id="balanceDelta"></span><svg class="spark" id="spkBalance"></svg></div></div>
+  <div class="figure"><div class="label">Money in</div><div class="value pos" id="income">—</div>
+    <div class="stat-foot"><span class="delta" id="incomeDelta"></span><svg class="spark" id="spkIncome"></svg></div></div>
+  <div class="figure"><div class="label">Money out</div><div class="value neg" id="expense">—</div>
+    <div class="stat-foot"><span class="delta" id="expenseDelta"></span><svg class="spark" id="spkExpense"></svg></div></div>
+  <a class="figure figure-link" href="/net-worth"><div class="label">Net worth</div><div class="value" id="nwCardVal">—</div>
+    <div class="stat-foot"><span class="delta" id="nwCardDelta"></span><svg class="spark" id="spkNetworth"></svg></div></a>
+</section>
 
-  <section class="home-card" data-card-id="lts">
-    <div class="card-tools"><button class="drag-handle" type="button" aria-label="Reorder Left to spend freely" title="Drag or use arrow keys"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button><span class="tool-title">Left to spend freely</span><button class="hide-toggle" type="button" role="switch" aria-checked="true" aria-label="Show Left to spend freely"><span class="tgl-ui"></span></button></div>
-    <div class="card lts-card" id="ltsCard" hidden>
-      <div class="card-head"><h2 id="ltsHeading">Left to spend freely</h2><a href="/budgets" class="card-link">Budgets <span aria-hidden="true">→</span></a></div>
+<div class="home-grid">
+  <section class="card" aria-labelledby="ltsHeading">
+    <div class="card-head"><h2 id="ltsHeading">Left to spend</h2><a href="/budgets" class="card-link">Budgets</a></div>
+    <div id="ltsCard" hidden>
       <div class="lts-value" id="ltsValue">—</div>
       <div class="lts-sub" id="ltsSub"></div>
       <div class="bar budget-bar"><div id="ltsBar"></div><span class="pace" id="ltsPace" hidden></span></div>
       <div class="budget-sub lts-foot"><span id="ltsFoot" class="muted"></span></div>
     </div>
-    <div class="card" id="ltsPlaceholder"><div class="card-head"><h2>Left to spend freely</h2><a href="/budgets" class="card-link">Budgets <span aria-hidden="true">→</span></a></div><div class="empty">Set a flexible budget to see what's left to spend.</div></div>
+    <div class="empty" id="ltsPlaceholder">Set a flexible budget to see what's left to spend. <a href="/budgets" class="card-link">Set one</a></div>
+    <div id="bucketsCard" class="buckets" hidden><div id="buckets"></div></div>
   </section>
 
-  <section class="home-card" data-card-id="forecast">
-    <div class="card-tools"><button class="drag-handle" type="button" aria-label="Reorder Month-end forecast" title="Drag or use arrow keys"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button><span class="tool-title">Month-end forecast</span><button class="hide-toggle" type="button" role="switch" aria-checked="true" aria-label="Show Month-end forecast"><span class="tgl-ui"></span></button></div>
-    <div class="card">
-      <div class="card-head"><h2>Month-end forecast</h2><a href="/forecast" class="card-link">Forecast <span aria-hidden="true">→</span></a></div>
-      <div class="hero-value" id="fcCardVal">—</div>
-      <div class="hero-sub" id="fcCardSub"></div>
-      <svg class="spark home-spark" id="spkForecast"></svg>
-      <div class="hero-foot" id="fcCardFoot"></div>
-    </div>
+  <section class="card" aria-labelledby="fcHeading">
+    <div class="card-head"><h2 id="fcHeading">Month-end forecast</h2><a href="/forecast" class="card-link">Forecast</a></div>
+    <div class="hero-value" id="fcCardVal">—</div>
+    <div class="hero-sub" id="fcCardSub"></div>
+    <svg class="spark home-spark" id="spkForecast"></svg>
+    <div class="hero-foot" id="fcCardFoot"></div>
   </section>
 
-  <section class="home-card" data-card-id="networth">
-    <div class="card-tools"><button class="drag-handle" type="button" aria-label="Reorder Net worth" title="Drag or use arrow keys"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button><span class="tool-title">Net worth</span><button class="hide-toggle" type="button" role="switch" aria-checked="true" aria-label="Show Net worth"><span class="tgl-ui"></span></button></div>
-    <div class="card stat">
-      <div class="card-head"><div class="label">Net worth</div><a href="/net-worth" class="card-link">Details <span aria-hidden="true">→</span></a></div>
-      <div class="value" id="nwCardVal">—</div>
-      <div class="stat-foot"><span class="delta" id="nwCardDelta"></span><svg class="spark" id="spkNetworth"></svg></div>
-    </div>
+  <section class="card upcoming-card" aria-labelledby="upcomingHeading">
+    <div class="card-head"><h2 id="upcomingHeading" tabindex="-1">Bills due</h2><a href="/bills" class="card-link">All bills</a></div>
+    <ul class="bill-list" id="upcoming" aria-labelledby="upcomingHeading" aria-busy="true">
+      <li class="bill-item" aria-hidden="true"><span class="skel w-60"></span></li>
+      <li class="bill-item" aria-hidden="true"><span class="skel w-40"></span></li>
+    </ul>
   </section>
 
-  <section class="home-card" data-card-id="buckets">
-    <div class="card-tools"><button class="drag-handle" type="button" aria-label="Reorder Your money this month" title="Drag or use arrow keys"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button><span class="tool-title">Your money this month</span><button class="hide-toggle" type="button" role="switch" aria-checked="true" aria-label="Show Your money this month"><span class="tgl-ui"></span></button></div>
-    <div class="card buckets-card" id="bucketsCard" hidden>
-      <div class="card-head"><h2>Your money this month</h2><a href="/budgets" class="card-link">Budgets <span aria-hidden="true">→</span></a></div>
-      <div id="buckets"></div>
-    </div>
-    <div class="card" id="bucketsPlaceholder"><div class="card-head"><h2>Your money this month</h2></div><div class="empty">No budgets yet. <a href="/budgets" style="color:var(--brand)">Add one →</a></div></div>
-  </section>
-
-  <section class="home-card span2" data-card-id="upcoming">
-    <div class="card-tools"><button class="drag-handle" type="button" aria-label="Reorder Upcoming bills" title="Drag or use arrow keys"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button><span class="tool-title">Upcoming bills</span><button class="hide-toggle" type="button" role="switch" aria-checked="true" aria-label="Show Upcoming bills"><span class="tgl-ui"></span></button></div>
-    <div class="card upcoming-card">
-      <div class="card-head"><h2 id="upcomingHeading" tabindex="-1">Upcoming bills</h2><a href="/bills" class="card-link">All bills <span aria-hidden="true">→</span></a></div>
-      <p class="card-intro" style="margin-bottom:8px">Due in the next 7 days, plus anything overdue.</p>
-      <ul class="bill-list" id="upcoming" aria-labelledby="upcomingHeading" aria-busy="true">
-        <li class="bill-item" aria-hidden="true"><span class="skel w-60"></span></li>
-        <li class="bill-item" aria-hidden="true"><span class="skel w-40"></span></li>
-      </ul>
-    </div>
-  </section>
-
-  <section class="home-card" data-card-id="accounts">
-    <div class="card-tools"><button class="drag-handle" type="button" aria-label="Reorder Accounts" title="Drag or use arrow keys"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button><span class="tool-title">Accounts</span><button class="hide-toggle" type="button" role="switch" aria-checked="true" aria-label="Show Accounts"><span class="tgl-ui"></span></button></div>
-    <div class="card"><h2>Accounts</h2><table><tbody id="accounts"></tbody></table></div>
-  </section>
-
-  <section class="home-card" data-card-id="budgets">
-    <div class="card-tools"><button class="drag-handle" type="button" aria-label="Reorder Budgets this month" title="Drag or use arrow keys"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button><span class="tool-title">Budgets this month</span><button class="hide-toggle" type="button" role="switch" aria-checked="true" aria-label="Show Budgets this month"><span class="tgl-ui"></span></button></div>
-    <div class="card"><h2>Budgets this month</h2><div id="budgets"></div></div>
-  </section>
-
-  <section class="home-card span2" data-card-id="recent">
-    <div class="card-tools"><button class="drag-handle" type="button" aria-label="Reorder Recent transactions" title="Drag or use arrow keys"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg></button><span class="tool-title">Recent transactions</span><button class="hide-toggle" type="button" role="switch" aria-checked="true" aria-label="Show Recent transactions"><span class="tgl-ui"></span></button></div>
-    <div class="card">
-      <h2>Recent transactions</h2>
-      <div class="table-wrap"><table class="tx-table">
-        <thead><tr><th>Date</th><th>Category</th><th>Account</th><th>Note</th><th style="text-align:right">Amount</th></tr></thead>
-        <tbody id="recent"></tbody>
-      </table></div>
-    </div>
+  <section class="card" aria-labelledby="recentHeading">
+    <div class="card-head"><h2 id="recentHeading">Latest</h2><a href="/transactions" class="card-link">All transactions</a></div>
+    <div class="table-wrap"><table class="tx-table tx-compact">
+      <thead class="sr-only"><tr><th>Date</th><th>Category</th><th>Account</th><th>Note</th><th>Amount</th></tr></thead>
+      <tbody id="recent"></tbody>
+    </table></div>
   </section>
 </div>
-
-<nav class="needs needs-phone" id="needsPhone" aria-label="Needs you" hidden></nav>
 {% endblock %}
 
 {% block page_script %}
@@ -168,21 +119,19 @@
         const note = b.key === "flexible" && bd > 0 ? `${Math.round((sp / bd) * 100)}% of ${money(bd)} used` : bd > 0 ? `of ${money(bd)} budgeted` : b.desc;
         return `<div class="bucket-row" data-bucket="${b.key}"><div class="bucket-top"><span class="bucket-name">${b.label}</span><span class="bucket-amt ${over ? "neg" : ""}">${money(sp)}</span></div><div class="bar"><div class="${over ? "over" : ""} bucket-fill-${b.key}" style="width:${pct}%"></div></div><div class="bucket-note muted">${note}</div></div>`;
       }).join("");
-      $("bucketsCard").hidden = false; $("bucketsPlaceholder").hidden = true;
-    } else { $("bucketsCard").hidden = true; $("bucketsPlaceholder").hidden = false; }
+    }
+    $("bucketsCard").hidden = !anyActivity;
   }
 
   async function load() {
     syncMonthNav();
     const month = monthInput.value || thisMonth();
-    const [summary, accounts, budgets, recent, flex] = await Promise.all([
+    const [summary, recent, flex] = await Promise.all([
       db.rpc("dashboard_summary", { p_month: month }),
-      db.rpc("account_balances"),
-      db.rpc("budget_status", { p_month: month }),
       db.from("transactions").select("occurred_on, amount, type, note, categories(name), accounts!transactions_account_id_fkey(name)").order("occurred_on", { ascending: false }).order("created_at", { ascending: false }).limit(8),
       db.rpc("flex_overview", { p_month: month }),
     ]);
-    for (const r of [summary, accounts, budgets, recent]) if (r.error) { toast(r.error.message); return; }
+    for (const r of [summary, recent]) if (r.error) { toast(r.error.message); return; }
     renderFlex((!flex.error && flex.data) || [], month);
 
     const s = summary.data[0] || { total_balance: 0, month_income: 0, month_expense: 0 };
@@ -191,21 +140,15 @@
     $("income").textContent = moneyCompact(s.month_income); $("income").title = money(s.month_income);
     $("expense").textContent = moneyCompact(s.month_expense); $("expense").title = money(s.month_expense);
 
-    $("accounts").innerHTML = accounts.data.length
-      ? accounts.data.map((a) => `<tr><td>${esc(a.name)} <span class="pill">${esc(a.type)}</span></td><td class="amt ${a.balance < 0 ? "neg" : ""}">${money(a.balance)}</td></tr>`).join("")
-      : `<tr><td class="empty">No accounts yet</td></tr>`;
-    $("budgets").innerHTML = budgets.data.length
-      ? budgets.data.map((b) => { const pct = Math.min(100, (b.spent / b.monthly_limit) * 100); const over = b.spent > b.monthly_limit; return `<div class="bar-row"><div class="top"><span>${esc(b.category)}</span><span class="${over ? "neg" : ""}">${money(b.spent)} / ${money(b.monthly_limit)}</span></div><div class="bar"><div class="${over ? "over" : ""}" style="width:${pct}%"></div></div></div>`; }).join("")
-      : `<div class="empty">No budgets set. <a href="/budgets" style="color:var(--brand)">Add one →</a></div>`;
     $("recent").innerHTML = recent.data.length
       ? recent.data.map((t) => { const sign = t.type === "income" ? "+" : t.type === "expense" ? "−" : ""; const cls = t.type === "income" ? "pos" : t.type === "expense" ? "neg" : ""; const label = t.type === "transfer" ? "Transfer" : esc(t.categories?.name || "—"); return `<tr data-tx><td class="t-date">${t.occurred_on}</td><td class="t-cat">${label}</td><td class="t-acc">${esc(t.accounts?.name || "—")}</td><td class="t-note">${esc(t.note)}</td><td class="amt ${cls}">${sign}${money(t.amount)}</td></tr>`; }).join("")
       : `<tr><td colspan="5"><div class="empty-state"><div class="es-icon" aria-hidden="true">` +
         `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></div>` +
-        `<h3>Welcome to Money Tracker</h3><p>Import from your email or add a transaction and your dashboard fills in automatically. We never store your email password.</p>` +
-        `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><a class="btn" href="/imports">Import from email</a><a class="btn ghost" href="/transactions">Add transaction</a></div></div></td></tr>`;
+        `<h3>Nothing here yet</h3><p>Add your first transaction, or import a statement, and this page fills in.</p>` +
+        `<div class="es-actions"><a class="btn" href="/transactions#add">Add a transaction</a><a class="btn ghost" href="/import">Import a file</a></div></div></td></tr>`;
   }
 
-  // --- Sprint 12: stat sparklines + deltas (from the 12-month totals) --------
+  // --- Sparklines + month-on-month deltas (from the 12-month totals) ---------
   function deltaTxt(diff, expense) {
     if (!diff) return `<span class="muted">no change</span>`;
     const up = diff > 0, good = expense ? !up : up;
@@ -225,7 +168,7 @@
     $("balanceDelta").innerHTML = deltaTxt((Number(cur.income) - Number(cur.expense)) - (Number(prev.income) - Number(prev.expense)), false);
   }
 
-  // --- Sprint 12: month-end forecast card ------------------------------------
+  // --- Month-end forecast ------------------------------------------------------
   async function loadForecastCard() {
     const t = today(); const [yy, mm] = t.split("-").map(Number);
     const mEnd = `${yy}-${String(mm).padStart(2, "0")}-${String(new Date(yy, mm, 0).getDate()).padStart(2, "0")}`;
@@ -250,7 +193,7 @@
     $("fcCardFoot").textContent = low ? `Tightest day: ${money(low.balance)} on ${fmtDay(low.date)}` : "Comfortable to month-end";
   }
 
-  // --- Sprint 12: net worth card ---------------------------------------------
+  // --- Net worth ---------------------------------------------------------------
   async function loadNetWorthCard() {
     try { await db.rpc("capture_net_worth_snapshot"); } catch (e) { /* bonus */ }
     const [bd, sr] = await Promise.all([db.rpc("net_worth_breakdown"), db.rpc("net_worth_series", { p_months: 6 })]);
@@ -264,7 +207,7 @@
     if (series.length >= 2) sparkline($("spkNetworth"), series, { dir: change >= 0 ? "up" : "down" });
   }
 
-  // --- Needs you (Sprint 9) --------------------------------------------------
+  // --- Needs you ---------------------------------------------------------------
   async function loadNeeds() {
     const [rev, bills, bud] = await Promise.all([
       db.from("pending_imports").select("id", { count: "exact", head: true }).eq("status", "pending"),
@@ -277,7 +220,7 @@
     const b = bills.error ? 0 : (bills.data || []).length;
     if (b) chips.push(`<a class="need" href="/bills"><span class="n">${b}</span>${b === 1 ? "bill" : "bills"} this week</a>`);
     if (!bud.error) (bud.data || []).filter((x) => Number(x.monthly_limit) > 0 && Number(x.spent) / Number(x.monthly_limit) >= 0.9).sort((x, y) => y.spent / y.monthly_limit - x.spent / x.monthly_limit).slice(0, 2).forEach((x) => chips.push(`<a class="need warn" href="/budgets"><span class="n">${Math.round(100 * x.spent / x.monthly_limit)}%</span>${esc(x.category)} budget</a>`));
-    for (const id of ["needsDesk", "needsPhone"]) { $(id).innerHTML = chips.join(""); $(id).hidden = !chips.length; }
+    $("needs").innerHTML = chips.join(""); $("needs").hidden = !chips.length;
   }
 
   // --- Upcoming bills --------------------------------------------------------
@@ -300,76 +243,8 @@
     finally { paying.delete(b.id); }
   }
 
-  // --- Sprint 12: customisable Home ------------------------------------------
-  const CARDS = ["stats", "lts", "forecast", "networth", "buckets", "upcoming", "accounts", "budgets", "recent"];
-  const container = $("homeCards");
-  let customizing = false, uid = null, dragEl = null;
-  const cardEls = () => [...container.querySelectorAll(".home-card")];
-  const currentLayout = () => cardEls().map((el) => ({ id: el.dataset.cardId, show: el.dataset.show !== "false" }));
-
-  function reflect() {
-    for (const el of cardEls()) {
-      const show = el.dataset.show !== "false";
-      el.classList.toggle("is-hidden", !show);
-      el.hidden = !show && !customizing;
-      el.setAttribute("draggable", String(customizing));
-      el.querySelector(".hide-toggle")?.setAttribute("aria-checked", String(show));
-    }
-  }
-  function applyLayout(layout) {
-    const known = new Map(cardEls().map((el) => [el.dataset.cardId, el]));
-    const seen = new Set(), order = [];
-    for (const it of layout || []) if (it && known.has(it.id) && !seen.has(it.id)) { order.push(it.id); seen.add(it.id); known.get(it.id).dataset.show = it.show === false ? "false" : "true"; }
-    for (const id of CARDS) if (!seen.has(id)) { order.push(id); known.get(id) && (known.get(id).dataset.show = "true"); }
-    for (const id of order) { const el = known.get(id); if (el) container.appendChild(el); }
-    reflect();
-  }
-  async function saveLayout() {
-    const layout = currentLayout();
-    try { localStorage.setItem("homeLayout", JSON.stringify(layout)); } catch (e) {}
-    if (!uid) return;
-    try { await db.from("user_prefs").upsert({ user_id: uid, home_layout: layout, updated_at: new Date().toISOString() }, { onConflict: "user_id" }); } catch (e) {}
-  }
-  async function loadLayout() {
-    let layout = null;
-    try { const ls = localStorage.getItem("homeLayout"); if (ls) layout = JSON.parse(ls); } catch (e) {}
-    try { const u = await db.auth.getUser(); uid = u?.data?.user?.id || null; } catch (e) {}
-    try { const { data } = await db.from("user_prefs").select("home_layout").limit(1); if (data && data[0] && Array.isArray(data[0].home_layout) && data[0].home_layout.length) layout = data[0].home_layout; } catch (e) {}
-    applyLayout(layout || CARDS.map((id) => ({ id, show: true })));
-  }
-  function setCustomizing(on) {
-    customizing = on;
-    container.classList.toggle("customizing", on);
-    $("customizeBtn").setAttribute("aria-pressed", String(on));
-    $("customizeLabel").textContent = on ? "Done" : "Customize";
-    $("customizeHint").hidden = !on;
-    reflect();
-    if (!on) saveLayout();
-  }
-  $("customizeBtn").onclick = () => setCustomizing(!customizing);
-  container.addEventListener("click", (e) => {
-    const tgl = e.target.closest(".hide-toggle"); if (!tgl || !customizing) return;
-    const el = tgl.closest(".home-card"); el.dataset.show = el.dataset.show === "false" ? "true" : "false";
-    reflect(); saveLayout();
-  });
-  container.addEventListener("dragstart", (e) => { if (!customizing) return; dragEl = e.target.closest(".home-card"); if (!dragEl) return; dragEl.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", dragEl.dataset.cardId); } catch (_) {} });
-  container.addEventListener("dragend", () => { if (!dragEl) return; dragEl.classList.remove("dragging"); dragEl = null; reflect(); saveLayout(); });
-  container.addEventListener("dragover", (e) => {
-    if (!dragEl) return; e.preventDefault();
-    const after = cardEls().filter((el) => el !== dragEl).find((el) => { const r = el.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
-    if (!after) container.appendChild(dragEl); else container.insertBefore(dragEl, after);
-  });
-  container.addEventListener("keydown", (e) => {
-    if (!customizing) return;
-    const handle = e.target.closest(".drag-handle"); if (!handle) return;
-    const el = handle.closest(".home-card");
-    if (e.key === "ArrowUp" && el.previousElementSibling) { e.preventDefault(); container.insertBefore(el, el.previousElementSibling); handle.focus(); saveLayout(); }
-    else if (e.key === "ArrowDown" && el.nextElementSibling) { e.preventDefault(); container.insertBefore(el.nextElementSibling, el); handle.focus(); saveLayout(); }
-  });
-
   monthInput.addEventListener("change", load);
   if (db) {
-    loadLayout();
     loadNeeds();
     await postDueBills();
     load();

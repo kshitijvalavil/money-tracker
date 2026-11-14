@@ -2,20 +2,18 @@
 {% block title %}To review — Money Tracker{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Transactions</h1>
+  <h1>To review</h1>
   <div class="head-actions">
     <span class="sync-line" id="syncLine" role="status" aria-live="polite"></span>
     <button class="btn ghost sm rv-desk" id="ignoreSel" hidden>Ignore selected</button>
     <button class="btn sm rv-desk" id="acceptSel" hidden>Accept selected</button>
-    <a class="btn ghost sm" href="/import" id="importFileLink">Import a file</a>
   </div>
 </div>
-{% include "_txn_tabs.html" %}
 
 <div class="card rv-card">
   <p class="card-intro rv-intro">
     <span class="rv-phone-only">Swipe right to accept, or swipe left to fix the category.</span>
-    <span class="rv-desk-only">New spending from your email, or from a file you import, waits here. Accept it, fix the category, or ignore it. Nothing is counted until you accept.</span>
+    <span class="rv-desk-only">From your email and imported files. Nothing counts until you accept it.</span>
   </p>
   <div class="notice" id="noAccounts" hidden>
     You need an account before you can accept anything.

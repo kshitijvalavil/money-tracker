@@ -2,18 +2,13 @@
 {% block title %}Import from a file — Money Tracker{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Import from a file</h1>
-  <div class="head-actions">
-    <a class="btn ghost" href="/imports">Back to review</a>
-  </div>
+  <h1>Import a file</h1>
 </div>
-{% include "_txn_tabs.html" %}
 
 <!-- Step 1: pick a file -------------------------------------------------- -->
 <section class="card imp-step" id="stepPick" aria-labelledby="pickTitle">
   <h2 id="pickTitle">Add many expenses at once</h2>
-  <p class="card-intro">Drop an Excel, CSV, PDF statement or Word table. Any layout works: we find the columns for you and
-    show a preview. Nothing is added until you accept it in <a class="card-link" href="/imports">To review</a>.</p>
+  <p class="card-intro">Any layout works. You get a preview first, and nothing is added until you accept it in <a class="card-link" href="/imports">To review</a>.</p>
   <label class="imp-drop" id="drop" for="file">
     <input type="file" id="file" class="sr-only"
       accept=".xlsx,.xlsm,.xls,.csv,.tsv,.txt,.pdf,.docx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
@@ -68,7 +63,7 @@
   <div class="table-wrap imp-preview-wrap">
     <table class="tx-table imp-preview" id="preview">
       <caption class="sr-only">First rows of the file, as they will be added</caption>
-      <thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Category in file</th><th style="text-align:right">Amount</th></tr></thead>
+      <thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Category in file</th><th class="num">Amount</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
