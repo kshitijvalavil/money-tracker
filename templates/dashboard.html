@@ -37,13 +37,14 @@
     <div id="bucketsCard" class="buckets" hidden><div id="buckets"></div></div>
   </section>
 
-  <section class="card" aria-labelledby="recentHeading">
-    <div class="card-head"><h2 id="recentHeading">Latest</h2><a href="/transactions" class="card-link">All transactions</a></div>
-    <div class="table-wrap"><table class="tx-table tx-compact">
-      <thead class="sr-only"><tr><th>Date</th><th>Category</th><th>Account</th><th>Note</th><th>Amount</th></tr></thead>
-      <tbody id="recent"></tbody>
-    </table></div>
+  <section class="card upcoming-card" aria-labelledby="upcomingHeading">
+    <div class="card-head"><h2 id="upcomingHeading" tabindex="-1">Bills due</h2><a href="/bills" class="card-link">All bills</a></div>
+    <ul class="bill-list" id="upcoming" aria-labelledby="upcomingHeading" aria-busy="true">
+      <li class="bill-item" aria-hidden="true"><span class="skel w-60"></span></li>
+      <li class="bill-item" aria-hidden="true"><span class="skel w-40"></span></li>
+    </ul>
   </section>
+
  </div>
  <div class="home-col">
   <section class="card" aria-labelledby="fcHeading">
@@ -54,14 +55,13 @@
     <div class="hero-foot" id="fcCardFoot"></div>
   </section>
 
-  <section class="card upcoming-card" aria-labelledby="upcomingHeading">
-    <div class="card-head"><h2 id="upcomingHeading" tabindex="-1">Bills due</h2><a href="/bills" class="card-link">All bills</a></div>
-    <ul class="bill-list" id="upcoming" aria-labelledby="upcomingHeading" aria-busy="true">
-      <li class="bill-item" aria-hidden="true"><span class="skel w-60"></span></li>
-      <li class="bill-item" aria-hidden="true"><span class="skel w-40"></span></li>
-    </ul>
+  <section class="card" aria-labelledby="recentHeading">
+    <div class="card-head"><h2 id="recentHeading">Latest</h2><a href="/transactions" class="card-link">All transactions</a></div>
+    <div class="table-wrap"><table class="tx-table tx-compact">
+      <thead class="sr-only"><tr><th>Date</th><th>Category</th><th>Account</th><th>Note</th><th>Amount</th></tr></thead>
+      <tbody id="recent"></tbody>
+    </table></div>
   </section>
-
  </div>
 </div>
 {% endblock %}
@@ -156,7 +156,7 @@
   function deltaTxt(diff, expense) {
     if (!diff) return `<span class="muted">no change</span>`;
     const up = diff > 0, good = expense ? !up : up;
-    return `<span class="${good ? "pos" : "neg"}">${up ? "▲" : "▼"} ${money(Math.abs(diff))}</span> <span class="muted">vs last month</span>`;
+    return `<span class="${good ? "pos" : "neg"}">${up ? "▲" : "▼"} ${moneyCompact(Math.abs(diff))}</span> <span class="muted">vs last month</span>`;
   }
   async function loadStatSparks() {
     const mt = await db.rpc("monthly_totals"); if (mt.error) return;
@@ -204,10 +204,10 @@
     if (bd.error) return;
     const assets = (bd.data || []).filter((r) => r.kind === "asset").reduce((n, r) => n + Number(r.amount), 0);
     const liab = (bd.data || []).filter((r) => r.kind === "liability").reduce((n, r) => n + Number(r.amount), 0);
-    $("nwCardVal").textContent = signed(assets - liab);
+    $("nwCardVal").textContent = moneyCompact(assets - liab); $("nwCardVal").title = money(assets - liab);
     const series = (sr.data || []).map((s) => Number(s.net));
     const change = series.length > 1 ? series[series.length - 1] - series[series.length - 2] : 0;
-    $("nwCardDelta").innerHTML = `<span class="${change >= 0 ? "pos" : "neg"}">${change >= 0 ? "+" : "−"}${money(Math.abs(change))}</span> this month`;
+    $("nwCardDelta").innerHTML = `<span class="${change >= 0 ? "pos" : "neg"}">${change >= 0 ? "▲" : "▼"} ${moneyCompact(Math.abs(change))}</span> <span class="muted">this month</span>`;
     if (series.length >= 2) sparkline($("spkNetworth"), series, { dir: change >= 0 ? "up" : "down" });
   }
 

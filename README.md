@@ -1,4 +1,4 @@
-# 💰 Money Tracker
+# Money Tracker
 
 A personal money tracker: accounts, income & expenses, transfers between your
 own accounts, monthly budgets, recurring bills, savings goals, labels and
@@ -24,11 +24,16 @@ paste your two Supabase values and click Apply):
 ## What's in here
 
 ```
-app.py                     Flask app (serves the pages)
-templates/                 the pages (dashboard, transactions, accounts, budgets, goals, bills, reports, insights, login)
-static/                    CSS and JavaScript
+app.py                     Flask app: serves the pages and a few small APIs
+assistant.py               the Ask assistant (instructions + tool list; forwards to Claude)
+claude_client.py           the one place the app talks to Claude
+billreader.py, statementreader.py, xlsreader.py   read a bill photo / messy statement / old .xls
+templates/                 the pages; _shell.html is the menu, tabs and Add sheet
+static/css/style.css       the "Passbook" design: every colour and size is a token at the top
+static/js/                 page logic; demo.js is the fake data used in demo mode and tests
 supabase/migrations/       the SQL to set up your database (run in order)
-tests/                     a SQL test of the schema, security rules and money logic
+bot/                       email import scanner
+tests/                     gate.sh runs everything: lints, unit, database and browser suites
 ```
 
 ---
@@ -102,37 +107,45 @@ Use this only to explore; turn it off for real use.
 
 ## Features
 
-- **Dashboard** — total balance across accounts, this month's income and
-  spending, budget progress, and recent transactions.
-- **Transactions** — add income, expenses, or transfers between your accounts;
-  filter by month and account; delete. Transfers don't count as spending.
-- **Accounts** — cash, bank, card or wallet, each with an opening balance and a
-  live balance.
-- **Budgets** — a monthly limit per category that repeats each month, with
-  progress bars that turn red when you go over.
-- **Reports** — spending by category (doughnut chart) and income vs. expenses
-  over the last 12 months (bar chart), plus **Export CSV** to download all your
-  transactions.
+Six places in the menu, with related pages behind tabs:
+
+- **Home** — balance, money in and out, net worth, what's left to spend, the
+  month-end forecast, bills due and the latest transactions.
+- **Transactions** — History, Bills, a bills Calendar, To review (from email or
+  an imported file) and Import a file. The **Add** button offers every way in:
+  type it, say it, snap a bill, import a file.
+- **Plan** — Budgets (fixed, flexible, non-monthly, with rollovers), Goals and
+  the cash-flow Forecast.
+- **Wealth** — Net worth over time, Accounts and Investments.
+- **Insights** — monthly recap, spending by category and label, money flow,
+  trends, top merchants and **Export CSV**.
+- **Ask** — an assistant that answers questions about your own money ("what's
+  outstanding?", "how much on food this year?") and turns an attached Excel or
+  CSV into transactions for you to review. It reads your data through tools
+  that run in your browser, so the server never sees it, and it cannot change
+  or delete anything. Set `ANTHROPIC_API_KEY` on the server to switch it on;
+  without it the page gives basic answers worked out on your device.
+  Optional: `ASSISTANT_MODEL` (default `claude-opus-5-5`) and
+  `ASSISTANT_EFFORT` (`low`, `medium` or `high`).
+
+Alerts and Settings sit under the menu. Day and night themes; installs as an
+app on a phone.
 
 ---
 
 ## Running the tests
 
-**Database** — schema, security rules (one user cannot see another's data) and
-money math (balances, transfers, budgets) against a local PostgreSQL:
+One script runs everything and prints one line per suite:
 
 ```bash
-bash tests/run.sh
+bash tests/gate.sh          # everything
+bash tests/gate.sh unit     # lints, Python and Node unit tests, dependency audit
+bash tests/gate.sh sql      # schema, security rules between users, money math (local PostgreSQL)
+bash tests/gate.sh ui       # every browser suite in demo mode: phone, tablet, desktop, day and night
 ```
 
-**Browser smoke test** — drives the real UI (dashboard, add a transaction/
-account/budget, charts) in demo mode, failing on any browser error. Needs
-`playwright` and a Chromium:
-
-```bash
-DEMO_MODE=1 gunicorn app:app --bind 127.0.0.1:8099 &
-BASE_URL=http://127.0.0.1:8099 python tests/smoke_test.py
-```
+The browser suites need `pip install -r requirements-dev.txt` and a Chromium.
+CI runs the same script.
 
 ---
 

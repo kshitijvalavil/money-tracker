@@ -34,7 +34,7 @@ if not (SITE and EMAIL and PASSWORD):
     sys.exit("Set SITE_URL, E2E_EMAIL and E2E_PASSWORD.")
 
 PAGES = ["/", "/transactions", "/accounts", "/budgets", "/bills", "/calendar", "/goals", "/investments",
-         "/net-worth", "/wealth", "/forecast", "/insights", "/alerts", "/ask", "/imports", "/profile"]
+         "/net-worth", "/forecast", "/insights", "/alerts", "/ask", "/imports", "/profile"]
 TABLES = ["accounts", "audit_log", "budgets", "categories", "category_rules", "goal_contributions", "goals",
           "investments", "labels", "net_worth_snapshots", "pending_imports", "recurring", "sync_status",
           "transaction_labels", "transactions", "user_consents", "user_prefs"]

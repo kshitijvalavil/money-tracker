@@ -76,6 +76,7 @@
 {% block page_script %}
 <script type="module" nonce="{{ csp_nonce }}">
   import { db, money, esc, thisMonth, toast, today } from "{{ url_for('static', filename='js/app.js') }}";
+  import { PALETTE, cssVar, themeCharts } from "{{ url_for('static', filename='js/charts.js') }}";
   themeCharts();
   const $ = (id) => document.getElementById(id);
   $("month").value = thisMonth();
@@ -277,7 +278,7 @@
 <script type="module" nonce="{{ csp_nonce }}">
   // Sprint 12: money-flow (Sankey) for the selected month + 6-month category sparklines.
   import { db, money, esc, thisMonth } from "{{ url_for('static', filename='js/app.js') }}";
-  import { sankey, sparkline, trendDir, PALETTE, cssVar, themeCharts } from "{{ url_for('static', filename='js/charts.js') }}";
+  import { sankey, sparkline, trendDir } from "{{ url_for('static', filename='js/charts.js') }}";
   const $ = (id) => document.getElementById(id);
   const BK = { fixed: "var(--muted)", flexible: "var(--brand)", non_monthly: "var(--warn)", savings: "var(--pos)" };
   const BK_LABEL = { fixed: "Fixed", flexible: "Flexible", non_monthly: "Non-monthly", savings: "Savings" };

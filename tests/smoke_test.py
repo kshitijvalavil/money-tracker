@@ -46,9 +46,9 @@ def main():
         pg.goto(BASE + "/", wait_until="networkidle")
         pg.wait_for_timeout(600)
         check("₹" in pg.inner_text("#balance"), "dashboard balance renders")
-        check(pg.locator("#accounts tr").count() >= 1, "dashboard lists accounts")
+        check(pg.locator(".figures .figure").count() == 4 and "₹" in pg.inner_text("#nwCardVal"), "dashboard shows the four headline figures")
         check(pg.locator("#recent tr").count() >= 1, "dashboard lists recent transactions")
-        check(pg.locator("#budgets .bar-row").count() >= 1, "dashboard shows budget bars")
+        check(pg.locator("#buckets .bucket-row").count() == 3, "dashboard shows the budget buckets")
         shot(pg, "01-dashboard.png")
 
         pg.goto(BASE + "/transactions", wait_until="networkidle")

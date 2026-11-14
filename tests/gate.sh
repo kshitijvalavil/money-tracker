@@ -3,7 +3,7 @@
 # one line per suite plus a summary, so a branch can be compared with main.
 #
 #   bash tests/gate.sh                 # everything
-#   bash tests/gate.sh unit            # Python + Node unit tests only
+#   bash tests/gate.sh unit            # lints, Python + Node unit tests, dependency audit
 #   bash tests/gate.sh sql             # database tests only
 #   bash tests/gate.sh ui              # browser suites only (starts its own demo server)
 #   GATE_OUT=gate-main.txt bash tests/gate.sh   # also write the results to a file
@@ -39,16 +39,19 @@ run() {   # run <label> <command...>
 }
 
 if [ "$WHAT" = all ] || [ "$WHAT" = unit ]; then
-    for f in tests/test_parsers.py tests/test_scanner.py tests/test_scanner_adversarial.py \
+    for f in tests/secret_scan.py tests/innerhtml_lint.py tests/test_card_masking.py \
+             tests/test_parsers.py tests/test_scanner.py tests/test_scanner_adversarial.py \
              tests/test_channel_parsers.py tests/test_recurring.py tests/billreader_test.py \
              tests/billtext_test.py tests/security_test.py tests/test_review.py \
-             tests/statementreader_test.py tests/xlsreader_test.py tests/voiceparse_api_test.py; do
-        [ -f "$f" ] && run "unit: $f" python3 "$f"
+             tests/statementreader_test.py tests/xlsreader_test.py tests/assistant_test.py; do
+        run "unit: $f" python3 "$f"
     done
     run "unit: scanner dry run" python3 -m bot.scanner --from-dir tests/fixtures
     for f in tests/*.mjs; do
-        [ -f "$f" ] && run "node: $f" node "$f"
+        run "node: $f" node "$f"
     done
+    # Known-vulnerability audit of the app's dependencies (CI installs pip-audit).
+    if command -v pip-audit >/dev/null 2>&1; then run "unit: pip-audit" pip-audit -r requirements.txt; fi
 fi
 
 if [ "$WHAT" = all ] || [ "$WHAT" = sql ]; then
@@ -67,7 +70,7 @@ if [ "$WHAT" = all ] || [ "$WHAT" = ui ]; then
     GPID=""
     start_server() {
         [ -n "$GPID" ] && kill "$GPID" 2>/dev/null
-        DEMO_MODE=1 gunicorn app:app --bind "127.0.0.1:$PORT" --workers 2 --timeout 120 >>"$LOGDIR/gunicorn.log" 2>&1 &
+        DEMO_MODE=1 gunicorn app:app --bind "127.0.0.1:$PORT" >>"$LOGDIR/gunicorn.log" 2>&1 &
         GPID=$!
         for i in $(seq 1 30); do curl -fsS -o /dev/null "$BASE_URL/" && return 0; sleep 1; done
         return 1
@@ -81,7 +84,8 @@ if [ "$WHAT" = all ] || [ "$WHAT" = ui ]; then
              tests/sprint9_review_inbox_test.py tests/sprint10_flex_test.py \
              tests/sprint11_networth_test.py tests/sprint12_ui_test.py tests/sprint13_ui_test.py \
              tests/sprint14_privacy_ui_test.py tests/sprint14_session_ui_test.py tests/sprint14_csp_test.py \
-             tests/sprint14_deploying_test.py tests/sprint15_import_ui_test.py tests/sprint16_voice_ui_test.py; do
+             tests/sprint14_deploying_test.py tests/sprint15_import_ui_test.py tests/sprint16_voice_ui_test.py \
+             tests/assistant_ui_test.py; do
         [ -f "$f" ] || continue
         # A long browser suite can exhaust the demo server; make sure it's up (restart if not) before each one.
         curl -fsS -o /dev/null "$BASE_URL/" 2>/dev/null || start_server

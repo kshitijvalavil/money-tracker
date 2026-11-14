@@ -111,9 +111,8 @@ def desktop(b):
     # Needs-you strip on Home.
     pg.goto(BASE + "/", wait_until="networkidle")
     pg.wait_for_timeout(800)
-    check(pg.is_visible("#needsDesk"), "Needs-you row on desktop Home")
-    check(not pg.is_visible("#needsPhone"), "phone strip hidden on desktop")
-    check("to review" in pg.inner_text("#needsDesk"), "Needs-you shows items to review")
+    check(pg.is_visible("#needs"), "Needs-you row on desktop Home")
+    check("to review" in pg.inner_text("#needs"), "Needs-you shows items to review")
     shot(pg, "s9-desktop-home.png")
 
     # Rules on Profile.
@@ -168,8 +167,9 @@ def phone(b):
 
     pg.goto(BASE + "/", wait_until="networkidle")
     pg.wait_for_timeout(800)
-    check(pg.is_visible("#needsPhone"), "Needs-you chips on phone Home")
-    check(not pg.is_visible("#needsDesk"), "desktop row hidden on phone")
+    check(pg.is_visible("#needs"), "Needs-you chips on phone Home")
+    nb, fb = pg.locator("#needs").bounding_box(), pg.locator(".figures").bounding_box()
+    check(nb["y"] < fb["y"], "Needs-you sits above the figures on phone, not at the bottom of the page")
     over = pg.evaluate("document.documentElement.scrollWidth - document.documentElement.clientWidth")
     check(over <= 0, f"Home fits at 390 ({over}px)")
     shot(pg, "s9-phone-home.png")

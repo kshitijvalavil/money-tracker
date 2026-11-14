@@ -467,19 +467,22 @@ def main():
         check(code == "22003", f"SB-9: demo refuses amounts over the cap with 22003 ({code})")
         ctx.close()
 
-        # --- Night mode: white text on buttons and toasts is at least 4.5:1 -----------------
+        # --- Night mode: button text against its own background is at least 4.5:1 -------
         contrast_js = """(sel) => { const el = document.querySelector(sel); if (!el) return null;
-            const rgb = getComputedStyle(el).backgroundColor.match(/\\d+/g).slice(0, 3).map(Number);
-            const L = rgb.map(v => v / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-            const l = 0.2126 * L[0] + 0.7152 * L[1] + 0.0722 * L[2];
-            return Math.round(1.05 / (l + 0.05) * 100) / 100; }"""
+            const lum = (c) => { const L = c.match(/[\\d.]+/g).slice(0, 3).map(Number).map(v => v / 255)
+                .map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+              return 0.2126 * L[0] + 0.7152 * L[1] + 0.0722 * L[2]; };
+            let bgEl = el, bg = getComputedStyle(el).backgroundColor;      // see-through: use what is behind it
+            while (/rgba\\(.*, 0\\)|transparent/.test(bg) && bgEl.parentElement) { bgEl = bgEl.parentElement; bg = getComputedStyle(bgEl).backgroundColor; }
+            const a = lum(getComputedStyle(el).color), b = lum(bg);
+            return Math.round((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) * 100) / 100; }"""
         for path, sel in (("/bills", "#addBillBtn"), ("/bills", "#billRows .mark-paid"), ("/transactions", ".btn"),
                           ("/budgets", ".btn"), ("/imports", ".act-accept")):
             ctx, pg = page_with(b, theme="dark")
             pg.goto(BASE + path, wait_until="networkidle")
             settle(pg, 600)
             ratio = pg.evaluate(contrast_js, sel)
-            check(ratio is not None and ratio >= 4.5, f"night mode: white on {sel} at {path} is {ratio}:1")
+            check(ratio is not None and ratio >= 4.5, f"night mode: text on {sel} at {path} is {ratio}:1")
             if path == "/bills" and sel == "#addBillBtn":
                 for kind in ("ok", "error"):
                     pg.evaluate(f"() => import('/static/js/app.js').then(m => m.toast('x', '{kind}'))")
